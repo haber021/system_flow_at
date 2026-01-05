@@ -1,0 +1,434 @@
+{% extends 'attendance/base.html' %}
+{% load static %}
+
+{% block title %}RFID Attendance Scan{% endblock %}
+
+{% block extra_css %}
+{% if last_scanned_student and last_scanned_student.profile_picture_url %}
+<link rel="preload" as="image" href="{{ last_scanned_student.profile_picture_url }}" fetchpriority="high">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h4 class="mb-0"><i class="bi bi-credit-card"></i> RFID Attendance Scan</h4>
+            </div>
+            <div class="card-body">
+                <p class="lead mb-4 text-center">
+                    <span class="badge bg-success">Status: Ready for scanning...</span>
+                </p>
+                
+                <form method="POST" action="{% url 'scan' %}" id="scanForm">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <label for="subject_id" class="form-label"><strong>Active Subject:</strong></label>
+                        {# Always show dropdown for easy subject selection #}
+                        <select class="form-select form-select-lg" id="subject_id" name="subject_id" onchange="changeSubject(this.value)" required>
+                            {% if not subject %}
+                            <option value="">-- Select Subject --</option>
+                            {% endif %}
+                            {% for subj in subjects %}
+                            <option value="{{ subj.id }}" {% if subject and subject.id == subj.id %}selected{% endif %}>
+                                {{ subj.code }} - {{ subj.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="mb-4 text-center">
+                        <label for="rfid_id" class="form-label"><strong>Scanning Area:</strong></label>
+                        <input type="text" class="form-control form-control-lg text-center" 
+                               id="rfid_id" name="rfid_id" 
+                               placeholder="Tap RFID Card here..." 
+                               autofocus autocomplete="off" style="font-size: 1.5rem;">
+                    </div>
+                    
+                    <div class="d-flex gap-2 justify-content-center">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-check-circle"></i> Submit
+                        </button>
+                        <a href="{% url 'manual_entry' %}" class="btn btn-secondary btn-lg">
+                            <i class="bi bi-pencil"></i> Manual Entry
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        {% if subject %}
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Subject Schedule</h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-2"><strong>{{ subject.code }}</strong> - {{ subject.name }}</p>
+                <p class="mb-3 text-muted"><small>{% if subject.instructor %}{{ subject.instructor.name }}{% else %}—{% endif %}</small></p>
+                
+                {% if subject.schedules.exists %}
+                    <div class="schedule-list">
+                        {% for schedule in subject.schedules.all %}
+                            {% if schedule.day_of_week is not None %}
+                            <div class="mb-2 p-2 bg-light rounded">
+                                <strong>{{ schedule.get_day_name }}</strong><br>
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> {{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }}
+                                </small>
+                            </div>
+                            {% elif schedule.date %}
+                            <div class="mb-2 p-2 bg-light rounded">
+                                <strong>{{ schedule.date|date:"M d, Y" }}</strong><br>
+                                <small class="text-muted">
+                                    <i class="bi bi-clock"></i> {{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }}
+                                </small>
+                            </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    {% if subject.schedule_days and subject.schedule_time_start %}
+                        <div class="mt-2 pt-2 border-top">
+                            <small class="text-muted">
+                                <em>General: {{ subject.schedule_days }}, {{ subject.schedule_time_start|time:"g:i A" }}-{{ subject.schedule_time_end|time:"g:i A" }}</em>
+                            </small>
+                        </div>
+                    {% endif %}
+                {% elif subject.schedule_days and subject.schedule_time_start %}
+                    <div class="p-2 bg-light rounded">
+                        <strong>General Schedule:</strong><br>
+                        <small class="text-muted">
+                            {{ subject.schedule_days }}<br>
+                            <i class="bi bi-clock"></i> {{ subject.schedule_time_start|time:"g:i A" }} - {{ subject.schedule_time_end|time:"g:i A" }}
+                        </small>
+                    </div>
+                {% else %}
+                    <p class="text-muted"><small>No schedule defined for this subject.</small></p>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        
+        <div class="card mt-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Last Scan Details</h5>
+            </div>
+            <div class="card-body">
+                {% if last_scan %}
+                <p><strong>Student Name:</strong> {{ last_scan.student.name }}</p>
+                <p><strong>RFID ID:</strong> {{ last_scan.student.rfid_id }}</p>
+                <p><strong>Subject:</strong> {{ last_scan.subject.code }}</p>
+                <p><strong>Date:</strong> {{ last_scan.date|date:"m/d/Y" }}</p>
+                <p><strong>Time In:</strong> {{ last_scan.time_in|time:"g:i A"|default:"--:--" }}</p>
+                <p><strong>Time Out:</strong> {{ last_scan.time_out|time:"g:i A"|default:"--:--" }}</p>
+                <p>
+                    <strong>Status:</strong> 
+                    <span class="badge bg-{% if last_scan.status == 'PRESENT' %}success{% elif last_scan.status == 'LATE' %}warning{% else %}danger{% endif %}">
+                        {{ last_scan.status }} ✓
+                    </span>
+                </p>
+                {% else %}
+                <p class="text-muted">No scans yet today.</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card mt-3">
+            <div class="card-body">
+                <a href="{% url 'attendance_logs' %}" class="btn btn-outline-info w-100 mb-2">
+                    <i class="bi bi-list-check"></i> View Today's Scans
+                </a>
+                <a href="{% url 'live_monitor' %}" class="btn btn-outline-success w-100">
+                    <i class="bi bi-activity"></i> Live Monitor
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Student Scan Confirmation Modal -->
+{% if last_scanned_student %}
+<div class="modal fade show" id="studentScanModal" tabindex="-1" aria-labelledby="studentScanModalLabel" aria-modal="true" role="dialog" style="display: block; background-color: rgba(0,0,0,0.8);">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
+            <div class="modal-body text-center p-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                <div class="mb-4">
+                    <div class="position-relative d-inline-block">
+                        {% if last_scanned_student.profile_picture_url %}
+                            <img src="{{ last_scanned_student.profile_picture_url }}" 
+                                 alt="{{ last_scanned_student.name }}" 
+                                 class="rounded-circle border border-5 border-white shadow-lg" 
+                                 loading="eager"
+                                 fetchpriority="high"
+                                 onload="this.style.opacity='1'"
+                                 style="width: 250px; height: 250px; object-fit: cover; opacity: 0; transition: opacity 0.3s;">
+                        {% else %}
+                            <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" 
+                                 alt="{{ last_scanned_student.name }}" 
+                                 class="rounded-circle border border-5 border-white shadow-lg" 
+                                 loading="eager"
+                                 fetchpriority="high"
+                                 style="width: 250px; height: 250px; object-fit: cover;">
+                        {% endif %}
+                        <div class="position-absolute top-0 start-50 translate-middle">
+                            {% if last_scanned_student.action == 'time_in' %}
+                                <span class="badge bg-success rounded-pill px-4 py-2" style="font-size: 1rem;">
+                                    <i class="bi bi-check-circle-fill"></i> TIME IN
+                                </span>
+                            {% else %}
+                                <span class="badge bg-info rounded-pill px-4 py-2" style="font-size: 1rem;">
+                                    <i class="bi bi-box-arrow-right"></i> TIME OUT
+                                </span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <h2 class="text-white mb-3 fw-bold" style="font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
+                    {{ last_scanned_student.name }}
+                </h2>
+                
+                <div class="bg-white rounded-4 p-4 mt-4 shadow-lg">
+                    <div class="row text-center">
+                        <div class="col-md-6 mb-3 mb-md-0">
+                            <p class="mb-1 text-muted small">Subject</p>
+                            <p class="mb-0 fw-bold text-primary" style="font-size: 1.2rem;">{{ last_scanned_student.subject_code }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p class="mb-1 text-muted small">Status</p>
+                            <p class="mb-0">
+                                <span class="badge bg-{% if last_scanned_student.status == 'PRESENT' %}success{% elif last_scanned_student.status == 'LATE' %}warning{% else %}danger{% endif %} px-3 py-2" style="font-size: 1rem;">
+                                    {{ last_scanned_student.status }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <hr class="my-3">
+                    
+                    <div class="row text-center">
+                        {% if last_scanned_student.action == 'time_in' %}
+                            <div class="col-12">
+                                <p class="mb-1 text-muted small">Time In</p>
+                                <p class="mb-0 fw-bold text-success" style="font-size: 1.5rem;">
+                                    <i class="bi bi-clock-fill"></i> {{ last_scanned_student.time_in }}
+                                </p>
+                            </div>
+                        {% else %}
+                            <div class="col-6">
+                                <p class="mb-1 text-muted small">Time In</p>
+                                <p class="mb-0 fw-bold" style="font-size: 1.1rem;">{{ last_scanned_student.time_in }}</p>
+                            </div>
+                            <div class="col-6">
+                                <p class="mb-1 text-muted small">Time Out</p>
+                                <p class="mb-0 fw-bold text-info" style="font-size: 1.1rem;">{{ last_scanned_student.time_out }}</p>
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<style>
+#studentScanModal {
+    z-index: 9999;
+    animation: fadeIn 0.3s ease-in;
+}
+
+#studentScanModal .modal-content {
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+#studentScanModal .modal-body img {
+    animation: scaleIn 0.5s ease-out;
+}
+
+@keyframes scaleIn {
+    from {
+        transform: scale(0.8);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+</style>
+
+<script>
+let isDropdownFocused = false;
+let isChangingSubject = false;
+
+function changeSubject(subjectId) {
+    if (subjectId && subjectId !== '') {
+        isChangingSubject = true;
+        const url = new URL(window.location.href);
+        url.searchParams.set('subject_id', subjectId);
+        window.location.href = url.toString();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const input = document.getElementById('rfid_id');
+    const form = document.getElementById('scanForm');
+    const subjectSelect = document.getElementById('subject_id');
+    
+    // Only add dropdown event listeners if it's a select element
+    if (subjectSelect && subjectSelect.tagName === 'SELECT') {
+        // Prevent auto-submit when dropdown is being used
+        subjectSelect.addEventListener('focus', function() {
+            isDropdownFocused = true;
+        });
+        
+        subjectSelect.addEventListener('blur', function() {
+            isDropdownFocused = false;
+            // Refocus input after a short delay to allow dropdown change to process
+            setTimeout(() => {
+                if (!isChangingSubject) {
+                    input.focus();
+                }
+            }, 200);
+        });
+        
+        subjectSelect.addEventListener('mousedown', function() {
+            isDropdownFocused = true;
+        });
+    }
+    
+    // Ensure subject_id is always included when form submits
+    form.addEventListener('submit', function(e) {
+        const selectedSubject = subjectSelect ? subjectSelect.value : null;
+        if (!selectedSubject) {
+            e.preventDefault();
+            alert('Please select a subject first.');
+            if (subjectSelect && subjectSelect.focus) {
+                subjectSelect.focus();
+            }
+            return false;
+        }
+        // Make sure the subject_id is in the form
+        if (!form.querySelector('input[name="subject_id"]')) {
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'subject_id';
+            hiddenInput.value = selectedSubject;
+            form.appendChild(hiddenInput);
+        }
+    });
+    
+    // Focus input initially
+    input.focus();
+    
+    input.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter' && input.value.trim() && !isDropdownFocused) {
+            e.preventDefault();
+            form.submit();
+        }
+    });
+    
+    let submitTimeout;
+    input.addEventListener('input', function() {
+        // Don't auto-submit if dropdown is focused or being changed
+        if (isDropdownFocused || isChangingSubject) {
+            clearTimeout(submitTimeout);
+            return;
+        }
+        
+        clearTimeout(submitTimeout);
+        if (input.value.trim().length >= 5) {
+            submitTimeout = setTimeout(function() {
+                if (input.value.trim() && !isDropdownFocused && !isChangingSubject) {
+                    form.submit();
+                }
+            }, 500);
+        }
+    });
+    
+    input.addEventListener('blur', function() {
+        // Only refocus if dropdown is not being used
+        if (!isDropdownFocused && !isChangingSubject) {
+            setTimeout(() => {
+                // Only check activeElement if subjectSelect is a select element
+                if (!subjectSelect || subjectSelect.tagName !== 'SELECT' || document.activeElement !== subjectSelect) {
+                    input.focus();
+                }
+            }, 100);
+        }
+    });
+    
+    // Clear input and focus after page load
+    setTimeout(function() {
+        input.value = '';
+        input.focus();
+    }, 100);
+    
+    // Auto-hide student scan modal after 4 seconds
+    {% if last_scanned_student %}
+    const scanModal = document.getElementById('studentScanModal');
+    if (scanModal) {
+        // Preload image if not already loaded
+        {% if last_scanned_student.profile_picture_url %}
+        const img = scanModal.querySelector('img');
+        if (img && !img.complete) {
+            const preloadImg = new Image();
+            preloadImg.src = img.src;
+            preloadImg.onload = function() {
+                img.style.opacity = '1';
+            };
+        }
+        {% endif %}
+        
+        // Show modal immediately
+        scanModal.classList.add('show');
+        scanModal.style.display = 'block';
+        
+        // Auto-hide after 4 seconds with fade out
+        setTimeout(function() {
+            scanModal.style.transition = 'opacity 0.5s ease-out';
+            scanModal.style.opacity = '0';
+            setTimeout(function() {
+                scanModal.classList.remove('show');
+                scanModal.style.display = 'none';
+                // Refocus input after modal closes
+                input.focus();
+            }, 500);
+        }, 4000);
+        
+        // Also allow clicking outside to close
+        scanModal.addEventListener('click', function(e) {
+            if (e.target === scanModal) {
+                scanModal.style.transition = 'opacity 0.5s ease-out';
+                scanModal.style.opacity = '0';
+                setTimeout(function() {
+                    scanModal.classList.remove('show');
+                    scanModal.style.display = 'none';
+                    input.focus();
+                }, 500);
+            }
+        });
+    }
+    {% endif %}
+});
+</script>
+{% endblock %}

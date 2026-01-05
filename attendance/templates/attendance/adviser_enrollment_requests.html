@@ -1,0 +1,371 @@
+{% extends 'attendance/base.html' %}
+{% load email_filters %}
+
+{% block title %}Enrollment Requests - Adviser Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .request-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border-left: 4px solid #ffc107;
+    }
+    .request-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .request-card.pending {
+        border-left-color: #ffc107;
+    }
+    .badge-pending {
+        background-color: #ffc107;
+        color: #000;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-1">
+        <i class="bi bi-clipboard-check"></i> Enrollment Requests
+    </h2>
+    <p class="text-muted">Review and approve/reject student enrollment requests</p>
+</div>
+
+<!-- Statistics -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <h5 class="card-title">Pending Requests</h5>
+                <h2 class="mb-0">{{ total_pending }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <h5 class="card-title">Approved</h5>
+                <h2 class="mb-0">{{ approved_count }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <h5 class="card-title">Rejected</h5>
+                <h2 class="mb-0">{{ rejected_count }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-funnel"></i> Filters</h5>
+    </div>
+    <div class="card-body">
+        {% if not is_staff %}
+        <div class="alert alert-info mb-3">
+            <i class="bi bi-info-circle"></i> Showing enrollment requests for subjects where instructors are assigned to: <strong>{{ adviser_name }}</strong>
+            {% if total_all_pending > total_pending %}
+            <br><small>Total pending requests in system: {{ total_all_pending }} (showing {{ total_pending }} for your instructors' subjects)</small>
+            {% endif %}
+        </div>
+        {% else %}
+        <div class="alert alert-success mb-3">
+            <i class="bi bi-shield-check"></i> <strong>Staff/Admin View:</strong> Showing all pending enrollment requests
+        </div>
+        {% endif %}
+        <form method="GET" class="row g-3">
+            <div class="col-md-2">
+                <label for="academic_year" class="form-label">Academic Year</label>
+                <input type="text" class="form-control" id="academic_year" name="academic_year" 
+                       value="{{ academic_year }}" placeholder="e.g., 2025-2026">
+            </div>
+            <div class="col-md-2">
+                <label for="semester" class="form-label">Semester</label>
+                <select class="form-select" id="semester" name="semester">
+                    <option value="">All Semesters</option>
+                    <option value="1st Semester" {% if semester == '1st Semester' %}selected{% endif %}>1st Semester</option>
+                    <option value="2nd Semester" {% if semester == '2nd Semester' %}selected{% endif %}>2nd Semester</option>
+                    <option value="Summer" {% if semester == 'Summer' %}selected{% endif %}>Summer</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="instructor_filter" class="form-label">Instructor</label>
+                <select class="form-select" id="instructor_filter" name="instructor_filter">
+                    <option value="">All Instructors</option>
+                    {% for instructor in all_instructors %}
+                    <option value="{{ instructor.id }}" {% if instructor_filter == instructor.id|stringformat:"s" %}selected{% endif %}>{{ instructor.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="student_search" class="form-label">Search</label>
+                <input type="text" class="form-control" id="student_search" name="student_search" 
+                       value="{{ student_search }}" placeholder="Student name, ID, or subject...">
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="bi bi-search"></i> Filter
+                </button>
+            </div>
+        </form>
+        {% if academic_year or semester or student_search or instructor_filter %}
+        <div class="mt-2">
+            <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-x-circle"></i> Clear Filters
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Enrollment Requests -->
+{% if enrollment_requests %}
+<!-- Bulk Actions -->
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="POST" id="bulk-approve-form">
+            {% csrf_token %}
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="select-all-checkbox">
+                        <label class="form-check-label" for="select-all-checkbox">
+                            <strong>Select All ({{ enrollment_requests|length }} requests)</strong>
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <label for="bulk_notes" class="form-label"><small>Bulk Notes (optional):</small></label>
+                    <textarea class="form-control form-control-sm" id="bulk_notes" name="bulk_notes" 
+                              rows="1" placeholder="Add notes for all selected requests..."></textarea>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button type="submit" name="action" value="bulk_approve" class="btn btn-success w-100" id="bulk-approve-btn" disabled>
+                        <i class="bi bi-check-all"></i> Approve Selected
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    {% for req in enrollment_requests %}
+    <div class="col-md-6 mb-4">
+        <div class="card request-card pending">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="form-check">
+                    <input class="form-check-input request-checkbox" type="checkbox" 
+                           name="selected_requests" value="{{ req.id }}" id="checkbox_{{ req.id }}">
+                    <label class="form-check-label" for="checkbox_{{ req.id }}">
+                        <strong>{{ req.subject.code }} - {{ req.subject.name }}</strong>
+                    </label>
+                </div>
+                <span class="badge badge-pending">
+                    <i class="bi bi-clock"></i> Pending
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <h6 class="card-title">
+                        <i class="bi bi-person"></i> Student Information
+                    </h6>
+                    <p class="mb-1"><strong>Name:</strong> {{ req.student.name }}</p>
+                    <p class="mb-1"><strong>Student ID:</strong> {{ req.student.student_id|default:"N/A" }}</p>
+                    <p class="mb-1"><strong>Course:</strong> {{ req.student.course }}</p>
+                    <p class="mb-1"><strong>Email:</strong> {{ req.student.email|mask_email }}</p>
+                </div>
+                
+                <div class="mb-3">
+                    <h6 class="card-title">
+                        <i class="bi bi-book"></i> Subject Information
+                    </h6>
+                    <p class="mb-1"><strong>Instructor:</strong> {% if req.subject.instructor %}{{ req.subject.instructor.name }}{% else %}—{% endif %}</p>
+                    <p class="mb-1"><strong>Academic Year:</strong> {{ req.academic_year }}</p>
+                    <p class="mb-1"><strong>Semester:</strong> {{ req.semester }}</p>
+                    {% if req.subject.schedules.all %}
+                    <p class="mb-1"><strong>Schedule:</strong>
+                        {% for schedule in req.subject.schedules.all %}
+                            {% if not forloop.first %}, {% endif %}
+                            {{ schedule.get_day_name }} ({{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }})
+                        {% endfor %}
+                    </p>
+                    {% endif %}
+                </div>
+                
+                <div class="mb-3">
+                    <p class="text-muted mb-0">
+                        <small>
+                            <i class="bi bi-calendar"></i> Requested: {{ req.requested_at|date:"M d, Y g:i A" }}
+                        </small>
+                    </p>
+                </div>
+                
+                <form method="POST" class="mt-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="request_id" value="{{ req.id }}">
+                    <div class="mb-2">
+                        <label for="notes_{{ req.id }}" class="form-label"><small>Notes (optional):</small></label>
+                        <textarea class="form-control form-control-sm" id="notes_{{ req.id }}" name="notes" 
+                                  rows="2" placeholder="Add notes for the student..."></textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" name="action" value="approve" class="btn btn-success btn-sm flex-fill approve-btn"
+                                data-message="Approve enrollment for {{ req.student.name }} in {{ req.subject.code }}?">
+                            <i class="bi bi-check-circle"></i> Approve
+                        </button>
+                        <button type="submit" name="action" value="reject" class="btn btn-danger btn-sm flex-fill reject-btn"
+                                data-message="Reject enrollment for {{ req.student.name }} in {{ req.subject.code }}?">
+                            <i class="bi bi-x-circle"></i> Reject
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No pending enrollment requests found.
+</div>
+{% endif %}
+
+<!-- Back to Dashboard -->
+<div class="mt-4">
+    <a href="{% url 'dashboard' %}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Back to Dashboard
+    </a>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Select All functionality
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    const requestCheckboxes = document.querySelectorAll('.request-checkbox');
+    const bulkApproveBtn = document.getElementById('bulk-approve-btn');
+    
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            requestCheckboxes.forEach(function(checkbox) {
+                checkbox.checked = selectAllCheckbox.checked;
+            });
+            updateBulkApproveButton();
+        });
+    }
+    
+    // Update bulk approve button state based on selected checkboxes
+    function updateBulkApproveButton() {
+        const selectedCount = document.querySelectorAll('.request-checkbox:checked').length;
+        if (bulkApproveBtn) {
+            bulkApproveBtn.disabled = selectedCount === 0;
+            if (selectedCount > 0) {
+                bulkApproveBtn.innerHTML = `<i class="bi bi-check-all"></i> Approve Selected (${selectedCount})`;
+            } else {
+                bulkApproveBtn.innerHTML = `<i class="bi bi-check-all"></i> Approve Selected`;
+            }
+        }
+        
+        // Update select all checkbox state
+        if (selectAllCheckbox && requestCheckboxes.length > 0) {
+            const allChecked = document.querySelectorAll('.request-checkbox:checked').length === requestCheckboxes.length;
+            const someChecked = document.querySelectorAll('.request-checkbox:checked').length > 0;
+            selectAllCheckbox.checked = allChecked;
+            selectAllCheckbox.indeterminate = someChecked && !allChecked;
+        }
+    }
+    
+    // Add change listeners to individual checkboxes
+    requestCheckboxes.forEach(function(checkbox) {
+        checkbox.addEventListener('change', updateBulkApproveButton);
+    });
+    
+    // Initialize button state
+    updateBulkApproveButton();
+    
+    // Handle bulk approve form submission
+    const bulkApproveForm = document.getElementById('bulk-approve-form');
+    if (bulkApproveForm) {
+        bulkApproveForm.addEventListener('submit', function(e) {
+            const selectedCheckboxes = document.querySelectorAll('.request-checkbox:checked');
+            if (selectedCheckboxes.length === 0) {
+                e.preventDefault();
+                alert('Please select at least one enrollment request to approve.');
+                return false;
+            }
+            
+            const count = selectedCheckboxes.length;
+            const confirmed = confirm(`Are you sure you want to approve ${count} selected enrollment request(s)?`);
+            if (!confirmed) {
+                e.preventDefault();
+                return false;
+            }
+            
+            // Collect all selected IDs and add them as hidden inputs
+            selectedCheckboxes.forEach(function(checkbox) {
+                const hiddenInput = document.createElement('input');
+                hiddenInput.type = 'hidden';
+                hiddenInput.name = 'selected_requests';
+                hiddenInput.value = checkbox.value;
+                bulkApproveForm.appendChild(hiddenInput);
+            });
+        });
+    }
+    
+    // Handle approve button confirmations
+    document.querySelectorAll('.approve-btn').forEach(function(button) {
+        const form = button.closest('form');
+        const message = button.getAttribute('data-message');
+        const actionValue = button.getAttribute('value');
+        const actionName = button.getAttribute('name');
+        
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            customConfirm(message, function(confirmed) {
+                if (confirmed) {
+                    // Create a hidden input to preserve the action value
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = actionName;
+                    hiddenInput.value = actionValue;
+                    form.appendChild(hiddenInput);
+                    
+                    // Submit the form
+                    form.submit();
+                }
+            });
+        });
+    });
+    
+    // Handle reject button confirmations
+    document.querySelectorAll('.reject-btn').forEach(function(button) {
+        const form = button.closest('form');
+        const message = button.getAttribute('data-message');
+        const actionValue = button.getAttribute('value');
+        const actionName = button.getAttribute('name');
+        
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            customConfirm(message, function(confirmed) {
+                if (confirmed) {
+                    // Create a hidden input to preserve the action value
+                    const hiddenInput = document.createElement('input');
+                    hiddenInput.type = 'hidden';
+                    hiddenInput.name = actionName;
+                    hiddenInput.value = actionValue;
+                    form.appendChild(hiddenInput);
+                    
+                    // Submit the form
+                    form.submit();
+                }
+            });
+        });
+    });
+});
+</script>
+{% endblock %}
+

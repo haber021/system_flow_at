@@ -1,0 +1,78 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Semester Report{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-header bg-primary text-white text-center">
+                <h3 class="mb-0">END-OF-SEMESTER ATTENDANCE REPORT</h3>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <p><strong>Student Name:</strong> {{ student.name }}</p>
+                        <p><strong>Student ID:</strong> {{ student.student_id|default:student.rfid_id }}</p>
+                        <p><strong>Course:</strong> {{ student.course }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Semester:</strong> {{ semester }} AY {{ academic_year }}</p>
+                        <p><strong>Adviser:</strong> {{ student.adviser|default:"Not assigned" }}</p>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <div class="row mb-4 text-center">
+                    <div class="col-md-4">
+                        <h5>Total Class Days</h5>
+                        <p class="display-6">{{ total_days }}</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h5 class="text-success">Present Days</h5>
+                        <p class="display-6 text-success">{{ total_present }} ({{ total_percentage }}%)</p>
+                    </div>
+                    <div class="col-md-4">
+                        <h5 class="text-danger">Absent Days</h5>
+                        <p class="display-6 text-danger">{{ total_absent }} ({{ 100|add:total_percentage|add:"-"|add:total_percentage }}%)</p>
+                    </div>
+                </div>
+                
+                {% if missed_dates %}
+                <div class="mb-4">
+                    <h5>Missed Subjects:</h5>
+                    <ul>
+                        {% for subject_code, dates in missed_dates.items %}
+                        <li>
+                            <strong>{{ subject_code }}:</strong> {{ dates|length }} days
+                            {% if dates|length <= 5 %}
+                                ({{ dates|join:", " }})
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+                
+                <div class="d-flex gap-2 justify-content-center mt-4">
+                    <button onclick="window.print()" class="btn btn-primary">
+                        <i class="bi bi-printer"></i> Print Report
+                    </button>
+                    <a href="{% url 'email_preview' student.id %}?academic_year={{ academic_year }}&semester={{ semester }}" class="btn btn-info">
+                        <i class="bi bi-envelope"></i> Send Report to Email
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    .navbar, .btn, .card-header { display: none; }
+    .card { border: none; box-shadow: none; }
+}
+</style>
+{% endblock %}
+

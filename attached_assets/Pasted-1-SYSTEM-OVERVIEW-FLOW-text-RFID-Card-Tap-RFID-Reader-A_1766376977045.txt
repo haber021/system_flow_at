@@ -1,0 +1,310 @@
+1. SYSTEM OVERVIEW (FLOW)
+text
+RFID Card Tap
+   ↓
+RFID Reader
+   ↓
+Attendance Processing Module
+   ↓
+Database
+   ↓
+Attendance Reports Generator
+   ↓
+Email Notification Service
+   ↓
+Student Email Inbox
+2. LOGIN SCREEN
+text
+---------------------------------------------------
+RFID Attendance Monitoring System
+---------------------------------------------------
+Username:  [__________________________]
+
+Password:  [__________________________]
+
+[ LOGIN ]
+
+Forgot Password?
+---------------------------------------------------
+3. ADMIN / INSTRUCTOR DASHBOARD
+text
+---------------------------------------------------
+Dashboard | Welcome, Admin
+---------------------------------------------------
+Total Students      : 150
+Total Subjects      : 8
+Present Today       : 112
+Absent Today        : 38
+---------------------------------------------------
+[ Students ] [ Subjects ] [ Attendance Scan ] 
+[ Attendance Logs ] [ Reports ] [ Email Logs ] 
+[ Settings ] [ Logout ]
+---------------------------------------------------
+Last Sync: Today, 08:15 AM
+System Status: Online
+---------------------------------------------------
+4. STUDENT MANAGEMENT SCREEN
+text
+---------------------------------------------------
+Student Management
+---------------------------------------------------
+Search: [____________] [ Search ] [ Refresh ]
+---------------------------------------------------
+RFID ID | Name        | Course | Email
+---------------------------------------------------
+10001   | Juan Cruz  | BSIT   | juan@email.com
+10002   | Ana Reyes  | BSIS   | ana@email.com
+10003   | Mark Lim   | BSCS   | mark@email.com
+---------------------------------------------------
+Showing 3 of 150 students
+[ Add Student ] [ Edit Student ] [ Delete Student ] 
+[ Import CSV ] [ Export CSV ]
+---------------------------------------------------
+5. SUBJECT MANAGEMENT SCREEN
+text
+---------------------------------------------------
+Subject Management
+---------------------------------------------------
+Search: [____________] [ Filter by Instructor ]
+---------------------------------------------------
+Code   | Subject Name           | Instructor
+---------------------------------------------------
+IT101  | Introduction to IT    | Mr. Santos
+IS102  | Information Systems   | Ms. Cruz
+CS103  | Data Structures       | Dr. Lee
+---------------------------------------------------
+[ Add Subject ] [ Edit Subject ] [ Delete Subject ]
+[ Assign Students ] [ Set Schedule ]
+---------------------------------------------------
+6. RFID ATTENDANCE SCAN SCREEN
+text
+---------------------------------------------------
+RFID Attendance Scan
+---------------------------------------------------
+Status: Ready for scanning...
+Scanning Area: [ _________________ ]
+---------------------------------------------------
+Last Scan Details:
+Student Name : Ana Reyes
+RFID ID      : 10002
+Subject      : IT101
+Date         : 09/10/2025
+Time         : 08:02 AM
+Status       : PRESENT ✓
+---------------------------------------------------
+[ Manual Entry ] [ View Today's Scans ] [ Clear ]
+Active Subject: IT101 - Introduction to IT
+---------------------------------------------------
+7. DAILY ATTENDANCE LOG SCREEN
+text
+---------------------------------------------------
+Daily Attendance Logs – IT101
+Date: [09/10/2025 ▼] [ Apply Filter ]
+---------------------------------------------------
+Student ID | Student Name | Time In | Status
+---------------------------------------------------
+10002     | Ana Reyes   | 08:02 AM | Present
+10001     | Juan Cruz  | --:--     | Absent
+10003     | Mark Lim   | 08:05 AM | Late
+---------------------------------------------------
+Total: 25 Present | 5 Absent | 3 Late
+[ Previous Day ] [ Next Day ] [ Export CSV ] 
+[ Export PDF ] [ Print ]
+---------------------------------------------------
+8. STUDENT ATTENDANCE SUMMARY (PER STUDENT)
+text
+---------------------------------------------------
+Attendance Summary – Ana Reyes (BSIS)
+Academic Year: 2025-2026
+---------------------------------------------------
+Subject       | Total Days | Present | Absent | %
+---------------------------------------------------
+IT101         | 30         | 27      | 3      | 90%
+IS102         | 30         | 25      | 5      | 83%
+CS201         | 30         | 28      | 2      | 93%
+---------------------------------------------------
+Total Class Days : 90
+Total Present    : 80 (88.9%)
+Total Absent     : 10 (11.1%)
+---------------------------------------------------
+[ View Detailed Logs ] [ Generate Report ]
+---------------------------------------------------
+9. END-OF-SEMESTER REPORT SCREEN
+text
+---------------------------------------------------
+END-OF-SEMESTER ATTENDANCE REPORT
+---------------------------------------------------
+Student Name : Ana Reyes
+Student ID   : 2025-10002
+Course       : BSIS
+Semester     : 1st Semester AY 2025–2026
+Adviser      : Dr. Maria Santos
+---------------------------------------------------
+Total Class Days : 60
+Present Days     : 52 (86.7%)
+Absent Days      : 8 (13.3%)
+---------------------------------------------------
+Missed Subjects:
+- IT101 : 3 days (Oct 5, 12, 19)
+- IS102 : 5 days (Sep 8, 15, 22, Oct 6, 13)
+---------------------------------------------------
+[ Generate PDF ] [ Send Report to Email ] 
+[ Print Report ]
+---------------------------------------------------
+10. EMAIL REPORT PREVIEW SCREEN
+text
+---------------------------------------------------
+Email Report Preview
+---------------------------------------------------
+To      : ana@email.com
+CC      : [__________________________]
+BCC     : [__________________________]
+Subject : [Attendance Report - 1st Semester AY 2025-2026]
+---------------------------------------------------
+Message Body:
+
+Dear Ana Reyes,
+
+This is your attendance summary for 
+1st Semester, Academic Year 2025-2026.
+
+Total Class Days : 60
+Present Days     : 52 (86.7%)
+Absent Days      : 8 (13.3%)
+
+Missed Subjects:
+- IT101 : 3 days
+- IS102 : 5 days
+
+Please contact your instructor for concerns.
+
+Regards,
+RFID Attendance Monitoring System
+University Attendance Office
+---------------------------------------------------
+[ Send Email ] [ Save as Draft ] [ Cancel ]
+---------------------------------------------------
+11. EMAIL LOGS SCREEN
+text
+---------------------------------------------------
+Email Logs
+---------------------------------------------------
+Filter: [ All Reports ▼ ] [ Date Range: ______ to ______ ]
+---------------------------------------------------
+Date Sent   | Student Name  | Type       | Status
+---------------------------------------------------
+10/15/25    | Ana Reyes    | Semester   | Sent ✓
+10/15/25    | Juan Cruz    | Semester   | Sent ✓
+10/14/25    | Mark Lim     | Warning    | Failed ✗
+---------------------------------------------------
+[ Resend Failed ] [ View Details ] [ Export Logs ]
+Total Sent: 148 | Failed: 2
+---------------------------------------------------
+12. SYSTEM SETTINGS SCREEN
+text
+---------------------------------------------------
+System Settings
+---------------------------------------------------
+Academic Settings:
+Semester Start Date : [ 06/01/2025 ▼ ]
+Semester End Date   : [ 10/15/2025 ▼ ]
+Class Hours        : [ 08:00 AM - 05:00 PM ]
+
+Attendance Settings:
+Grace Period       : [ 15 minutes ]
+Late Threshold     : [ 30 minutes ]
+Absent Threshold   : [ 50% of class ]
+
+Notification Settings:
+Email Notifications : [ Enabled ✓ ]
+Auto Send Reports   : [ Enabled ✓ ]
+Send Warnings After: [ 3 absences ]
+
+System Settings:
+Auto Backup        : [ Daily ✓ ]
+Data Retention     : [ 5 years ]
+---------------------------------------------------
+[ Save Settings ] [ Reset to Default ] [ Backup Now ]
+---------------------------------------------------
+13. USER PROFILE SCREEN
+text
+---------------------------------------------------
+User Profile
+---------------------------------------------------
+Username     : admin
+Full Name    : [System Administrator]
+Email        : [admin@university.edu]
+Role         : Administrator
+Last Login   : 09/10/2025 08:00 AM
+---------------------------------------------------
+[ Change Password ]
+Old Password: [__________________________]
+New Password: [__________________________]
+Confirm New : [__________________________]
+---------------------------------------------------
+[ Update Profile ] [ Save Password ]
+---------------------------------------------------
+14. FORGOT PASSWORD SCREEN
+text
+---------------------------------------------------
+Password Recovery
+---------------------------------------------------
+Enter your registered email address:
+Email: [__________________________]
+
+[ Send Reset Link ]
+
+A password reset link will be sent to your email.
+Link expires in 24 hours.
+---------------------------------------------------
+15. MOBILE VIEW (RFID SCAN)
+text
+[ RFID SCAN APP ]
+-----------------
+University Logo
+
+Tap RFID Card
+or
+Enter Student ID: [____]
+
+[ Manual Entry ]
+[ View Today's Attendance ]
+[ Sync Data ]
+-----------------
+Last Sync: 08:15 AM
+Connected: Yes
+16. COMPLETE SYSTEM FLOW (SUMMARY)
+text
+1. Login
+2. Dashboard Overview
+3. Student/Subject Setup
+4. RFID Scanning
+5. Attendance Storage
+6. Daily Logs Monitoring
+7. Report Generation
+8. Email Notification
+9. Logs & Analytics
+10. System Maintenance
+17. ERROR / SUCCESS MESSAGES
+text
+Success: ✓ Attendance recorded successfully!
+Error:   ✗ RFID card not recognized
+Warning: ⚠ Student already marked present
+Info:    ℹ System backup completed
+18. REAL-TIME MONITORING PANEL
+text
+---------------------------------------------------
+Live Attendance Monitor
+---------------------------------------------------
+Time: 08:15 AM | Date: 09/10/2025
+Active Class: IT101 (8:00-9:30 AM)
+---------------------------------------------------
+Present: 25 | Absent: 5 | Late: 3 | Total: 33
+---------------------------------------------------
+Recent Activity:
+08:14 AM - Maria Santos (Present)
+08:12 AM - Jose Reyes (Late)
+08:10 AM - Ana Cruz (Present)
+---------------------------------------------------
+[ Refresh ] [ Auto-Refresh: ON ] [ Pause ]
+---------------------------------------------------

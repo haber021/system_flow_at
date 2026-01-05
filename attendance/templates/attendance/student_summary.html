@@ -1,0 +1,308 @@
+{% extends 'attendance/base.html' %}
+{% load static %}
+
+{% block title %}Subject Enrollment Summary{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-book"></i> Subject Enrollment Summary</h2>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="GET" action="{% url 'student_summary' %}" class="row g-3">
+            <div class="col-md-5">
+                <label for="academic_year" class="form-label">Academic Year:</label>
+                <input type="text" class="form-control" id="academic_year" name="academic_year" value="{{ academic_year }}" placeholder="e.g., 2025-2026">
+            </div>
+            <div class="col-md-5">
+                <label for="semester" class="form-label">Semester:</label>
+                <input type="text" class="form-control" id="semester" name="semester" value="{{ semester }}" placeholder="e.g., 1st Semester">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <button type="submit" class="btn btn-primary d-block w-100">
+                    <i class="bi bi-search"></i> Filter
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if subjects_data %}
+<!-- Bulk Action Bar -->
+<div class="card mb-3 bg-light">
+    <div class="card-body">
+        <form method="POST" action="{% url 'bulk_send_emails' %}" id="bulkEmailForm" onsubmit="return confirmBulkSend();">
+            {% csrf_token %}
+            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+            <input type="hidden" name="semester" value="{{ semester }}">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <div class="d-flex align-items-center gap-3">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="selectAllStudents()">
+                            <i class="bi bi-check-all"></i> Select All
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="deselectAllStudents()">
+                            <i class="bi bi-x-square"></i> Deselect All
+                        </button>
+                        <span class="text-muted" id="selectedCount">0 students selected</span>
+                    </div>
+                </div>
+                <div class="col-md-6 text-end">
+                    <button type="submit" class="btn btn-primary" id="bulkSendBtn" disabled>
+                        <i class="bi bi-envelope-fill"></i> Send Email Reports to Selected
+                    </button>
+                </div>
+            </div>
+            <div id="selectedStudentsContainer"></div>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    {% for item in subjects_data %}
+    <div class="col-md-6 col-lg-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-book-half"></i> {{ item.subject.code }}
+                </h5>
+                <small>{{ item.subject.name }}</small>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <span class="badge bg-info text-dark">
+                        <i class="bi bi-people"></i> {{ item.enrollment_count }} student{{ item.enrollment_count|pluralize }} enrolled
+                    </span>
+                    {% if item.subject.instructor %}
+                    <div class="mt-2">
+                        <small class="text-muted">
+                            <i class="bi bi-person"></i> <strong>Instructor:</strong> {{ item.subject.instructor.name }}
+                        </small>
+                    </div>
+                    {% endif %}
+                    {% if item.subject.course %}
+                    <div class="mt-1">
+                        <small class="text-muted">
+                            <i class="bi bi-mortarboard"></i> <strong>Course:</strong> {{ item.subject.course.code }}
+                        </small>
+                    </div>
+                    {% endif %}
+                </div>
+                
+                {% if item.students %}
+                <div class="enrolled-students" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th style="width: 30px;">
+                                    <input type="checkbox" class="form-check-input select-all-checkbox" 
+                                           data-subject-id="{{ item.subject.id }}" 
+                                           title="Select All">
+                                </th>
+                                <th>#</th>
+                                <th>Student</th>
+                                <th>Course</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student_item in item.students %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" class="form-check-input student-checkbox" 
+                                           name="student_ids" 
+                                           value="{{ student_item.student.id }}"
+                                           data-subject-id="{{ item.subject.id }}">
+                                </td>
+                                <td>{{ forloop.counter }}</td>
+                                <td>
+                                    <strong>{{ student_item.student.name }}</strong>
+                                    {% if student_item.student.student_id %}
+                                    <br><small class="text-muted">ID: {{ student_item.student.student_id }}</small>
+                                    {% endif %}
+                                    {% if student_item.student.rfid_id %}
+                                    <br><small class="text-muted"><code>{{ student_item.student.rfid_id }}</code></small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ student_item.student.course.code }}</span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'email_preview' student_item.student.id %}?academic_year={{ academic_year }}&semester={{ semester }}" 
+                                       class="btn btn-sm btn-info" 
+                                       title="Send Email Report to {{ student_item.student.name }}">
+                                        <i class="bi bi-envelope"></i> Send Email
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No students enrolled for this academic year and semester.
+                </div>
+                {% endif %}
+            </div>
+            <div class="card-footer bg-light">
+                <small class="text-muted">
+                    Academic Year: <strong>{{ academic_year }}</strong> | Semester: <strong>{{ semester }}</strong>
+                </small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title">
+            <i class="bi bi-bar-chart"></i> Summary Statistics
+        </h5>
+        <div class="row text-center">
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded">
+                    <h3 class="text-primary mb-0">{{ total_subjects }}</h3>
+                    <small class="text-muted">Total Subjects</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded">
+                    <h3 class="text-success mb-0">{{ total_enrollments }}</h3>
+                    <small class="text-muted">Total Enrollments</small>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="p-3 bg-light rounded">
+                    <h3 class="text-info mb-0">{{ avg_enrollments }}</h3>
+                    <small class="text-muted">Average per Subject</small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> No subjects found. Please check your filters or contact an administrator.
+</div>
+{% endif %}
+
+<style>
+.enrolled-students {
+    scrollbar-width: thin;
+    scrollbar-color: #6c757d #f8f9fa;
+}
+
+.enrolled-students::-webkit-scrollbar {
+    width: 8px;
+}
+
+.enrolled-students::-webkit-scrollbar-track {
+    background: #f8f9fa;
+    border-radius: 4px;
+}
+
+.enrolled-students::-webkit-scrollbar-thumb {
+    background: #6c757d;
+    border-radius: 4px;
+}
+
+.enrolled-students::-webkit-scrollbar-thumb:hover {
+    background: #5a6268;
+}
+
+.sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Email Loading Modal Styles */
+.email-loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(5px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.email-loading-modal {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    max-width: 500px;
+    width: 90%;
+    overflow: hidden;
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.email-loading-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    color: white;
+    padding: 1.5rem;
+    text-align: center;
+}
+
+.email-loading-header h4 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.email-loading-body {
+    padding: 2rem;
+    text-align: center;
+}
+
+.loading-info {
+    text-align: left;
+}
+
+.loading-details {
+    background-color: #f8f9fa;
+    padding: 1rem;
+    border-radius: 8px;
+    border-left: 4px solid #0d6efd;
+}
+
+.loading-details p {
+    margin-bottom: 0.5rem;
+}
+
+.loading-details i {
+    color: #0d6efd;
+    margin-right: 0.5rem;
+}
+</style>
+
+<script src="{% static 'attendance/js/student_summary.js' %}"></script>
+{% endblock %}

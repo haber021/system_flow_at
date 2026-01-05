@@ -1,0 +1,50 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Student Login - RFID Attendance System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white text-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-credit-card"></i><br>
+                    Student Login
+                </h4>
+                <small>Login with your RFID ID</small>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% url 'student_login' %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="rfid_id" class="form-label">
+                            <i class="bi bi-credit-card"></i> RFID ID:
+                        </label>
+                        <input type="text" class="form-control" id="rfid_id" name="rfid_id" 
+                               placeholder="Scan or enter your RFID ID" required autofocus>
+                        <small class="form-text text-muted">Enter your RFID card ID to access your attendance records.</small>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 mb-2">
+                        <i class="bi bi-box-arrow-in-right"></i> LOGIN
+                    </button>
+                    <div class="text-center mb-2">
+                        <small class="text-muted">
+                            Don't have an account? 
+                            <a href="{% url 'student_register' %}" class="text-decoration-none">Register here</a>
+                        </small>
+                    </div>
+                    <div class="text-center">
+                        <small class="text-muted">Need help? Contact your administrator.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center">
+                <small class="text-muted">
+                    <a href="{% url 'login' %}" class="text-decoration-none">Staff/Admin Login</a>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

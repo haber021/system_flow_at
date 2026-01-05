@@ -1,0 +1,80 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Manual Entry{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0"><i class="bi bi-pencil"></i> Manual Entry</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% url 'manual_entry' %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="student_id" class="form-label">Student *</label>
+                        <select class="form-select" id="student_id" name="student_id" required>
+                            <option value="">Select Student</option>
+                            {% for student in students %}
+                            <option value="{{ student.id }}">{{ student.name }} ({{ student.rfid_id }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="subject_id" class="form-label">Subject *</label>
+                        <select class="form-select" id="subject_id" name="subject_id" required>
+                            <option value="">Select Subject</option>
+                            {% for subject in subjects %}
+                            <option value="{{ subject.id }}">{{ subject.code }} - {{ subject.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="date" class="form-label">Date *</label>
+                        <input type="date" class="form-control" id="date" name="date" 
+                               value="{% now 'Y-m-d' %}" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="time_in" class="form-label">Time In</label>
+                            <input type="time" class="form-control" id="time_in" name="time_in" 
+                                   value="{% now 'H:i' %}">
+                            <small class="text-muted">Leave empty to use current time</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="time_out" class="form-label">Time Out</label>
+                            <input type="time" class="form-control" id="time_out" name="time_out">
+                            <small class="text-muted">Optional - leave empty if not checked out</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status *</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="PRESENT">Present</option>
+                            <option value="LATE">Late</option>
+                            <option value="ABSENT">Absent</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="skip_validation" name="skip_validation">
+                            <label class="form-check-label" for="skip_validation">
+                                Skip Time Validation (Admin Override)
+                            </label>
+                            <small class="text-muted d-block">Allows recording attendance outside scheduled times</small>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Record Attendance
+                        </button>
+                        <a href="{% url 'scan' %}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,214 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Live Attendance Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .activity-item {
+        padding: 10px;
+        border-left: 3px solid #007bff;
+        margin-bottom: 10px;
+        background: #f8f9fa;
+    }
+    .status-badge {
+        font-size: 0.9em;
+        padding: 5px 10px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-activity"></i> Live Attendance Monitor</h2>
+    <div>
+        <span class="badge bg-success">System Status: Online</span>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <strong>Time:</strong> <span id="current-time">{{ current_time|date:"g:i A" }}</span> | 
+                <strong>Date:</strong> {{ current_time|date:"m/d/Y" }}
+            </div>
+            <div class="col-md-6 text-end">
+                <form method="GET" action="{% url 'live_monitor' %}" class="d-inline">
+                    <select name="subject_id" class="form-select d-inline-block" style="width: auto;" onchange="this.form.submit()">
+                        <option value="">All Subjects</option>
+                        {% for subject in subjects %}
+                        <option value="{{ subject.id }}" {% if active_subject.id == subject.id %}selected{% endif %}>
+                            {{ subject.code }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+            </div>
+        </div>
+        {% if active_subject %}
+        <div class="mt-2">
+            <strong>Active Class:</strong> {{ active_subject.code }} ({{ active_subject.schedule_time_start|time:"g:i A"|default:"N/A" }}-{{ active_subject.schedule_time_end|time:"g:i A"|default:"N/A" }})
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-3">
+        <div class="card text-white bg-success">
+            <div class="card-body text-center">
+                <h5>Present</h5>
+                <h2 id="stat-present">{{ stats.present }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger">
+            <div class="card-body text-center">
+                <h5>Absent</h5>
+                <h2 id="stat-absent">{{ stats.absent }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning">
+            <div class="card-body text-center">
+                <h5>Late</h5>
+                <h2 id="stat-late">{{ stats.late }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-info">
+            <div class="card-body text-center">
+                <h5>Total</h5>
+                <h2 id="stat-total">{{ stats.total }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">Recent Activity</h5>
+            </div>
+            <div class="card-body" id="recent-activity">
+                {% for activity in recent_activity %}
+                <div class="activity-item">
+                    <strong>
+                        {% if activity.time_in %}
+                            Time In: {{ activity.time_in|time:"g:i A" }}
+                        {% elif activity.time %}
+                            {{ activity.time|time:"g:i A" }}
+                        {% else %}
+                            --:--
+                        {% endif %}
+                        {% if activity.time_out %}
+                            | Time Out: {{ activity.time_out|time:"g:i A" }}
+                        {% endif %}
+                    </strong> - 
+                    {{ activity.student.name }} 
+                    <span class="badge bg-{% if activity.status == 'PRESENT' %}success{% elif activity.status == 'LATE' %}warning{% else %}danger{% endif %} status-badge">
+                        {{ activity.status }}
+                    </span>
+                </div>
+                {% empty %}
+                <p class="text-muted">No recent activity.</p>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <button onclick="refreshData()" class="btn btn-primary">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                    <button onclick="toggleAutoRefresh()" class="btn btn-success" id="auto-refresh-btn">
+                        <i class="bi bi-play-circle"></i> Auto-Refresh: <span id="auto-status">ON</span>
+                    </button>
+                    <a href="{% url 'scan' %}" class="btn btn-outline-primary">
+                        <i class="bi bi-credit-card"></i> Go to Scan
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let autoRefreshInterval = null;
+let autoRefreshEnabled = true;
+
+function updateTime() {
+    const now = new Date();
+    document.getElementById('current-time').textContent = now.toLocaleTimeString('en-US', {hour: 'numeric', minute: '2-digit'});
+}
+
+function refreshData() {
+    const subjectId = new URLSearchParams(window.location.search).get('subject_id') || '';
+    fetch(`{% url 'live_monitor_api' %}?subject_id=${subjectId}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('stat-present').textContent = data.stats.present;
+            document.getElementById('stat-absent').textContent = data.stats.absent;
+            document.getElementById('stat-late').textContent = data.stats.late;
+            document.getElementById('stat-total').textContent = data.stats.total;
+            
+            const activityHtml = data.recent_activity.map(item => {
+                const badgeClass = item.status === 'PRESENT' ? 'success' : (item.status === 'LATE' ? 'warning' : 'danger');
+                let timeDisplay = '';
+                if (item.time_in) {
+                    timeDisplay = `Time In: ${item.time_in}`;
+                    if (item.time_out) {
+                        timeDisplay += ` | Time Out: ${item.time_out}`;
+                    }
+                } else {
+                    timeDisplay = item.time || '--:--';
+                }
+                return `<div class="activity-item">
+                    <strong>${timeDisplay}</strong> - ${item.student_name} 
+                    <span class="badge bg-${badgeClass} status-badge">${item.status}</span>
+                </div>`;
+            }).join('');
+            
+            document.getElementById('recent-activity').innerHTML = activityHtml || '<p class="text-muted">No recent activity.</p>';
+        })
+        .catch(error => console.error('Error:', error));
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    const btn = document.getElementById('auto-refresh-btn');
+    const status = document.getElementById('auto-status');
+    
+    if (autoRefreshEnabled) {
+        status.textContent = 'ON';
+        btn.classList.remove('btn-secondary');
+        btn.classList.add('btn-success');
+        autoRefreshInterval = setInterval(refreshData, 5000);
+    } else {
+        status.textContent = 'OFF';
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-secondary');
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+            autoRefreshInterval = null;
+        }
+    }
+}
+
+// Initialize
+updateTime();
+setInterval(updateTime, 1000);
+if (autoRefreshEnabled) {
+    autoRefreshInterval = setInterval(refreshData, 5000);
+}
+</script>
+{% endblock %}
+

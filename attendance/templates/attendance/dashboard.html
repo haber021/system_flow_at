@@ -1,0 +1,258 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-speedometer2"></i> Dashboard | Welcome, {{ user.get_full_name|default:user.username }}</h2>
+</div>
+
+<div class="row mb-4">
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card text-white bg-primary card-stat">
+            <div class="card-body">
+                <h5 class="card-title">Total Students</h5>
+                <p class="card-text display-4">{{ total_students }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card text-white bg-info card-stat">
+            <div class="card-body">
+                <h5 class="card-title">Total Subjects</h5>
+                <p class="card-text display-4">{{ total_subjects }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-2 col-md-4 col-sm-6 mb-3">
+        <div class="card text-white bg-warning card-stat">
+            <div class="card-body">
+                <h5 class="card-title">Total Instructors</h5>
+                <p class="card-text display-4">{{ total_instructors }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+        <div class="card text-white bg-success card-stat">
+            <div class="card-body">
+                <h5 class="card-title">Present Today</h5>
+                <p class="card-text display-4">{{ present_today }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-3 col-md-4 col-sm-6 mb-3">
+        <div class="card text-white bg-danger card-stat">
+            <div class="card-body">
+                <h5 class="card-title">Absent Today</h5>
+                <p class="card-text display-4">{{ absent_today }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5 class="card-title">Quick Actions</h5>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="{% url 'student_list' %}" class="btn btn-outline-primary">
+                        <i class="bi bi-people"></i> Students
+                    </a>
+                    <a href="{% url 'subject_list' %}" class="btn btn-outline-primary">
+                        <i class="bi bi-book"></i> Subjects
+                    </a>
+                    <a href="{% url 'scan' %}" class="btn btn-outline-success">
+                        <i class="bi bi-credit-card"></i> Attendance Scan
+                    </a>
+                    <a href="{% url 'attendance_logs' %}" class="btn btn-outline-info">
+                        <i class="bi bi-list-check"></i> Attendance Logs
+                    </a>
+                    <a href="{% url 'student_summary' %}" class="btn btn-outline-info">
+                        <i class="bi bi-graph-up"></i> Reports
+                    </a>
+                    <a href="{% url 'email_logs' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-envelope"></i> Email Logs
+                    </a>
+                    <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-outline-warning position-relative" id="enrollmentRequestsBtn" style="overflow: visible;">
+                        <i class="bi bi-clipboard-check"></i> Enrollment Requests
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="pendingBadge" style="display: {% if pending_enrollments > 0 %}inline-block{% else %}none{% endif %}; font-size: 0.75rem; padding: 0.35em 0.65em; font-weight: bold; min-width: 1.5em; text-align: center;">
+                            {{ pending_enrollments|default:0 }}
+                            <span class="visually-hidden">pending requests</span>
+                        </span>
+                    </a>
+                    <a href="{% url 'adviser_features' %}" class="btn btn-outline-primary">
+                        <i class="bi bi-person-badge"></i> Adviser Features
+                    </a>
+                    <a href="{% url 'settings' %}" class="btn btn-outline-secondary">
+                        <i class="bi bi-gear"></i> Settings
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <h5 class="mb-0"><i class="bi bi-person-badge"></i> Registered Instructors</h5>
+            </div>
+            <div class="card-body">
+                {% if instructors %}
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Employee ID</th>
+                                <th>Assigned Adviser</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for instructor in instructors %}
+                            <tr>
+                                <td><strong>{{ instructor.name }}</strong></td>
+                                <td>{{ instructor.email|default:"—" }}</td>
+                                <td>{{ instructor.employee_id|default:"—" }}</td>
+                                <td>{{ instructor.adviser.name }}</td>
+                                <td>
+                                    {% if instructor.is_active %}
+                                        <span class="badge bg-success">Active</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">Inactive</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ instructor.created_at|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle"></i> No instructors registered yet.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Last Sync:</strong> {{ last_sync|date:"M d, Y h:i A" }}
+                    </div>
+                    <div>
+                        <span class="badge bg-success">System Status: Online</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const enrollmentBtn = document.getElementById('enrollmentRequestsBtn');
+    const pendingCount = {{ pending_enrollments|default:0 }};
+    
+    // Function to update the badge
+    function updateBadge(count) {
+        let badge = document.getElementById('pendingBadge');
+        
+        if (count > 0) {
+            if (!badge) {
+                // Create badge if it doesn't exist
+                badge = document.createElement('span');
+                badge.id = 'pendingBadge';
+                badge.className = 'position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger';
+                badge.innerHTML = count + ' <span class="visually-hidden">pending requests</span>';
+                enrollmentBtn.appendChild(badge);
+            } else {
+                // Update existing badge
+                badge.innerHTML = count + ' <span class="visually-hidden">pending requests</span>';
+            }
+            badge.style.display = 'inline-block';
+            // Add pulse animation for attention
+            badge.style.animation = 'pulse 2s infinite';
+        } else {
+            // Hide badge if count is 0
+            if (badge) {
+                badge.style.display = 'none';
+            }
+        }
+    }
+    
+    // Initial badge update
+    updateBadge(pendingCount);
+    
+    // Function to fetch updated count
+    function fetchPendingCount() {
+        fetch('{% url "enrollment_requests_count_api" %}')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    updateBadge(data.pending_count);
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching pending count:', error);
+            });
+    }
+    
+    // Update count every 30 seconds
+    setInterval(fetchPendingCount, 30000);
+    
+    // Also update when page becomes visible again
+    document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) {
+            fetchPendingCount();
+        }
+    });
+});
+
+// Add pulse animation CSS
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes pulse {
+        0% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: translate(-50%, -50%) scale(1.1);
+            opacity: 0.8;
+        }
+        100% {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+    }
+    #pendingBadge {
+        font-size: 0.75rem;
+        padding: 0.35em 0.65em;
+        font-weight: bold;
+        min-width: 1.5em;
+        text-align: center;
+        z-index: 10;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        border: 2px solid #fff;
+    }
+    #enrollmentRequestsBtn {
+        overflow: visible !important;
+    }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

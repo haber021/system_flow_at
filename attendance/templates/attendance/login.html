@@ -1,0 +1,44 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Login - RFID Attendance System{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="col-md-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-person-badge"></i><br>
+                    Adviser / Administrator Login
+                </h4>
+                <small class="text-white-50">RFID Attendance Monitoring System</small>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% url 'login' %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username / Employee ID:</label>
+                        <input type="text" class="form-control" id="username" name="username" required autofocus placeholder="Enter username or employee ID">
+                        <small class="form-text text-muted">You can login using your username or employee ID</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password:</label>
+                        <input type="password" class="form-control" id="password" name="password" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100 mb-2">
+                        <i class="bi bi-box-arrow-in-right"></i> LOGIN
+                    </button>
+                    <div class="text-center">
+                        <a href="{% url 'forgot_password' %}" class="text-decoration-none">Forgot Password?</a>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center">
+                <small class="text-muted">
+                    <a href="{% url 'student_login' %}" class="text-decoration-none">Student Login</a>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

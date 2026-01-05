@@ -1,0 +1,441 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Adviser Features Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    .feature-card {
+        transition: transform 0.2s, box-shadow 0.2s;
+        border-left: 4px solid #007bff;
+        min-height: 150px;
+    }
+    .feature-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+    .feature-card.enrollment {
+        border-left-color: #ffc107;
+    }
+    .feature-card.students {
+        border-left-color: #28a745;
+    }
+    .feature-card.attendance {
+        border-left-color: #3b82f6;
+    }
+    .feature-card.reports {
+        border-left-color: #6f42c1;
+    }
+    .feature-card.scan {
+        border-left-color: #dc3545;
+    }
+    .stat-card {
+        min-height: 120px;
+    }
+    .recent-item {
+        border-left: 3px solid #dee2e6;
+        padding-left: 15px;
+        margin-bottom: 10px;
+        transition: border-color 0.2s;
+    }
+    .recent-item:hover {
+        border-left-color: #007bff;
+    }
+    /* Purple color scheme for Reports section */
+    .bg-purple {
+        background-color: #6f42c1 !important;
+    }
+    .btn-purple {
+        background-color: #6f42c1;
+        border-color: #6f42c1;
+        color: #ffffff;
+    }
+    .btn-purple:hover {
+        background-color: #5a32a3;
+        border-color: #5a32a3;
+        color: #ffffff;
+    }
+    .btn-outline-purple {
+        color: #6f42c1;
+        border-color: #6f42c1;
+    }
+    .btn-outline-purple:hover {
+        background-color: #6f42c1;
+        border-color: #6f42c1;
+        color: #ffffff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h2 class="mb-1">
+        <i class="bi bi-person-badge"></i> Adviser Features Dashboard
+    </h2>
+    <p class="text-muted">Welcome, <strong>{{ adviser_name }}</strong> - Manage your students and monitor attendance</p>
+    {% if not is_staff %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> You are viewing features for students assigned to you as their adviser.
+    </div>
+    {% else %}
+    <div class="alert alert-success">
+        <i class="bi bi-shield-check"></i> <strong>Staff/Admin View:</strong> You have access to all features and data.
+    </div>
+    {% endif %}
+</div>
+
+<!-- Statistics Overview -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-primary stat-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-book"></i> Subject Enrollments
+                </h5>
+                <p class="card-text display-4">{{ enrolled_students_count }}</p>
+                <small class="text-white-50">Total subjects students enrolled in</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-warning stat-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-clipboard-check"></i> Pending Requests
+                </h5>
+                <p class="card-text display-4">{{ pending_enrollments }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-success stat-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-check-circle"></i> Present Today
+                </h5>
+                <p class="card-text display-4">{{ present_today }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card text-white bg-danger stat-card">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-x-circle"></i> Absent Today
+                </h5>
+                <p class="card-text display-4">{{ absent_today }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Main Features -->
+<div class="row mb-4">
+    <div class="col-md-6 mb-4">
+        <div class="card feature-card enrollment">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="bi bi-clipboard-check"></i> Enrollment Management
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Review and manage student enrollment requests for subjects.</p>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Pending Requests:</span>
+                        <strong class="text-warning">{{ pending_enrollments }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Approved:</span>
+                        <strong class="text-success">{{ approved_enrollments }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Rejected:</span>
+                        <strong class="text-danger">{{ rejected_enrollments }}</strong>
+                    </div>
+                </div>
+                <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-warning w-100">
+                    <i class="bi bi-arrow-right-circle"></i> Manage Enrollment Requests
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card feature-card students">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-people"></i> Student Management
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">View and manage your assigned students.</p>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Total Assigned Students:</span>
+                        <strong>{{ total_students }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Late Today:</span>
+                        <strong class="text-warning">{{ late_today }}</strong>
+                    </div>
+                </div>
+                <a href="{% url 'student_list' %}?adviser={{ adviser_name }}" class="btn btn-success w-100">
+                    <i class="bi bi-arrow-right-circle"></i> View My Students
+                </a>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card feature-card attendance">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-list-check"></i> Attendance Monitoring
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Monitor attendance records and logs for your students.</p>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Present Today:</span>
+                        <strong class="text-success">{{ present_today }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Absent Today:</span>
+                        <strong class="text-danger">{{ absent_today }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Late Today:</span>
+                        <strong class="text-warning">{{ late_today }}</strong>
+                    </div>
+                </div>
+                <div class="d-grid gap-2">
+                    <a href="{% url 'attendance_logs' %}" class="btn btn-info">
+                        <i class="bi bi-arrow-right-circle"></i> View Attendance Logs
+                    </a>
+                    <a href="{% url 'live_monitor' %}" class="btn btn-outline-info">
+                        <i class="bi bi-activity"></i> Live Monitor
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card feature-card reports">
+            <div class="card-header bg-purple text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-graph-up"></i> Reports & Analytics
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="card-text">Generate reports and view attendance analytics.</p>
+                <div class="mb-3">
+                    <small class="text-muted">Access comprehensive attendance reports and student summaries.</small>
+                </div>
+                <div class="d-grid gap-2">
+                    <a href="{% url 'student_summary' %}" class="btn btn-purple">
+                        <i class="bi bi-arrow-right-circle"></i> Student Summary
+                    </a>
+                    <a href="{% url 'email_logs' %}" class="btn btn-outline-purple">
+                        <i class="bi bi-envelope"></i> Email Logs
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RFID Scan Feature -->
+<div class="row mb-4">
+    <div class="col-md-12 mb-4">
+        <div class="card feature-card scan">
+            <div class="card-header bg-danger text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-credit-card"></i> RFID Attendance Scan
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <p class="card-text mb-3">Scan RFID cards to record student attendance in real-time. Select a subject and start scanning student cards.</p>
+                        <div class="mb-3">
+                            <small class="text-muted">
+                                <i class="bi bi-info-circle"></i> The scan interface supports automatic card reading and manual entry options.
+                            </small>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-end">
+                        <a href="{% url 'scan' %}" class="btn btn-danger btn-lg w-100">
+                            <i class="bi bi-credit-card"></i> Open Scanner
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Subject Statistics -->
+{% if subject_stats %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-book"></i> Subject-Wise Attendance (Today)
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th>Enrolled Students</th>
+                                <th>Present</th>
+                                <th>Absent</th>
+                                <th>Late</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for stat in subject_stats %}
+                            <tr>
+                                <td><strong>{{ stat.subject.code }}</strong></td>
+                                <td>{{ stat.subject.name }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ stat.enrolled_count }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-success">{{ stat.present_today }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">{{ stat.absent_today }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-warning text-dark">{{ stat.late_today }}</span>
+                                </td>
+                                <td>
+                                    <a href="{% url 'attendance_logs' %}?subject_id={{ stat.subject.id }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i> View
+                                    </a>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">No subjects found for your students.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Activity -->
+<div class="row">
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="bi bi-clock-history"></i> Recent Enrollment Requests
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_requests %}
+                <div class="list-group list-group-flush">
+                    {% for req in recent_requests %}
+                    <div class="list-group-item recent-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">{{ req.student.name }}</h6>
+                                <p class="mb-1">
+                                    <small class="text-muted">
+                                        <strong>{{ req.subject.code }}</strong> - {{ req.subject.name }}
+                                    </small>
+                                </p>
+                                <small class="text-muted">
+                                    <i class="bi bi-calendar"></i> {{ req.requested_at|date:"M d, Y g:i A" }}
+                                </small>
+                            </div>
+                            <span class="badge bg-warning text-dark">Pending</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-warning btn-sm w-100">
+                        <i class="bi bi-arrow-right"></i> View All Requests
+                    </a>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No pending enrollment requests</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-activity"></i> Recent Attendance
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if recent_attendance %}
+                <div class="list-group list-group-flush">
+                    {% for att in recent_attendance %}
+                    <div class="list-group-item recent-item">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="mb-1">{{ att.student.name }}</h6>
+                                <p class="mb-1">
+                                    <small class="text-muted">
+                                        <strong>{{ att.subject.code }}</strong> - {{ att.date|date:"M d, Y" }}
+                                    </small>
+                                </p>
+                                <small class="text-muted">
+                                    {% if att.time_in %}
+                                        <i class="bi bi-clock"></i> {{ att.time_in|time:"g:i A" }}
+                                    {% elif att.time %}
+                                        <i class="bi bi-clock"></i> {{ att.time|time:"g:i A" }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            <span class="badge 
+                                {% if att.status == 'PRESENT' %}bg-success
+                                {% elif att.status == 'ABSENT' %}bg-danger
+                                {% elif att.status == 'LATE' %}bg-warning text-dark
+                                {% endif %}">
+                                {{ att.status }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mt-3">
+                    <a href="{% url 'attendance_logs' %}" class="btn btn-info btn-sm w-100">
+                        <i class="bi bi-arrow-right"></i> View All Attendance
+                    </a>
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                    <p class="mt-2">No recent attendance records</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

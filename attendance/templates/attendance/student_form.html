@@ -1,0 +1,108 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}{{ action }} Student{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">{{ action }} Student</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {% csrf_token %}
+                    {% if query_params %}
+                        {% for key, value in query_params.items %}
+                            {% if value %}
+                                <input type="hidden" name="{{ key }}" value="{{ value }}">
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="rfid_id" class="form-label">RFID ID *</label>
+                            <input type="text" class="form-control" id="rfid_id" name="rfid_id" 
+                                   value="{{ student.rfid_id|default:'' }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="student_id" class="form-label">Student ID</label>
+                            <input type="text" class="form-control" id="student_id" name="student_id" 
+                                   value="{{ student.student_id|default:'' }}">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ student.name|default:'' }}" required>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="course" class="form-label">Course *</label>
+                            <select class="form-select" id="course" name="course" required>
+                                <option value="">-- Select Course --</option>
+                                {% if courses %}
+                                    {% for course in courses %}
+                                    <option value="{{ course.id }}" {% if student.course and student.course.id == course.id %}selected{% elif default_course_id and course.id == default_course_id %}selected{% endif %}>
+                                        {{ course.code }} - {{ course.name }}
+                                    </option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value="" disabled>No courses available. Please contact administrator.</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="section" class="form-label">Section *</label>
+                            <select class="form-select" id="section" name="section" required>
+                                <option value="">-- Select Section --</option>
+                                {% if sections %}
+                                    {% for section in sections %}
+                                    <option value="{{ section.id }}" {% if student.section and student.section.id == section.id %}selected{% endif %}>
+                                        {{ section.name }} ({{ section.code }})
+                                    </option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value="" disabled>No sections available. Please create a section first.</option>
+                                {% endif %}
+                            </select>
+                            <small class="form-text text-muted">
+                                <a href="{% url 'section_list' %}" target="_blank">Manage Sections</a>
+                            </small>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="email" class="form-label">Email *</label>
+                            <input type="email" class="form-control" id="email" name="email" 
+                                   value="{{ student.email|default:'' }}" required>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="adviser" class="form-label">Adviser</label>
+                        <select class="form-select" id="adviser" name="adviser">
+                            <option value="">-- No Adviser --</option>
+                            {% if advisers %}
+                                {% for adviser in advisers %}
+                                <option value="{{ adviser.id }}" {% if student.adviser and student.adviser.id == adviser.id %}selected{% endif %}>
+                                    {{ adviser.name }} ({{ adviser.email }})
+                                </option>
+                                {% endfor %}
+                            {% else %}
+                                <option value="" disabled>No advisers available.</option>
+                            {% endif %}
+                        </select>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save
+                        </button>
+                        <a href="{% url 'student_list' %}{{ query_string }}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

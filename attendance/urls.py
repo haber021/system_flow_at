@@ -1,0 +1,92 @@
+from django.urls import path
+from . import views
+
+urlpatterns = [
+    # Authentication
+    path('', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+    path('forgot-password/', views.forgot_password_view, name='forgot_password'),
+    
+    # Dashboard
+    path('dashboard/', views.dashboard, name='dashboard'),
+    
+    # Student Management
+    path('students/', views.student_list, name='student_list'),
+    path('students/add/', views.student_add, name='student_add'),
+    path('students/<int:student_id>/edit/', views.student_edit, name='student_edit'),
+    path('students/<int:student_id>/delete/', views.student_delete, name='student_delete'),
+    path('students/import-csv/', views.student_import_csv, name='student_import_csv'),
+    path('students/export-csv/', views.student_export_csv, name='student_export_csv'),
+    
+    # Subject Management
+    path('subjects/', views.subject_list, name='subject_list'),
+    path('subjects/add/', views.subject_add, name='subject_add'),
+    path('subjects/<int:subject_id>/edit/', views.subject_edit, name='subject_edit'),
+    path('subjects/<int:subject_id>/delete/', views.subject_delete, name='subject_delete'),
+    path('subjects/<int:subject_id>/assign-students/', views.assign_students_to_subject, name='assign_students'),
+    
+    # Section Management
+    path('sections/', views.section_list, name='section_list'),
+    path('sections/add/', views.section_add, name='section_add'),
+    path('sections/<int:section_id>/edit/', views.section_edit, name='section_edit'),
+    path('sections/<int:section_id>/delete/', views.section_delete, name='section_delete'),
+    
+    # RFID Attendance Scan
+    path('scan/', views.scan_view, name='scan'),
+    path('scan/manual-entry/', views.manual_entry, name='manual_entry'),
+    
+    # Attendance Logs
+    path('attendance-logs/', views.attendance_logs, name='attendance_logs'),
+    path('attendance-logs/export-csv/', views.attendance_logs_export_csv, name='attendance_logs_export_csv'),
+    
+    # Student Attendance Summary
+    path('student-summary/', views.student_attendance_summary, name='student_summary'),
+    path('student-summary/<int:student_id>/', views.student_attendance_summary, name='student_summary_detail'),
+    path('bulk-send-emails/', views.bulk_send_emails, name='bulk_send_emails'),
+    
+    # Semester Report
+    path('semester-report/<int:student_id>/', views.semester_report, name='semester_report'),
+    
+    # Email
+    path('email-preview/<int:student_id>/', views.email_preview, name='email_preview'),
+    path('email-logs/', views.email_logs, name='email_logs'),
+    path('email-logs/<int:log_id>/resend/', views.email_resend, name='email_resend'),
+    
+    # Settings
+    path('settings/', views.settings_view, name='settings'),
+    
+    # Profile
+    path('profile/', views.profile_view, name='profile'),
+    
+    # Real-time Monitoring
+    path('live-monitor/', views.live_monitor, name='live_monitor'),
+    path('api/live-monitor/', views.live_monitor_api, name='live_monitor_api'),
+    
+    # Mobile View
+    path('mobile/', views.mobile_scan, name='mobile_scan'),
+    
+    # Public Student View
+    path('student-view/', views.student_view, name='student_view'),
+    
+    # Student Login and Dashboard
+    path('student/register/', views.student_register, name='student_register'),
+    path('student/login/', views.student_login, name='student_login'),
+    path('student/dashboard/', views.student_dashboard, name='student_dashboard'),
+    path('student/enroll-subjects/', views.student_enroll_subjects, name='student_enroll_subjects'),
+    path('student/features/', views.student_features_view, name='student_features'),
+    path('student/profile/', views.student_profile_view, name='student_profile'),
+    path('student/history/', views.student_history, name='student_history'),
+    path('student/logout/', views.student_logout, name='student_logout'),
+    
+    # Adviser Enrollment Confirmation
+    path('adviser/enrollment-requests/', views.adviser_enrollment_requests, name='adviser_enrollment_requests'),
+    path('adviser/features/', views.subject_list, name='adviser_features'),  # Redirects to subject_list which shows features for advisers
+    path('adviser/subjects-monitor/', views.adviser_subjects_monitor, name='adviser_subjects_monitor'),
+    path('api/enrollment-requests-count/', views.enrollment_requests_count_api, name='enrollment_requests_count_api'),
+    
+    # API Endpoints for Form Dropdowns
+    path('api/courses/', views.api_courses, name='api_courses'),
+    path('api/sections/', views.api_sections, name='api_sections'),
+    path('api/advisers/', views.api_advisers, name='api_advisers'),
+    path('api/instructors/', views.api_instructors, name='api_instructors'),
+]

@@ -1,0 +1,151 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}System Settings{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-gear"></i> System Settings</h2>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{% url 'settings' %}">
+            {% csrf_token %}
+            
+            <h5 class="mb-3">Academic Settings</h5>
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3">
+                    <label for="semester_start_date" class="form-label">Semester Start Date:</label>
+                    <input type="date" class="form-control" id="semester_start_date" name="semester_start_date" 
+                           value="{{ settings.semester_start_date|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="semester_end_date" class="form-label">Semester End Date:</label>
+                    <input type="date" class="form-control" id="semester_end_date" name="semester_end_date" 
+                           value="{{ settings.semester_end_date|date:'Y-m-d' }}" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="class_start_time" class="form-label">Class Start Time:</label>
+                    <input type="time" class="form-control" id="class_start_time" name="class_start_time" 
+                           value="{{ settings.class_start_time|time:'H:i' }}" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="class_end_time" class="form-label">Class End Time:</label>
+                    <input type="time" class="form-control" id="class_end_time" name="class_end_time" 
+                           value="{{ settings.class_end_time|time:'H:i' }}" required>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <h5 class="mb-3">Attendance Settings</h5>
+            <div class="row mb-4">
+                <div class="col-md-4 mb-3">
+                    <label for="grace_period_minutes" class="form-label">Grace Period (minutes):</label>
+                    <input type="number" class="form-control" id="grace_period_minutes" name="grace_period_minutes" 
+                           value="{{ settings.grace_period_minutes }}" min="0" required>
+                    <small class="text-muted">Minutes allowed before marking as LATE</small>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="late_threshold_minutes" class="form-label">Late Threshold (minutes):</label>
+                    <input type="number" class="form-control" id="late_threshold_minutes" name="late_threshold_minutes" 
+                           value="{{ settings.late_threshold_minutes }}" min="0" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="absent_threshold_percent" class="form-label">Absent Threshold (%):</label>
+                    <input type="number" class="form-control" id="absent_threshold_percent" name="absent_threshold_percent" 
+                           value="{{ settings.absent_threshold_percent }}" min="0" max="100" required>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <h5 class="mb-3">Time Validation Settings</h5>
+            <div class="row mb-4">
+                <div class="col-md-12 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="enable_time_validation" name="enable_time_validation" 
+                               {% if settings.enable_time_validation %}checked{% endif %}>
+                        <label class="form-check-label" for="enable_time_validation">
+                            <strong>Enable Time Validation</strong>
+                        </label>
+                        <small class="text-muted d-block">When enabled, attendance is only allowed during scheduled class times</small>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="early_attendance_minutes" class="form-label">Early Attendance Allowed (minutes):</label>
+                    <input type="number" class="form-control" id="early_attendance_minutes" name="early_attendance_minutes" 
+                           value="{{ settings.early_attendance_minutes }}" min="0" required>
+                    <small class="text-muted">Allow attendance this many minutes before class starts</small>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="late_attendance_minutes" class="form-label">Late Attendance Allowed (minutes):</label>
+                    <input type="number" class="form-control" id="late_attendance_minutes" name="late_attendance_minutes" 
+                           value="{{ settings.late_attendance_minutes }}" min="0" required>
+                    <small class="text-muted">Allow attendance this many minutes after class ends</small>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <h5 class="mb-3">Notification Settings</h5>
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="email_notifications_enabled" name="email_notifications_enabled" 
+                               {% if settings.email_notifications_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="email_notifications_enabled">
+                            <strong>Email Notifications Enabled</strong>
+                        </label>
+                        <small class="text-muted d-block">Enable/disable all email notifications (attendance confirmations, warnings, reports)</small>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="auto_send_reports" name="auto_send_reports" 
+                               {% if settings.auto_send_reports %}checked{% endif %}>
+                        <label class="form-check-label" for="auto_send_reports">
+                            <strong>Auto Send Reports</strong>
+                        </label>
+                        <small class="text-muted d-block">Enable automatic sending of semester reports (when implemented)</small>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="send_warnings_after" class="form-label"><strong>Send Warnings After (absences):</strong></label>
+                    <input type="number" class="form-control" id="send_warnings_after" name="send_warnings_after" 
+                           value="{{ settings.send_warnings_after }}" min="1" required>
+                    <small class="text-muted">Automatically send warning emails when a student reaches this number of absences in a subject</small>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <h5 class="mb-3">System Settings</h5>
+            <div class="row mb-4">
+                <div class="col-md-6 mb-3">
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="auto_backup_enabled" name="auto_backup_enabled" 
+                               {% if settings.auto_backup_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="auto_backup_enabled">
+                            Auto Backup Enabled
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="data_retention_years" class="form-label">Data Retention (years):</label>
+                    <input type="number" class="form-control" id="data_retention_years" name="data_retention_years" 
+                           value="{{ settings.data_retention_years }}" min="1" required>
+                </div>
+            </div>
+            
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-save"></i> Save Settings
+                </button>
+                <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,76 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Assign Students to Subject{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-people"></i> Assign Students to {{ subject.code }}</h2>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" action="{% url 'assign_students' subject.id %}">
+            {% csrf_token %}
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="academic_year" class="form-label">Academic Year:</label>
+                    <input type="text" class="form-control" id="academic_year" name="academic_year" 
+                           value="2025-2026" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="semester" class="form-label">Semester:</label>
+                    <input type="text" class="form-control" id="semester" name="semester" 
+                           value="1st Semester" required>
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Select Students:</label>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox" id="select-all"></th>
+                                <th>RFID ID</th>
+                                <th>Name</th>
+                                <th>Course</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for student in students %}
+                            <tr>
+                                <td>
+                                    <input type="checkbox" name="student_ids" value="{{ student.id }}" class="student-checkbox">
+                                </td>
+                                <td>{{ student.rfid_id }}</td>
+                                <td>{{ student.name }}</td>
+                                <td>{{ student.course }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="4" class="text-center">All students are already assigned to this subject.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle"></i> Assign Students
+                </button>
+                <a href="{% url 'subject_list' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.getElementById('select-all').addEventListener('change', function() {
+    const checkboxes = document.querySelectorAll('.student-checkbox');
+    checkboxes.forEach(cb => cb.checked = this.checked);
+});
+</script>
+{% endblock %}
+

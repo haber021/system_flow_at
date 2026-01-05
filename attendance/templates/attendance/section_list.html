@@ -1,0 +1,105 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Section Management{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-layers"></i> Section Management</h2>
+    <a href="{% url 'section_add' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add Section
+    </a>
+</div>
+
+<div class="card mb-3">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-search"></i> Search Sections</h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{% url 'section_list' %}">
+            <div class="row g-3">
+                <div class="col-md-10">
+                    <label for="search" class="form-label"><small><strong>Search:</strong></small></label>
+                    <input type="text" class="form-control form-control-sm" name="search" id="search" 
+                           placeholder="Search by code, name, or description..." value="{{ search_query }}" autocomplete="off">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label"><small>&nbsp;</small></label>
+                    <div class="d-grid gap-1">
+                        <button type="submit" class="btn btn-primary btn-sm">
+                            <i class="bi bi-search"></i> Search
+                        </button>
+                        <a href="{% url 'section_list' %}" class="btn btn-outline-secondary btn-sm">
+                            <i class="bi bi-x-circle"></i> Clear
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Description</th>
+                        <th>Students</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for section in sections %}
+                    <tr>
+                        <td><strong>{{ section.code }}</strong></td>
+                        <td>{{ section.name }}</td>
+                        <td>{{ section.description|default:"<span class='text-muted'>N/A</span>" }}</td>
+                        <td>
+                            <span class="badge bg-info">{{ section.students.count }}</span>
+                        </td>
+                        <td>
+                            {% if section.is_active %}
+                                <span class="badge bg-success">Active</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Inactive</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group btn-group-sm" role="group">
+                                <a href="{% url 'section_edit' section.id %}" class="btn btn-outline-primary" title="Edit">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="POST" action="{% url 'section_delete' section.id %}" class="d-inline delete-form" 
+                                      data-message="Are you sure you want to delete '{{ section.name }}'? This action cannot be undone if there are students assigned to this section.">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-danger" title="Delete">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center py-4">
+                            <div class="text-muted">
+                                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                                <p class="mt-2 mb-0">No sections found.</p>
+                                {% if search_query %}
+                                <small>Try adjusting your search.</small>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

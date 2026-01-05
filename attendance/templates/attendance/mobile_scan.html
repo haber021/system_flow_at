@@ -1,0 +1,102 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Mobile RFID Scan{% endblock %}
+
+{% block extra_css %}
+<style>
+    @media (max-width: 768px) {
+        .mobile-scan-card {
+            margin: 10px;
+            border-radius: 15px;
+        }
+        .scan-input {
+            font-size: 1.5rem;
+            padding: 20px;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card mobile-scan-card text-center">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">RFID SCAN APP</h4>
+            </div>
+            <div class="card-body">
+                <div class="mb-4">
+                    <h5>University Logo</h5>
+                </div>
+                
+                <form method="POST" action="{% url 'mobile_scan' %}">
+                    {% csrf_token %}
+                    <div class="mb-4">
+                        <h5>Tap RFID Card</h5>
+                        <p class="text-muted">or</p>
+                        <label for="student_id" class="form-label">Enter Student ID:</label>
+                        <input type="text" class="form-control scan-input" id="student_id" name="student_id" 
+                               placeholder="Enter Student ID" autofocus>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <input type="text" class="form-control scan-input" id="rfid_id" name="rfid_id" 
+                               placeholder="Or scan RFID card" style="display: none;">
+                    </div>
+                    
+                    <div class="d-grid gap-2 mb-3">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="bi bi-check-circle"></i> Submit
+                        </button>
+                        <a href="{% url 'manual_entry' %}" class="btn btn-secondary">
+                            <i class="bi bi-pencil"></i> Manual Entry
+                        </a>
+                    </div>
+                </form>
+                
+                <div class="mt-4">
+                    <a href="{% url 'attendance_logs' %}" class="btn btn-outline-info w-100 mb-2">
+                        <i class="bi bi-list-check"></i> View Today's Attendance
+                    </a>
+                    <button class="btn btn-outline-success w-100">
+                        <i class="bi bi-arrow-repeat"></i> Sync Data
+                    </button>
+                </div>
+                
+                <hr>
+                
+                <div class="text-muted small">
+                    <div>Last Sync: {{ last_scan.created_at|date:"g:i A"|default:"Never" }}</div>
+                    <div>Connected: <span class="badge bg-success">Yes</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const rfidInput = document.getElementById('rfid_id');
+    const studentIdInput = document.getElementById('student_id');
+    const form = rfidInput.closest('form');
+    
+    // Auto-submit on RFID scan
+    rfidInput.addEventListener('input', function() {
+        if (rfidInput.value.trim().length >= 5) {
+            setTimeout(() => form.submit(), 500);
+        }
+    });
+    
+    // Focus management
+    studentIdInput.addEventListener('focus', function() {
+        rfidInput.style.display = 'none';
+    });
+    
+    rfidInput.addEventListener('focus', function() {
+        studentIdInput.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}
+

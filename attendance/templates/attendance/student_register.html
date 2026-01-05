@@ -1,0 +1,315 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Student Registration - RFID Attendance System{% endblock %}
+
+{% block content %}
+<style>
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(2px);
+        z-index: 9999;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        transition: opacity 0.3s ease;
+    }
+    
+    .loading-overlay.active {
+        display: flex;
+    }
+    
+    .loading-spinner {
+        width: 60px;
+        height: 60px;
+        border: 5px solid #e3e3e3;
+        border-top: 5px solid #2563eb;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .loading-message {
+        font-size: 18px;
+        font-weight: 500;
+        color: #2563eb;
+        text-align: center;
+    }
+    
+    .loading-submessage {
+        font-size: 14px;
+        color: #6b7280;
+        margin-top: 10px;
+        text-align: center;
+    }
+    
+    .loading-content {
+        background: white;
+        padding: 40px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        text-align: center;
+        min-width: 300px;
+    }
+</style>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-message">Processing Registration...</div>
+        <div class="loading-submessage">Please wait while we create your account</div>
+    </div>
+</div>
+
+<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
+    <div class="col-md-6">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white text-center">
+                <h4 class="mb-0">
+                    <i class="bi bi-person-plus"></i><br>
+                    Student Registration
+                </h4>
+                <small>Create your account to access the attendance system</small>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{% url 'student_register' %}" id="registerForm">
+                    {% csrf_token %}
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="rfid_id" class="form-label">
+                                <i class="bi bi-credit-card"></i> RFID ID <span class="text-danger">*</span>:
+                            </label>
+                            <input type="text" class="form-control" id="rfid_id" name="rfid_id" 
+                                   placeholder="Enter your RFID card ID" required autofocus>
+                            <small class="form-text text-muted">Your unique RFID card identifier.</small>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="student_id" class="form-label">
+                                <i class="bi bi-person-badge"></i> Student ID:
+                            </label>
+                            <input type="text" class="form-control" id="student_id" name="student_id" 
+                                   placeholder="Enter your student ID (optional)">
+                            <small class="form-text text-muted">Your official student identification number.</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="name" class="form-label">
+                            <i class="bi bi-person"></i> Full Name <span class="text-danger">*</span>:
+                        </label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               placeholder="Enter your full name" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="email" class="form-label">
+                            <i class="bi bi-envelope"></i> Email Address <span class="text-danger">*</span>:
+                        </label>
+                        <input type="email" class="form-control" id="email" name="email" 
+                               placeholder="Enter your email address" required>
+                        <small class="form-text text-muted">This will be used for notifications and account recovery.</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="course" class="form-label">
+                            <i class="bi bi-book"></i> Course <span class="text-danger">*</span>:
+                        </label>
+                        <select class="form-control" id="course" name="course" required>
+                            <option value="">-- Select Course --</option>
+                            {% for course in courses %}
+                                <option value="{{ course.id }}">{{ course.code }} - {{ course.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Select your enrolled course from the list.</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="section" class="form-label">
+                            <i class="bi bi-collection"></i> Section <span class="text-danger">*</span>:
+                        </label>
+                        <select class="form-control" id="section" name="section" required>
+                            <option value="">-- Select Section --</option>
+                            {% for section in sections %}
+                                <option value="{{ section.id }}">{{ section.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Select your section from the list.</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="adviser" class="form-label">
+                            <i class="bi bi-person-badge"></i> Adviser:
+                        </label>
+                        <select class="form-control" id="adviser" name="adviser">
+                            <option value="">-- Select Adviser (Optional) --</option>
+                            {% for adviser in advisers %}
+                                <option value="{{ adviser.id }}">{{ adviser.name }} {% if adviser.email %}({{ adviser.email }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="form-text text-muted">Select your assigned adviser (optional).</small>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label for="password" class="form-label">
+                                <i class="bi bi-lock"></i> Password <span class="text-danger">*</span>:
+                            </label>
+                            <input type="password" class="form-control" id="password" name="password" 
+                                   placeholder="Enter password (min. 8 characters)" required minlength="8">
+                            <small class="form-text text-muted">Minimum 8 characters.</small>
+                        </div>
+                        
+                        <div class="col-md-6 mb-3">
+                            <label for="password_confirm" class="form-label">
+                                <i class="bi bi-lock-fill"></i> Confirm Password <span class="text-danger">*</span>:
+                            </label>
+                            <input type="password" class="form-control" id="password_confirm" name="password_confirm" 
+                                   placeholder="Confirm your password" required minlength="8">
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="terms" required>
+                            <label class="form-check-label" for="terms">
+                                I agree to the terms and conditions
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary w-100 mb-2" id="submitButton">
+                        <span id="submitText">
+                            <i class="bi bi-person-plus"></i> REGISTER
+                        </span>
+                        <span id="submitLoading" style="display: none;">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Processing...
+                        </span>
+                    </button>
+                    
+                    <div class="text-center">
+                        <small class="text-muted">
+                            Already have an account? 
+                            <a href="{% url 'student_login' %}" class="text-decoration-none">Login here</a>
+                        </small>
+                    </div>
+                </form>
+            </div>
+            <div class="card-footer text-center">
+                <small class="text-muted">
+                    <a href="{% url 'login' %}" class="text-decoration-none">Staff/Admin Login</a>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const registerForm = document.getElementById('registerForm');
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    let isSubmitting = false; // Flag to prevent double submission
+    
+    // Password confirmation validation
+    registerForm.addEventListener('submit', function(e) {
+        // Prevent double submission
+        if (isSubmitting) {
+            e.preventDefault();
+            return false;
+        }
+        
+        const password = document.getElementById('password').value;
+        const passwordConfirm = document.getElementById('password_confirm').value;
+        
+        if (password !== passwordConfirm) {
+            e.preventDefault();
+            alert('Passwords do not match!');
+            return false;
+        }
+        
+        if (password.length < 8) {
+            e.preventDefault();
+            alert('Password must be at least 8 characters long!');
+            return false;
+        }
+        
+        // Mark form as submitting
+        isSubmitting = true;
+        
+        // Show loading overlay when form is valid and being submitted
+        loadingOverlay.classList.add('active');
+        
+        // Update button to show loading state
+        const submitButton = document.getElementById('submitButton');
+        const submitText = document.getElementById('submitText');
+        const submitLoading = document.getElementById('submitLoading');
+        if (submitText) submitText.style.display = 'none';
+        if (submitLoading) submitLoading.style.display = 'inline';
+        if (submitButton) submitButton.disabled = true;
+        
+        // Update loading message
+        const loadingMessage = loadingOverlay.querySelector('.loading-message');
+        const loadingSubmessage = loadingOverlay.querySelector('.loading-submessage');
+        
+        // Simulate progress updates (optional - can be removed if not needed)
+        setTimeout(() => {
+            if (loadingMessage) loadingMessage.textContent = 'Validating Information...';
+        }, 500);
+        
+        setTimeout(() => {
+            if (loadingMessage) loadingMessage.textContent = 'Creating Account...';
+            if (loadingSubmessage) loadingSubmessage.textContent = 'Setting up your profile';
+        }, 1500);
+        
+        // Form will submit normally - overlay stays until page reloads/redirects
+    });
+    
+    // Real-time password match indicator
+    document.getElementById('password_confirm').addEventListener('input', function() {
+        const password = document.getElementById('password').value;
+        const passwordConfirm = this.value;
+        const confirmField = this;
+        
+        if (passwordConfirm && password !== passwordConfirm) {
+            confirmField.classList.add('is-invalid');
+            confirmField.classList.remove('is-valid');
+        } else if (passwordConfirm && password === passwordConfirm) {
+            confirmField.classList.add('is-valid');
+            confirmField.classList.remove('is-invalid');
+        } else {
+            confirmField.classList.remove('is-valid', 'is-invalid');
+        }
+    });
+    
+    // Hide loading overlay if form validation fails (page doesn't reload)
+    // This will be handled by the browser if JavaScript validation passes
+    window.addEventListener('pageshow', function(event) {
+        // Hide overlay if page is loaded from cache (back button)
+        if (event.persisted) {
+            isSubmitting = false; // Reset submission flag
+            loadingOverlay.classList.remove('active');
+            
+            // Reset button state
+            const submitButton = document.getElementById('submitButton');
+            const submitText = document.getElementById('submitText');
+            const submitLoading = document.getElementById('submitLoading');
+            if (submitButton) submitButton.disabled = false;
+            if (submitText) submitText.style.display = 'inline';
+            if (submitLoading) submitLoading.style.display = 'none';
+        }
+    });
+</script>
+{% endblock %}
+

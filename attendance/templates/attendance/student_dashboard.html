@@ -1,0 +1,727 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}My Attendance - Student Dashboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Page Header Styling */
+    .page-header {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        border-radius: 12px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    
+    .page-header h2 {
+        color: white;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .page-header .student-info {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.95rem;
+        margin-bottom: 0;
+    }
+    
+    .page-header .student-info i {
+        margin-right: 0.5rem;
+        opacity: 0.8;
+    }
+    
+    .header-action-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+        font-weight: 500;
+        padding: 0.625rem 1.5rem;
+        border-radius: 8px;
+    }
+    
+    .header-action-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    
+    /* Statistics Cards */
+    .stat-card {
+        border: none;
+        border-radius: 12px;
+        transition: all 0.3s ease;
+        min-height: 140px;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+    }
+    
+    .stat-card.present {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+    }
+    
+    .stat-card.absent {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+    }
+    
+    .stat-card.late {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        color: white;
+    }
+    
+    .stat-card.rate {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+    }
+    
+    .stat-card .card-body {
+        padding: 1.5rem;
+    }
+    
+    .stat-card .card-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        opacity: 0.95;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1;
+        margin: 0;
+    }
+    
+    .stat-card.rate .stat-value {
+        font-size: 2rem;
+    }
+    
+    /* Filter Card */
+    .filter-card {
+        border: none;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        background: white;
+    }
+    
+    .filter-card .card-header {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        border-bottom: 2px solid #e2e8f0;
+        border-radius: 12px 12px 0 0 !important;
+        padding: 1.25rem 1.5rem;
+    }
+    
+    .filter-card .card-header h5 {
+        color: #1e293b;
+        font-weight: 600;
+        margin: 0;
+    }
+    
+    .filter-card .card-body {
+        padding: 1.5rem;
+    }
+    
+    /* Content Cards */
+    .content-card {
+        border: none;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        background: white;
+        overflow: hidden;
+    }
+    
+    .content-card .card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 2px solid #e2e8f0;
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    }
+    
+    .content-card .card-header.primary {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+        border-bottom: none;
+    }
+    
+    .content-card .card-header.danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        border-bottom: none;
+    }
+    
+    .content-card .card-header h5 {
+        font-weight: 600;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .content-card .card-body {
+        padding: 1.5rem;
+    }
+    
+    /* Table Styling */
+    .table {
+        margin-bottom: 0;
+    }
+    
+    .table thead th {
+        background-color: #f8fafc;
+        border-bottom: 2px solid #e2e8f0;
+        font-weight: 600;
+        color: #1e293b;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.5px;
+        padding: 1rem;
+    }
+    
+    .table tbody td {
+        padding: 1rem;
+        vertical-align: middle;
+        color: #475569;
+    }
+    
+    .table tbody tr {
+        transition: background-color 0.2s ease;
+    }
+    
+    .table tbody tr:hover {
+        background-color: #f8fafc;
+    }
+    
+    .absence-item {
+        border-left: 4px solid #ef4444;
+    }
+    
+    .absence-item td {
+        background-color: #fef2f2;
+    }
+    
+    .absence-item:hover td {
+        background-color: #fee2e2;
+    }
+    
+    /* Badge Styling */
+    .badge {
+        padding: 0.5rem 0.75rem;
+        font-weight: 500;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+    
+    /* Progress Bar */
+    .progress {
+        height: 24px;
+        border-radius: 6px;
+        background-color: #e2e8f0;
+        overflow: hidden;
+    }
+    
+    .progress-bar {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.75rem;
+        color: white;
+    }
+    
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: #64748b;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        color: #cbd5e1;
+        margin-bottom: 1rem;
+        display: block;
+    }
+    
+    .empty-state h6 {
+        color: #475569;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    
+    .empty-state p {
+        margin-bottom: 0;
+        color: #64748b;
+    }
+    
+    /* Pagination */
+    .pagination {
+        margin-top: 1.5rem;
+    }
+    
+    .page-link {
+        border-radius: 6px;
+        margin: 0 2px;
+        border: 1px solid #e2e8f0;
+        color: #475569;
+        padding: 0.5rem 0.75rem;
+        transition: all 0.2s ease;
+    }
+    
+    .page-link:hover {
+        background-color: #f1f5f9;
+        border-color: #cbd5e1;
+        color: #1e293b;
+    }
+    
+    .page-item.active .page-link {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-color: #2563eb;
+    }
+    
+    /* Form Controls */
+    .form-control:focus,
+    .form-select:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.15);
+    }
+    
+    /* Date Display */
+    .date-display {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .date-display strong {
+        color: #1e293b;
+        font-weight: 600;
+    }
+    
+    .date-display small {
+        color: #64748b;
+        font-size: 0.75rem;
+    }
+    
+    /* Button Styling */
+    .btn {
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    }
+    
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+        .page-header {
+            padding: 1.5rem;
+        }
+        
+        .page-header .d-flex {
+            flex-direction: column;
+            align-items: flex-start !important;
+        }
+        
+        .header-action-btn {
+            margin-top: 1rem;
+            width: 100%;
+        }
+        
+        .stat-card .stat-value {
+            font-size: 2rem;
+        }
+        
+        .table {
+            font-size: 0.875rem;
+        }
+        
+        .table thead th,
+        .table tbody td {
+            padding: 0.75rem 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-start flex-wrap">
+        <div>
+            <h2>
+                <i class="bi bi-person-circle me-2"></i>Welcome, {{ student.name }}!
+            </h2>
+            <div class="student-info">
+                <div class="mb-1">
+                    <i class="bi bi-person-badge"></i>
+                    <span>Student ID: <strong>{{ student.student_id|default:student.rfid_id }}</strong></span>
+                </div>
+                <div class="mb-1">
+                    <i class="bi bi-book"></i>
+                    <span>Course: <strong>{{ student.course }}</strong></span>
+                </div>
+                <div>
+                    <i class="bi bi-people"></i>
+                    <span>Section: <strong>{{ student.get_section_display }}</strong></span>
+                </div>
+            </div>
+        </div>
+        <a href="{% url 'student_enroll_subjects' %}" class="header-action-btn">
+            <i class="bi bi-book-plus me-2"></i>Enroll in Subjects
+        </a>
+    </div>
+</div>
+
+<!-- Statistics Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-lg-3">
+        <div class="card stat-card present">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-check-circle-fill"></i>
+                    <span>Present</span>
+                </h5>
+                <p class="stat-value">{{ total_present }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card stat-card absent">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-x-circle-fill"></i>
+                    <span>Absent</span>
+                </h5>
+                <p class="stat-value">{{ total_absent }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card stat-card late">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-clock-fill"></i>
+                    <span>Late</span>
+                </h5>
+                <p class="stat-value">{{ total_late }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6 col-lg-3">
+        <div class="card stat-card rate">
+            <div class="card-body">
+                <h5 class="card-title">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span>Attendance Rate</span>
+                </h5>
+                <p class="stat-value">{{ attendance_rate }}%</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card filter-card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-funnel-fill me-2"></i>Filter Attendance Records
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <label for="subject_id" class="form-label fw-semibold">
+                    <i class="bi bi-book me-1"></i>Subject
+                </label>
+                <select class="form-select" id="subject_id" name="subject_id">
+                    <option value="">All Subjects</option>
+                    {% for subject in subjects %}
+                    <option value="{{ subject.id }}" {% if selected_subject_id_int == subject.id %}selected{% endif %}>
+                        {{ subject.code }} - {{ subject.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="date_from" class="form-label fw-semibold">
+                    <i class="bi bi-calendar-event me-1"></i>Date From
+                </label>
+                <input type="date" class="form-control" id="date_from" name="date_from" value="{{ date_from }}">
+            </div>
+            <div class="col-md-4">
+                <div class="d-flex flex-column">
+                    <label for="date_to" class="form-label fw-semibold">
+                        <i class="bi bi-calendar-event-fill me-1"></i>Date To
+                    </label>
+                    <div class="d-flex gap-2">
+                        <input type="date" class="form-control" id="date_to" name="date_to" value="{{ date_to }}">
+                        <button type="submit" class="btn btn-primary btn-action">
+                            <i class="bi bi-search"></i>
+                            <span class="d-none d-md-inline">Filter</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Subject-wise Statistics -->
+{% if subject_stats %}
+<div class="card content-card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-bar-chart-fill me-2"></i>Subject-wise Attendance Statistics
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Subject Code</th>
+                        <th>Subject Name</th>
+                        <th class="text-center">Total Days</th>
+                        <th class="text-center">Present</th>
+                        <th class="text-center">Absent</th>
+                        <th class="text-center">Late</th>
+                        <th>Attendance Rate</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stat in subject_stats %}
+                    <tr>
+                        <td><strong>{{ stat.subject.code }}</strong></td>
+                        <td>{{ stat.subject.name }}</td>
+                        <td class="text-center"><strong>{{ stat.total }}</strong></td>
+                        <td class="text-center">
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i>{{ stat.present }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-danger">
+                                <i class="bi bi-x-circle"></i>{{ stat.absent }}
+                            </span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-warning text-dark">
+                                <i class="bi bi-clock"></i>{{ stat.late }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="progress">
+                                <div class="progress-bar {% if stat.rate >= 75 %}bg-success{% elif stat.rate >= 50 %}bg-warning{% else %}bg-danger{% endif %}" 
+                                     role="progressbar" 
+                                     style="width: {{ stat.rate }}%"
+                                     aria-valuenow="{{ stat.rate }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    <strong>{{ stat.rate }}%</strong>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Attendance Records with Time In/Out -->
+<div class="card content-card">
+    <div class="card-header primary">
+        <h5 class="mb-0">
+            <i class="bi bi-clock-history me-2"></i>My Attendance Records
+            <small class="opacity-75 ms-2">(Time In / Time Out)</small>
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if recent_attendances %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Subject Code</th>
+                        <th>Subject Name</th>
+                        <th class="text-center">Time In</th>
+                        <th class="text-center">Time Out</th>
+                        <th class="text-center">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_attendances %}
+                    {% with attendance=item.attendance %}
+                    <tr>
+                        <td>
+                            <div class="date-display">
+                                <strong>{{ attendance.date|date:"M d, Y" }}</strong>
+                                <small>{{ attendance.date|date:"l" }}</small>
+                            </div>
+                        </td>
+                        <td><strong>{{ attendance.subject.code }}</strong></td>
+                        <td>{{ attendance.subject.name }}</td>
+                        <td class="text-center">
+                            {% if item.time_in_formatted %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-arrow-right-circle"></i>{{ item.time_in_formatted }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if item.time_out_formatted %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-arrow-left-circle"></i>{{ item.time_out_formatted }}
+                                </span>
+                            {% else %}
+                                <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if attendance.status == 'PRESENT' %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i>{{ attendance.status }}
+                                </span>
+                            {% elif attendance.status == 'LATE' %}
+                                <span class="badge bg-warning text-dark">
+                                    <i class="bi bi-clock"></i>{{ attendance.status }}
+                                </span>
+                            {% elif attendance.status == 'ABSENT' %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x-circle"></i>{{ attendance.status }}
+                                </span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ attendance.status }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-info-circle"></i>
+            <h6>No Attendance Records Found</h6>
+            <p>{% if selected_subject_id or date_from or date_to %}No records match your selected filters.{% else %}You don't have any attendance records yet.{% endif %}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Absences List -->
+<div class="card content-card">
+    <div class="card-header danger">
+        <h5 class="mb-0">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>My Absences
+            <span class="badge bg-light text-dark ms-2">{{ total_absent }}</span>
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if absences %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Subject Code</th>
+                        <th>Subject Name</th>
+                        <th>Instructor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for absence in absences %}
+                    <tr class="absence-item">
+                        <td>
+                            <div class="date-display">
+                                <strong>{{ absence.date|date:"M d, Y" }}</strong>
+                                <small>{{ absence.date|date:"l" }}</small>
+                            </div>
+                        </td>
+                        <td><strong>{{ absence.subject.code }}</strong></td>
+                        <td>{{ absence.subject.name }}</td>
+                        <td>{% if absence.subject.instructor %}{{ absence.subject.instructor.name }}{% else %}<span class="text-muted">—</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Pagination -->
+        {% if absences.has_other_pages %}
+        <nav aria-label="Absences pagination">
+            <ul class="pagination justify-content-center">
+                {% if absences.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page=1{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                        <i class="bi bi-chevron-double-left"></i> First
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ absences.previous_page_number }}{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                        <i class="bi bi-chevron-left"></i> Previous
+                    </a>
+                </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">
+                        Page {{ absences.number }} of {{ absences.paginator.num_pages }}
+                    </span>
+                </li>
+                
+                {% if absences.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ absences.next_page_number }}{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ absences.paginator.num_pages }}{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                        Last <i class="bi bi-chevron-double-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-check-circle"></i>
+            <h6>Excellent! No Absences</h6>
+            <p>{% if selected_subject_id or date_from or date_to %}You have no absences for the selected filters. Keep up the great attendance!{% else %}You have perfect attendance. Keep up the great work!{% endif %}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

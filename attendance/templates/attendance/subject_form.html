@@ -1,0 +1,396 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}{{ action }} Subject{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">{{ action }} Subject</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="code-select" class="form-label">Code *</label>
+                            <select class="form-select" id="code-select" name="code" required data-current-code="{{ subject.code|default:'' }}">
+                                <option value="">-- Select Code --</option>
+                                {% for code in codes %}
+                                <option value="{{ code }}" {% if subject.code == code %}selected{% endif %}>
+                                    {{ code }}
+                                </option>
+                                {% endfor %}
+                                <option value="__new__">+ Add New Code</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="code-new" 
+                                   placeholder="Enter new code">
+                            <small class="text-muted d-block mt-1">Select a code from the list or add a new one.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="name-select" class="form-label">Subject Name *</label>
+                            <select class="form-select" id="name-select" name="name" required data-current-name="{{ subject.name|default:'' }}">
+                                <option value="">-- Select Subject Name --</option>
+                                {% for name in names %}
+                                <option value="{{ name }}" {% if subject.name == name %}selected{% endif %}>
+                                    {{ name }}
+                                </option>
+                                {% endfor %}
+                                <option value="__new__">+ Add New Subject Name</option>
+                            </select>
+                            <input type="text" class="form-control mt-2 d-none" id="name-new" 
+                                   placeholder="Enter new subject name">
+                            <small class="text-muted d-block mt-1">Select a subject name from the list or add a new one.</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="instructor-select" class="form-label">Instructor *</label>
+                        <select class="form-select" id="instructor-select" name="instructor" required data-current-instructor="{% if subject.instructor %}{{ subject.instructor.id }}{% endif %}" data-current-instructor-name="{% if subject.instructor %}{{ subject.instructor.name }}{% endif %}">
+                            <option value="">-- Select Instructor --</option>
+                            {% for instructor in instructors %}
+                            <option value="{{ instructor.id }}" {% if subject and subject.instructor and subject.instructor.id == instructor.id %}selected{% endif %}>
+                                {{ instructor.name }}
+                            </option>
+                            {% endfor %}
+                            <option value="__new__">+ Add New Instructor</option>
+                        </select>
+                        <input type="text" class="form-control mt-2 d-none" id="instructor-new" 
+                               placeholder="Enter new instructor name">
+                        <small class="text-muted">Select an instructor from the list or choose "Add New Instructor" to enter a new name.</small>
+                    </div>
+                    {% if is_superuser_or_staff and advisers %}
+                    <div class="mb-3">
+                        <label for="adviser-select" class="form-label">Adviser *</label>
+                        <select class="form-select" id="adviser-select" name="adviser" required data-current-adviser="{% if subject.adviser %}{{ subject.adviser.id }}{% endif %}">
+                            <option value="">-- Select Adviser --</option>
+                            {% for adviser in advisers %}
+                            <option value="{{ adviser.id }}" {% if subject and subject.adviser and subject.adviser.id == adviser.id %}selected{% endif %}>
+                                {{ adviser.name }} ({{ adviser.email }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Select the adviser who will manage this subject.</small>
+                    </div>
+                    {% endif %}
+                    <div class="mb-3">
+                        <label for="course-select" class="form-label">Course (Optional)</label>
+                        <select class="form-select" id="course-select" name="course" data-current-course="{% if subject.course %}{{ subject.course.id }}{% endif %}">
+                            <option value="">-- Select Course (Optional) --</option>
+                            {% for course in courses %}
+                            <option value="{{ course.id }}" {% if subject and subject.course and subject.course.id == course.id %}selected{% endif %}>
+                                {{ course.code }} - {{ course.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Select a course this subject belongs to. Leave blank for general subjects.</small>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="course_code" class="form-label">Course Code (Optional)</label>
+                            <input type="text" class="form-control" id="course_code" name="course_code" 
+                                   placeholder="e.g., BSIT, BSCS" value="{{ subject.course_code|default:'' }}">
+                            <small class="text-muted">Enter the course code (e.g., BSIT, BSCS).</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="course_number" class="form-label">Course Number (Optional)</label>
+                            <input type="text" class="form-control" id="course_number" name="course_number" 
+                                   placeholder="e.g., 101, 201" value="{{ subject.course_number|default:'' }}">
+                            <small class="text-muted">Enter the course number (e.g., 101, 201).</small>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="schedule_days" class="form-label">General Schedule Days (Optional)</label>
+                        <input type="text" class="form-control" id="schedule_days" name="schedule_days" 
+                               placeholder="e.g., Mon,Wed,Fri" value="{{ subject.schedule_days|default:'' }}">
+                        <small class="text-muted">For reference only. Use specific date & time entries below for actual scheduling.</small>
+                    </div>
+                    
+                    <!-- Weekly Schedule Entries -->
+                    <div class="mb-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <label class="form-label mb-0"><strong>Weekly Schedule</strong></label>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="add-schedule-btn">
+                                <i class="bi bi-plus-circle"></i> Add Day & Time
+                            </button>
+                        </div>
+                        <div id="schedule-entries">
+                            {% if subject and subject.schedules.all %}
+                                {% for schedule in subject.schedules.all %}
+                                    {% if schedule.day_of_week is not None %}
+                                    <div class="row mb-2 schedule-entry">
+                                        <div class="col-md-4">
+                                            <label class="form-label small">Day of Week</label>
+                                            <select class="form-select" name="schedule_day[]">
+                                                <option value="">-- Select Day --</option>
+                                                <option value="0" {% if schedule.day_of_week == 0 %}selected{% endif %}>Monday</option>
+                                                <option value="1" {% if schedule.day_of_week == 1 %}selected{% endif %}>Tuesday</option>
+                                                <option value="2" {% if schedule.day_of_week == 2 %}selected{% endif %}>Wednesday</option>
+                                                <option value="3" {% if schedule.day_of_week == 3 %}selected{% endif %}>Thursday</option>
+                                                <option value="4" {% if schedule.day_of_week == 4 %}selected{% endif %}>Friday</option>
+                                                <option value="5" {% if schedule.day_of_week == 5 %}selected{% endif %}>Saturday</option>
+                                                <option value="6" {% if schedule.day_of_week == 6 %}selected{% endif %}>Sunday</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small">Start Time</label>
+                                            <input type="time" class="form-control" name="schedule_time_start[]" 
+                                                   value="{{ schedule.time_start|time:'H:i' }}">
+                                        </div>
+                                        <div class="col-md-3">
+                                            <label class="form-label small">End Time</label>
+                                            <input type="time" class="form-control" name="schedule_time_end[]" 
+                                                   value="{{ schedule.time_end|time:'H:i' }}">
+                                        </div>
+                                        <div class="col-md-2">
+                                            <label class="form-label small">&nbsp;</label>
+                                            <button type="button" class="btn btn-sm btn-outline-danger remove-schedule-btn w-100">
+                                                <i class="bi bi-trash"></i> Remove
+                                            </button>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            {% endif %}
+                        </div>
+                        <small class="text-muted">Add weekly schedule entries. Select the day of the week and set the time for each class session.</small>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                   {% if subject.is_active or not subject %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">
+                                Active
+                            </label>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save
+                        </button>
+                        <a href="{% url 'subject_list' %}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Code to name mapping for auto-fill functionality
+    const codeToNameMap = {{ code_to_name_json|safe }};
+    
+    // Handle instructor dropdown and new instructor input
+    const instructorSelect = document.getElementById('instructor-select');
+    const instructorNew = document.getElementById('instructor-new');
+    
+    if (instructorSelect && instructorNew) {
+        // Check if we're editing and the current instructor is not in the dropdown list
+        const currentInstructor = instructorSelect.getAttribute('data-current-instructor');
+        const currentInstructorName = instructorSelect.getAttribute('data-current-instructor-name');
+        const selectedValue = instructorSelect.value;
+        
+        // If we have a current instructor but nothing is selected (or empty selected), 
+        // it means the instructor is not in the dropdown list
+        if (currentInstructor && currentInstructor.trim() !== '' && selectedValue === '') {
+            // Current instructor is not in the list, show new input
+            instructorSelect.value = '__new__';
+            instructorNew.classList.remove('d-none');
+            instructorNew.value = currentInstructorName || '';
+            instructorSelect.removeAttribute('name');
+            instructorNew.setAttribute('name', 'instructor');
+            instructorNew.setAttribute('required', 'required');
+        }
+        
+        instructorSelect.addEventListener('change', function() {
+            if (this.value === '__new__') {
+                // Show text input for new instructor
+                instructorNew.classList.remove('d-none');
+                instructorNew.setAttribute('name', 'instructor');
+                instructorNew.setAttribute('required', 'required');
+                instructorNew.focus();
+                this.removeAttribute('name');
+                this.removeAttribute('required');
+            } else if (this.value !== '') {
+                // Use selected instructor from dropdown
+                instructorNew.classList.add('d-none');
+                instructorNew.removeAttribute('name');
+                instructorNew.removeAttribute('required');
+                this.setAttribute('name', 'instructor');
+                this.setAttribute('required', 'required');
+            } else {
+                // No selection, keep dropdown active
+                instructorNew.classList.add('d-none');
+                instructorNew.removeAttribute('name');
+                instructorNew.removeAttribute('required');
+                this.setAttribute('name', 'instructor');
+                this.setAttribute('required', 'required');
+            }
+        });
+    }
+    
+    // Handle code dropdown and new code input
+    const codeSelect = document.getElementById('code-select');
+    const codeNew = document.getElementById('code-new');
+    
+    if (codeSelect && codeNew) {
+        const currentCode = codeSelect.getAttribute('data-current-code');
+        const selectedValue = codeSelect.value;
+        
+        if (currentCode && currentCode.trim() !== '' && selectedValue === '') {
+            codeSelect.value = '__new__';
+            codeNew.classList.remove('d-none');
+            codeNew.value = currentCode;
+            codeSelect.removeAttribute('name');
+            codeNew.setAttribute('name', 'code');
+            codeNew.setAttribute('required', 'required');
+        }
+        
+        codeSelect.addEventListener('change', function() {
+            if (this.value === '__new__') {
+                codeNew.classList.remove('d-none');
+                codeNew.setAttribute('name', 'code');
+                codeNew.setAttribute('required', 'required');
+                codeNew.focus();
+                this.removeAttribute('name');
+                this.removeAttribute('required');
+            } else if (this.value !== '') {
+                codeNew.classList.add('d-none');
+                codeNew.removeAttribute('name');
+                codeNew.removeAttribute('required');
+                this.setAttribute('name', 'code');
+                this.setAttribute('required', 'required');
+                
+                // Auto-fill subject name if code exists in mapping
+                if (codeToNameMap && codeToNameMap[this.value]) {
+                    const nameSelect = document.getElementById('name-select');
+                    const nameNew = document.getElementById('name-new');
+                    
+                    if (nameSelect && nameNew) {
+                        // Check if the name exists in the dropdown
+                        const matchingName = codeToNameMap[this.value];
+                        const nameOption = Array.from(nameSelect.options).find(opt => opt.value === matchingName);
+                        
+                        if (nameOption) {
+                            // Name exists in dropdown, select it
+                            nameSelect.value = matchingName;
+                            nameNew.classList.add('d-none');
+                            nameNew.removeAttribute('name');
+                            nameNew.removeAttribute('required');
+                            nameSelect.setAttribute('name', 'name');
+                            nameSelect.setAttribute('required', 'required');
+                        } else {
+                            // Name doesn't exist in dropdown, show new input with pre-filled value
+                            nameSelect.value = '__new__';
+                            nameNew.classList.remove('d-none');
+                            nameNew.value = matchingName;
+                            nameSelect.removeAttribute('name');
+                            nameSelect.removeAttribute('required');
+                            nameNew.setAttribute('name', 'name');
+                            nameNew.setAttribute('required', 'required');
+                        }
+                    }
+                }
+            } else {
+                codeNew.classList.add('d-none');
+                codeNew.removeAttribute('name');
+                codeNew.removeAttribute('required');
+                this.setAttribute('name', 'code');
+                this.setAttribute('required', 'required');
+            }
+        });
+    }
+    
+    // Handle name dropdown and new name input
+    const nameSelect = document.getElementById('name-select');
+    const nameNew = document.getElementById('name-new');
+    
+    if (nameSelect && nameNew) {
+        const currentName = nameSelect.getAttribute('data-current-name');
+        const selectedValue = nameSelect.value;
+        
+        if (currentName && currentName.trim() !== '' && selectedValue === '') {
+            nameSelect.value = '__new__';
+            nameNew.classList.remove('d-none');
+            nameNew.value = currentName;
+            nameSelect.removeAttribute('name');
+            nameNew.setAttribute('name', 'name');
+            nameNew.setAttribute('required', 'required');
+        }
+        
+        nameSelect.addEventListener('change', function() {
+            if (this.value === '__new__') {
+                nameNew.classList.remove('d-none');
+                nameNew.setAttribute('name', 'name');
+                nameNew.setAttribute('required', 'required');
+                nameNew.focus();
+                this.removeAttribute('name');
+                this.removeAttribute('required');
+            } else if (this.value !== '') {
+                nameNew.classList.add('d-none');
+                nameNew.removeAttribute('name');
+                nameNew.removeAttribute('required');
+                this.setAttribute('name', 'name');
+                this.setAttribute('required', 'required');
+            } else {
+                nameNew.classList.add('d-none');
+                nameNew.removeAttribute('name');
+                nameNew.removeAttribute('required');
+                this.setAttribute('name', 'name');
+                this.setAttribute('required', 'required');
+            }
+        });
+    }
+    
+    const addBtn = document.getElementById('add-schedule-btn');
+    const entriesContainer = document.getElementById('schedule-entries');
+    let entryCount = entriesContainer.children.length;
+    
+    // Add new schedule entry
+    addBtn.addEventListener('click', function() {
+        const entry = document.createElement('div');
+        entry.className = 'row mb-2 schedule-entry';
+        entry.innerHTML = `
+            <div class="col-md-4">
+                <label class="form-label small">Day of Week</label>
+                <select class="form-select" name="schedule_day[]">
+                    <option value="">-- Select Day --</option>
+                    <option value="0">Monday</option>
+                    <option value="1">Tuesday</option>
+                    <option value="2">Wednesday</option>
+                    <option value="3">Thursday</option>
+                    <option value="4">Friday</option>
+                    <option value="5">Saturday</option>
+                    <option value="6">Sunday</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Start Time</label>
+                <input type="time" class="form-control" name="schedule_time_start[]">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">End Time</label>
+                <input type="time" class="form-control" name="schedule_time_end[]">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">&nbsp;</label>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-schedule-btn w-100">
+                    <i class="bi bi-trash"></i> Remove
+                </button>
+            </div>
+        `;
+        entriesContainer.appendChild(entry);
+        entryCount++;
+    });
+    
+    // Remove schedule entry
+    entriesContainer.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-schedule-btn')) {
+            e.target.closest('.schedule-entry').remove();
+        }
+    });
+});
+</script>
+{% endblock %}
+

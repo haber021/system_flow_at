@@ -1,0 +1,56 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}{{ action }} Section{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">{{ action }} Section</h4>
+            </div>
+            <div class="card-body">
+                <form method="POST">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="code" class="form-label">Section Code *</label>
+                        <input type="text" class="form-control" id="code" name="code" 
+                               value="{{ section.code|default:'' }}" required maxlength="20"
+                               placeholder="e.g., A, B, C, 1, 2, 3">
+                        <small class="form-text text-muted">Unique code for this section (e.g., A, B, C, 1, 2, 3)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="name" class="form-label">Section Name *</label>
+                        <input type="text" class="form-control" id="name" name="name" 
+                               value="{{ section.name|default:'' }}" required maxlength="100"
+                               placeholder="e.g., Section A">
+                        <small class="form-text text-muted">Full name for this section (e.g., Section A)</small>
+                    </div>
+                    <div class="mb-3">
+                        <label for="description" class="form-label">Description</label>
+                        <textarea class="form-control" id="description" name="description" rows="3"
+                                  placeholder="Optional description for this section">{{ section.description|default:'' }}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="is_active" name="is_active" 
+                                   {% if section.is_active or not section %}checked{% endif %}>
+                            <label class="form-check-label" for="is_active">
+                                Active
+                            </label>
+                            <small class="form-text text-muted d-block">Only active sections will be available for selection when adding/editing students.</small>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-circle"></i> Save
+                        </button>
+                        <a href="{% url 'section_list' %}" class="btn btn-secondary">Cancel</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
