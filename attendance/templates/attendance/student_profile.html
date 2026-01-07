@@ -4,6 +4,8 @@
 {% block title %}My Profile{% endblock %}
 
 {% block content %}
+<!-- Cropper.js for client-side profile picture cropping -->
+<link rel="stylesheet" href="https://unpkg.com/cropperjs@1.6.1/dist/cropper.min.css">
 <div class="row justify-content-center">
     <div class="col-md-10">
         <div class="card shadow-sm">
@@ -17,10 +19,12 @@
                         <div class="profile-picture-container">
                             {% if student.profile_picture %}
                                 <img src="{{ student.profile_picture.url }}" alt="Profile Picture" 
+                                     id="profile-picture-preview"
                                      class="profile-picture img-thumbnail rounded-circle mb-3" 
                                      style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #10b981;">
                             {% else %}
                                 <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" alt="Default Profile Picture" 
+                                     id="profile-picture-preview"
                                      class="profile-picture img-thumbnail rounded-circle mb-3" 
                                      style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #10b981;">
                             {% endif %}
@@ -34,6 +38,7 @@
                                 </label>
                                 <input type="file" class="form-control" id="profile_picture" name="profile_picture" 
                                        accept="image/jpeg,image/jpg,image/png,image/gif" required>
+                                <input type="hidden" name="cropped_image" id="cropped_image">
                                 <small class="form-text text-muted">Max size: 5MB. Formats: JPEG, PNG, GIF</small>
                             </div>
                             <button type="submit" name="upload_picture" class="btn btn-success btn-sm w-100">
@@ -69,6 +74,18 @@
                                     <input type="email" class="form-control" id="email" name="email" 
                                            value="{{ student.email }}" required>
                                 </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label class="form-label d-block">Email Notifications:</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="email_opt_in" name="email_opt_in"
+                                           {% if student.email_opt_in %}checked{% endif %}>
+                                    <label class="form-check-label" for="email_opt_in">
+                                        Receive attendance emails (alerts, confirmations, reports)
+                                    </label>
+                                </div>
+                                <small class="text-muted">Turn this off if you prefer not to get system emails.</small>
                             </div>
                             
                             <div class="row mb-3">
@@ -149,6 +166,158 @@
     </div>
 </div>
 
+<!-- Cropping modal -->
+<div class="modal fade" id="cropperModal" tabindex="-1" aria-labelledby="cropperModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="cropperModalLabel"><i class="bi bi-crop"></i> Crop Profile Picture</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="ratio ratio-1x1 bg-light border rounded cropper-wrapper">
+                    <img id="cropper-image" class="img-fluid" alt="Crop preview">
+                </div>
+                <small class="text-muted d-block mt-2">Drag to adjust the square crop. The preview will update after saving.</small>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="cropperReset">
+                    <i class="bi bi-arrow-counterclockwise"></i> Reset
+                </button>
+                <button type="button" class="btn btn-success" id="cropperSave">
+                    <i class="bi bi-check-circle"></i> Save Crop
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://unpkg.com/cropperjs@1.6.1/dist/cropper.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const fileInput = document.getElementById('profile_picture');
+    const hiddenCroppedInput = document.getElementById('cropped_image');
+    const cropperImage = document.getElementById('cropper-image');
+    const cropperModalEl = document.getElementById('cropperModal');
+    const cropperModal = new bootstrap.Modal(cropperModalEl);
+    const cropperSaveBtn = document.getElementById('cropperSave');
+    const cropperResetBtn = document.getElementById('cropperReset');
+    const previewImage = document.getElementById('profile-picture-preview');
+    let cropperInstance = null;
+    let currentImageURL = '';
+    let isProgrammaticZoom = false;
+    let resizeTimeout = null;
+
+    const centerCropBox = () => {
+        if (!cropperInstance) return;
+        const canvasData = cropperInstance.getCanvasData();
+        const cropBoxData = cropperInstance.getCropBoxData();
+        const left = canvasData.left + (canvasData.width - cropBoxData.width) / 2;
+        const top = canvasData.top + (canvasData.height - cropBoxData.height) / 2;
+        cropperInstance.setCropBoxData({ left, top });
+    };
+
+    const scheduleResponsiveCenter = () => {
+        if (resizeTimeout) {
+            clearTimeout(resizeTimeout);
+        }
+        resizeTimeout = setTimeout(() => {
+            centerCropBox();
+        }, 120);
+    };
+
+    const destroyCropper = () => {
+        if (cropperInstance) {
+            cropperInstance.destroy();
+            cropperInstance = null;
+        }
+    };
+
+    // Initialize cropper once the modal is shown and the image is loaded
+    cropperImage.addEventListener('load', () => {
+        if (!currentImageURL) return;
+        destroyCropper();
+        cropperInstance = new Cropper(cropperImage, {
+            aspectRatio: 1,
+            viewMode: 1,
+            autoCropArea: 1,
+            movable: true,
+            zoomable: true,
+            responsive: true,
+            dragMode: 'move',
+            ready() {
+                centerCropBox();
+            },
+            zoom(event) {
+                if (isProgrammaticZoom) return;
+                event.preventDefault();
+                isProgrammaticZoom = true;
+                const canvasData = cropperInstance.getCanvasData();
+                const centerPoint = {
+                    x: canvasData.left + canvasData.width / 2,
+                    y: canvasData.top + canvasData.height / 2,
+                };
+                cropperInstance.zoomTo(event.detail.ratio, centerPoint);
+                centerCropBox();
+                isProgrammaticZoom = false;
+            },
+        });
+    });
+
+    cropperModalEl.addEventListener('hidden.bs.modal', () => {
+        destroyCropper();
+    });
+
+    fileInput.addEventListener('change', (event) => {
+        const [file] = event.target.files;
+        hiddenCroppedInput.value = '';
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = e => {
+            currentImageURL = e.target.result;
+            cropperImage.src = currentImageURL;
+            cropperModal.show();
+        };
+        reader.readAsDataURL(file);
+    });
+
+    cropperModalEl.addEventListener('shown.bs.modal', () => {
+        centerCropBox();
+    });
+
+    cropperResetBtn.addEventListener('click', () => {
+        if (cropperInstance) {
+            cropperInstance.reset();
+            centerCropBox();
+        }
+    });
+
+    cropperSaveBtn.addEventListener('click', () => {
+        if (!cropperInstance) return;
+        const canvas = cropperInstance.getCroppedCanvas({ width: 600, height: 600 });
+        canvas.toBlob(blob => {
+            if (!blob) return;
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const dataUrl = reader.result;
+                hiddenCroppedInput.value = dataUrl;
+                if (previewImage) {
+                    previewImage.src = dataUrl;
+                }
+                cropperModal.hide();
+            };
+            reader.readAsDataURL(blob);
+        }, 'image/jpeg');
+    });
+
+    window.addEventListener('resize', () => {
+        if (!cropperInstance) return;
+        scheduleResponsiveCenter();
+    });
+});
+</script>
+
 <style>
 .profile-picture-container {
     position: relative;
@@ -192,6 +361,48 @@
 .btn-success:hover {
     background-color: #059669;
     border-color: #059669;
+}
+
+/* Cropper modal sizing */
+.cropper-wrapper {
+    min-height: 360px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #f8f9fa;
+    overflow: hidden;
+}
+
+#cropper-image {
+    max-width: 100%;
+    max-height: 70vh;
+    display: block;
+    object-fit: contain;
+}
+
+/* Responsive adjustments for smaller devices */
+@media (max-width: 768px) {
+    .cropper-wrapper {
+        min-height: 260px;
+    }
+
+    #cropper-image {
+        max-height: 55vh;
+    }
+}
+
+@media (max-width: 576px) {
+    .modal-dialog.modal-lg {
+        margin: 0.75rem;
+    }
+
+    .cropper-wrapper {
+        min-height: 220px;
+    }
+
+    #cropper-image {
+        max-height: 50vh;
+    }
 }
 </style>
 {% endblock %}

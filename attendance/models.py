@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import MinValueValidator, MaxValueValidator
 import os
+import secrets
 
 class SystemSettings(models.Model):
     """System-wide settings"""
@@ -131,6 +132,7 @@ class Student(models.Model):
     course = models.ForeignKey('Course', on_delete=models.PROTECT, related_name='students', help_text="Student's enrolled course")
     section = models.ForeignKey('Section', on_delete=models.PROTECT, related_name='students', null=True, blank=True, help_text="Student's section (A, B, C, etc.)")
     email = models.EmailField()
+    email_opt_in = models.BooleanField(default=True, help_text="Allow this student to receive email notifications")
     adviser = models.ForeignKey(Adviser, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='student_profile')
     profile_picture = models.ImageField(upload_to=student_profile_picture_path, null=True, blank=True, help_text="Student profile picture")
@@ -326,3 +328,51 @@ class EnrollmentRequest(models.Model):
     
     def __str__(self):
         return f"{self.student.name} - {self.subject.code} - {self.status}"
+
+class PasswordResetToken(models.Model):
+    """Token model for password reset functionality"""
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='password_reset_tokens')
+    token = models.CharField(max_length=100, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used = models.BooleanField(default=False)
+    
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['token', 'used']),
+            models.Index(fields=['user', 'used']),
+        ]
+    
+    def __str__(self):
+        return f"Password reset token for {self.user.username} - {self.token[:8]}..."
+    
+    @classmethod
+    def generate_token(cls, user):
+        """Generate a new password reset token for a user"""
+        # Invalidate any existing unused tokens for this user
+        cls.objects.filter(user=user, used=False).update(used=True)
+        
+        # Generate a secure random token
+        token = secrets.token_urlsafe(48)
+        
+        # Set expiration to 24 hours from now
+        expires_at = timezone.now() + timezone.timedelta(hours=24)
+        
+        # Create the token
+        reset_token = cls.objects.create(
+            user=user,
+            token=token,
+            expires_at=expires_at
+        )
+        
+        return reset_token
+    
+    def is_valid(self):
+        """Check if token is valid (not used and not expired)"""
+        return not self.used and timezone.now() < self.expires_at
+    
+    def mark_as_used(self):
+        """Mark token as used"""
+        self.used = True
+        self.save()

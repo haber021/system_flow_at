@@ -118,7 +118,7 @@
                     <tr id="student-row-{{ student.id }}" data-student-id="{{ student.id }}">
                         <td><code>{{ student.rfid_id }}</code></td>
                         <td>{{ student.student_id|default:"<span class='text-muted'>N/A</span>" }}</td>
-                        <td><strong>{{ student.name }}</strong></td>
+                        <td><strong style="font-size: 13px;">{{ student.name|upper }}</strong></td>
                         <td>{% if student.course %}{{ student.course.code }} - {{ student.course.name }}{% else %}<span class='text-muted'>N/A</span>{% endif %}</td>
                         <td>{% if student.section %}<span class="badge bg-info">{{ student.section.name }} ({{ student.section.code }})</span>{% else %}<span class='text-muted'>N/A</span>{% endif %}</td>
                         <td>{{ student.email }}</td>
@@ -131,7 +131,7 @@
                                 <a href="{% url 'student_summary_detail' student.id %}" class="btn btn-outline-info" title="View Summary">
                                     <i class="bi bi-graph-up"></i>
                                 </a>
-                                <form method="POST" action="{% url 'student_delete' student.id %}" class="d-inline delete-form" data-message="Are you sure you want to delete {{ student.name }}?">
+                                <form method="POST" action="{% url 'student_delete' student.id %}" class="d-inline delete-form" data-message="Are you sure you want to delete {{ student.name|upper }}?">
                                     {% csrf_token %}
                                     {% if adviser_filter %}
                                         <input type="hidden" name="adviser" value="{{ adviser_filter }}">

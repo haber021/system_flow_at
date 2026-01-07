@@ -14,18 +14,23 @@ from django.views.decorators.http import require_http_methods
 from django.views.decorators.cache import cache_page
 from django.core.cache import cache
 from django.contrib.sessions.exceptions import SessionInterrupted
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.mail import EmailMessage
+from django.conf import settings as django_settings
+from django.template.loader import render_to_string
 import csv
 import json
 import traceback
 import logging
 import os
+import base64
 from datetime import datetime, timedelta
 from decimal import Decimal
 import pytz
 
 from .models import (
     Student, Subject, Attendance, SystemSettings, 
-    StudentSubject, EmailLog, SubjectSchedule, EnrollmentRequest, Adviser, Course, Instructor, Section
+    StudentSubject, EmailLog, SubjectSchedule, EnrollmentRequest, Adviser, Course, Instructor, Section, PasswordResetToken
 )
 from .email_utils import send_attendance_email, resend_email, send_emails_bulk
 
@@ -385,12 +390,128 @@ def logout_view(request):
     return redirect('login')
 
 def forgot_password_view(request):
+    """Handle forgot password requests"""
     if request.method == 'POST':
-        email = request.POST.get('email')
-        # In production, implement actual password reset functionality
-        messages.info(request, "Password reset link has been sent to your email (if registered).")
+        email = request.POST.get('email', '').strip()
+        
+        if not email:
+            messages.error(request, "Please enter your email address.")
+            return render(request, 'attendance/forgot_password.html')
+        
+        try:
+            # Find user by email
+            user = User.objects.get(email=email)
+            
+            # Generate password reset token
+            reset_token = PasswordResetToken.generate_token(user)
+            
+            # Create reset link
+            reset_url = request.build_absolute_uri(
+                reverse('reset_password', args=[reset_token.token])
+            )
+            
+            # Prepare email content
+            email_subject = "Password Reset Request - DMMMSU Attendance Monitor"
+            email_body = f"""
+Hello {user.get_full_name() or user.username},
+
+You have requested to reset your password for your DMMMSU Attendance Monitor account.
+
+Please click the following link to reset your password:
+{reset_url}
+
+This link will expire in 24 hours. If you did not request this password reset, please ignore this email.
+
+If you have any concerns, please contact the system administrator.
+
+Best regards,
+DMMMSU Attendance Monitor System
+"""
+            
+            # Send email
+            try:
+                email_message = EmailMessage(
+                    subject=email_subject,
+                    body=email_body,
+                    from_email=django_settings.DEFAULT_FROM_EMAIL,
+                    to=[email],
+                )
+                email_message.send(fail_silently=False)
+                
+                messages.success(
+                    request, 
+                    "Password reset link has been sent to your email address. Please check your inbox (and spam folder)."
+                )
+            except Exception as e:
+                logger.error(f"Failed to send password reset email to {email}: {str(e)}")
+                messages.error(
+                    request,
+                    "Failed to send password reset email. Please try again later or contact the administrator."
+                )
+            
+        except User.DoesNotExist:
+            # Don't reveal whether email exists or not (security best practice)
+            messages.success(
+                request,
+                "If an account with that email exists, a password reset link has been sent."
+            )
+        except Exception as e:
+            logger.error(f"Error in forgot_password_view: {str(e)}")
+            messages.error(request, "An error occurred. Please try again later.")
+        
         return redirect('login')
+    
     return render(request, 'attendance/forgot_password.html')
+
+def reset_password_view(request, token):
+    """Handle password reset with token"""
+    try:
+        # Find the token
+        reset_token = PasswordResetToken.objects.get(token=token)
+        
+        # Check if token is valid
+        if not reset_token.is_valid():
+            messages.error(request, "This password reset link has expired or has already been used. Please request a new one.")
+            return redirect('forgot_password')
+        
+        if request.method == 'POST':
+            password = request.POST.get('password')
+            password_confirm = request.POST.get('password_confirm')
+            
+            # Validate passwords
+            if not password or not password_confirm:
+                messages.error(request, "Please fill in all password fields.")
+                return render(request, 'attendance/reset_password.html', {'token': token, 'valid': True})
+            
+            if password != password_confirm:
+                messages.error(request, "Passwords do not match.")
+                return render(request, 'attendance/reset_password.html', {'token': token, 'valid': True})
+            
+            if len(password) < 8:
+                messages.error(request, "Password must be at least 8 characters long.")
+                return render(request, 'attendance/reset_password.html', {'token': token, 'valid': True})
+            
+            # Set new password
+            user = reset_token.user
+            user.set_password(password)
+            user.save()
+            
+            # Mark token as used
+            reset_token.mark_as_used()
+            
+            messages.success(request, "Your password has been reset successfully. You can now login with your new password.")
+            return redirect('login')
+        
+        # GET request - show reset form
+        return render(request, 'attendance/reset_password.html', {'token': token, 'valid': True})
+        
+    except PasswordResetToken.DoesNotExist:
+        messages.error(request, "Invalid password reset link. Please request a new one.")
+        return redirect('forgot_password')
+    except Exception as e:
+        logger.error(f"Error in reset_password_view: {str(e)}")
+        messages.error(request, "An error occurred. Please try again.")
+        return redirect('forgot_password')
 
 # Dashboard
 @login_required
@@ -1942,6 +2063,40 @@ Attendance System"""
 def scan_view(request):
     # Filter subjects by adviser first
     subjects_qs = filter_subjects_by_user(request.user).filter(is_active=True).prefetch_related('schedules')
+
+    # Cache settings and current Manila time for auto subject selection
+    settings = get_cached_settings()
+    now_manila = get_manila_now()
+    today = now_manila.date()
+    current_time = now_manila.time()
+
+    # Identify a subject whose schedule is active right now (with grace periods)
+    auto_subject = None
+    auto_subject_window_start = None
+    for subj in subjects_qs:
+        try:
+            is_active_now, _, schedule = validate_attendance_time(
+                subj, today, current_time, settings
+            )
+        except Exception:
+            # Skip subjects that fail validation to avoid breaking the scan page
+            continue
+
+        if not is_active_now:
+            continue
+
+        # Use the beginning of the valid window so we pick the earliest active class
+        window_start_dt = None
+        if schedule and schedule.time_start:
+            window_start_dt = make_aware_datetime(today, schedule.time_start) - timedelta(minutes=settings.early_attendance_minutes)
+        elif subj.schedule_time_start:
+            window_start_dt = make_aware_datetime(today, subj.schedule_time_start) - timedelta(minutes=settings.early_attendance_minutes)
+        elif getattr(settings, 'class_start_time', None):
+            window_start_dt = make_aware_datetime(today, settings.class_start_time) - timedelta(minutes=settings.early_attendance_minutes)
+
+        if auto_subject_window_start is None or (window_start_dt and window_start_dt < auto_subject_window_start):
+            auto_subject = subj
+            auto_subject_window_start = window_start_dt
     
     # Get subject_id from GET parameter (for dropdown changes)
     active_subject_id = request.GET.get('subject_id')
@@ -1952,6 +2107,14 @@ def scan_view(request):
             active_subject = subjects_qs.filter(id=active_subject_id).first()
         except (ValueError, TypeError):
             pass
+    
+    # Auto-switch to the subject whose schedule is currently active
+    auto_selected = False
+    if auto_subject and (not active_subject or active_subject.id != auto_subject.id):
+        active_subject = auto_subject
+        auto_selected = True
+        if request.method == 'GET':
+            messages.info(request, f"Active subject switched to {active_subject.code} based on the current schedule.")
     
     # Fallback to first active subject if none selected
     if not active_subject:
@@ -1982,6 +2145,7 @@ def scan_view(request):
         'subjects': subjects_to_display,
         'last_scan': last_scan,
         'last_scanned_student': last_scanned_student,
+        'auto_selected_subject_id': active_subject.id if auto_selected else None,
     }
     
     if request.method == 'POST':
@@ -2199,8 +2363,17 @@ def scan_view(request):
                                 messages.info(request, f"ℹ Time-out already recorded at {time_out_str}. No duplicate created.")
                         else:
                             # Student is checking in (time in) or updating existing record
-                            # Only update if time_in is not set or if new time is different
-                            if existing_attendance.time_in is None or existing_attendance.time_in != stored_time:
+                            if existing_attendance.time_in is not None:
+                                # Preserve original time-in to avoid accidental changes from re-scans
+                                time_in_str = existing_attendance.time_in.strftime('%I:%M %p') if existing_attendance.time_in else 'N/A'
+                                time_out_str = existing_attendance.time_out.strftime('%I:%M %p') if existing_attendance.time_out else 'N/A'
+                                messages.info(
+                                    request,
+                                    f"ℹ Time-in already recorded at {time_in_str}. "
+                                    f"{'Time-out recorded at ' + time_out_str if existing_attendance.time_out else 'Time-out not yet recorded.'}"
+                                )
+                            else:
+                                # Only set time-in when it has not been recorded yet
                                 existing_attendance.time = stored_time  # Keep for backward compatibility
                                 existing_attendance.time_in = stored_time
                                 existing_attendance.status = status
@@ -2237,10 +2410,6 @@ def scan_view(request):
                                 # Check and send warning email if student has reached absence threshold
                                 if status == 'ABSENT':
                                     check_and_send_warning_email(student, subject)
-                            else:
-                                # Time-in already recorded at this time - no duplicate
-                                time_in_str = existing_attendance.time_in.strftime('%I:%M %p') if existing_attendance.time_in else 'N/A'
-                                messages.info(request, f"ℹ Time-in already recorded at {time_in_str}. No duplicate created.")
                             
                         return redirect(f"{reverse('scan')}?subject_id={subject.id}")
 
@@ -2752,6 +2921,11 @@ def email_preview(request, student_id):
         messages.warning(request, "Email notifications are currently disabled in system settings.")
         return redirect('student_summary')
     
+    # Respect student opt-out preference
+    if hasattr(student, 'email_opt_in') and not student.email_opt_in:
+        messages.warning(request, "This student has opted out of email notifications.")
+        return redirect('student_summary')
+    
     # Get report data (similar to semester_report)
     student_subjects = StudentSubject.objects.filter(
         student=student,
@@ -2896,6 +3070,10 @@ def bulk_send_emails(request):
     failed_students = []
     
     for student in students:
+        # Skip students who opted out
+        if hasattr(student, 'email_opt_in') and not student.email_opt_in:
+            failed_students.append(f"{student.name} (opted out)")
+            continue
         try:
             # Get report data for this student
             student_subjects = StudentSubject.objects.filter(
@@ -3561,13 +3739,19 @@ def student_register(request):
         # Get form data
         rfid_id = request.POST.get('rfid_id', '').strip()
         student_id = request.POST.get('student_id', '').strip()
-        name = request.POST.get('name', '').strip()
+        first_name = request.POST.get('first_name', '').strip()
+        middle_name = request.POST.get('middle_name', '').strip()
+        last_name = request.POST.get('last_name', '').strip()
         email = request.POST.get('email', '').strip().lower()  # Normalize email to lowercase
         course_id = request.POST.get('course', '').strip()
         section_id = request.POST.get('section', '').strip()
         adviser_id = request.POST.get('adviser', '').strip()
         password = request.POST.get('password', '')
         password_confirm = request.POST.get('password_confirm', '')
+        
+        # Combine name parts and convert to uppercase
+        name_parts = [part for part in [first_name, middle_name, last_name] if part]
+        name = ' '.join(name_parts).upper() if name_parts else ''
         
         # Validation
         errors = []
@@ -3580,8 +3764,11 @@ def student_register(request):
         if student_id and Student.objects.filter(student_id=student_id).exists():
             errors.append("This Student ID is already registered.")
         
-        if not name:
-            errors.append("Name is required.")
+        if not first_name:
+            errors.append("First name is required.")
+        
+        if not last_name:
+            errors.append("Last name is required.")
         
         if not email:
             errors.append("Email is required.")
@@ -3649,8 +3836,8 @@ def student_register(request):
                         # Reuse existing user (from a failed registration attempt)
                         user = existing_user
                         user.set_password(password)  # Update password
-                        user.first_name = name.split()[0] if name.split() else name
-                        user.last_name = ' '.join(name.split()[1:]) if len(name.split()) > 1 else ''
+                        user.first_name = first_name.upper()
+                        user.last_name = last_name.upper()
                         user.email = email  # Email is already normalized
                         user.save()
                     else:
@@ -3667,8 +3854,8 @@ def student_register(request):
                             username=username,
                             email=email,  # Email is already normalized
                             password=password,
-                            first_name=name.split()[0] if name.split() else name,
-                            last_name=' '.join(name.split()[1:]) if len(name.split()) > 1 else ''
+                            first_name=first_name.upper(),
+                            last_name=last_name.upper()
                         )
                     
                     # Create Student record with all form fields
@@ -3818,8 +4005,14 @@ def student_dashboard(request):
     subject_id = request.GET.get('subject_id', '')
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
+    time_filter = request.GET.get('time_filter', '')  # new, yesterday, past_week
     academic_year = request.GET.get('academic_year', '2025-2026')
     semester = request.GET.get('semester', '1st Semester')
+    
+    # Calculate date ranges for time filters
+    today = timezone.localtime().date()
+    yesterday = today - timedelta(days=1)
+    past_week_start = today - timedelta(days=7)
     
     # Get all attendances for this student
     attendances = Attendance.objects.filter(student=student).select_related('subject').order_by('-date', '-time')
@@ -3898,24 +4091,54 @@ def student_dashboard(request):
         '-time'
     )[:50]
     
-    # Format times for display
-    recent_attendances = []
-    for att in recent_attendances_qs:
-        time_in_str = None
-        if att.time_in:
-            time_in_str = att.time_in.strftime('%I:%M %p')
-        elif att.time:
-            time_in_str = att.time.strftime('%I:%M %p')
-        
-        time_out_str = None
-        if att.time_out:
-            time_out_str = att.time_out.strftime('%I:%M %p')
-        
-        recent_attendances.append({
-            'attendance': att,
-            'time_in_formatted': time_in_str,
-            'time_out_formatted': time_out_str,
-        })
+    # Create time-filtered attendance lists for tabs
+    # Today's records (New)
+    today_attendances_qs = attendances.exclude(status='ABSENT').filter(date=today).order_by(
+        '-time_out', '-time_in', '-time'
+    )
+    
+    # Yesterday's records
+    yesterday_attendances_qs = attendances.exclude(status='ABSENT').filter(date=yesterday).order_by(
+        '-time_out', '-time_in', '-time'
+    )
+    
+    # Past week records (last 7 days, excluding today)
+    past_week_attendances_qs = attendances.exclude(status='ABSENT').filter(
+        date__gte=past_week_start,
+        date__lt=today
+    ).order_by('-date', '-time_out', '-time_in', '-time')
+    
+    # Helper function to format attendance records
+    def format_attendance_records(qs):
+        records = []
+        for att in qs:
+            time_in_str = None
+            if att.time_in:
+                time_in_str = att.time_in.strftime('%I:%M %p')
+            elif att.time:
+                time_in_str = att.time.strftime('%I:%M %p')
+            
+            time_out_str = None
+            if att.time_out:
+                time_out_str = att.time_out.strftime('%I:%M %p')
+            
+            records.append({
+                'attendance': att,
+                'time_in_formatted': time_in_str,
+                'time_out_formatted': time_out_str,
+            })
+        return records
+    
+    # Format all attendance records
+    recent_attendances = format_attendance_records(recent_attendances_qs)
+    today_attendances = format_attendance_records(today_attendances_qs)
+    yesterday_attendances = format_attendance_records(yesterday_attendances_qs)
+    past_week_attendances = format_attendance_records(past_week_attendances_qs)
+    
+    # Get counts for tab badges
+    today_count = today_attendances_qs.count()
+    yesterday_count = yesterday_attendances_qs.count()
+    past_week_count = past_week_attendances_qs.count()
     
     # Convert subject_id to int for template comparison
     selected_subject_id_int = None
@@ -3929,6 +4152,15 @@ def student_dashboard(request):
         'student': student,
         'absences': page_obj,
         'recent_attendances': recent_attendances,
+        'today_attendances': today_attendances,
+        'yesterday_attendances': yesterday_attendances,
+        'past_week_attendances': past_week_attendances,
+        'today_count': today_count,
+        'yesterday_count': yesterday_count,
+        'past_week_count': past_week_count,
+        'today_date': today,
+        'yesterday_date': yesterday,
+        'past_week_start': past_week_start,
         'total_attendances': total_attendances,
         'total_present': total_present,
         'total_absent': total_absent,
@@ -3940,6 +4172,7 @@ def student_dashboard(request):
         'selected_subject_id_int': selected_subject_id_int,
         'date_from': date_from,
         'date_to': date_to,
+        'time_filter': time_filter,
         'academic_year': academic_year,
         'semester': semester,
     }
@@ -4175,7 +4408,37 @@ def student_profile_view(request):
     
     if request.method == 'POST':
         if 'upload_picture' in request.POST:
+            cropped_image_data = request.POST.get('cropped_image')
             profile_picture = request.FILES.get('profile_picture')
+
+            # Prefer cropped image data if provided
+            if cropped_image_data:
+                try:
+                    header, encoded = cropped_image_data.split(';base64,')
+                    mime_type = header.replace('data:', '') or 'image/jpeg'
+                    image_bytes = base64.b64decode(encoded)
+
+                    if len(image_bytes) > 5 * 1024 * 1024:
+                        messages.error(request, "Image size must be less than 5MB.")
+                        profile_picture = None
+                    else:
+                        # Determine file extension based on MIME type
+                        ext = 'jpg'
+                        if 'png' in mime_type:
+                            ext = 'png'
+                        elif 'gif' in mime_type:
+                            ext = 'gif'
+
+                        profile_picture = SimpleUploadedFile(
+                            f"profile_cropped_{student.id}.{ext}",
+                            image_bytes,
+                            content_type=mime_type
+                        )
+                except Exception as exc:
+                    logger.exception("Failed to decode cropped image", exc_info=exc)
+                    messages.error(request, "Could not process cropped image. Please try again.")
+                    profile_picture = None
+
             if profile_picture:
                 # Validate file size (max 5MB)
                 if profile_picture.size > 5 * 1024 * 1024:
@@ -4221,6 +4484,7 @@ def student_profile_view(request):
             # Update student information
             student.name = request.POST.get('name', student.name)
             student.email = request.POST.get('email', student.email)
+            student.email_opt_in = bool(request.POST.get('email_opt_in'))
             student.save()
             
             messages.success(request, "Profile updated successfully!")

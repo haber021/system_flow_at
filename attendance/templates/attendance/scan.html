@@ -7,142 +7,521 @@
 {% if last_scanned_student and last_scanned_student.profile_picture_url %}
 <link rel="preload" as="image" href="{{ last_scanned_student.profile_picture_url }}" fetchpriority="high">
 {% endif %}
+<style>
+    .scan-container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .scan-main-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+        background: white;
+    }
+    
+    .scan-header {
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        padding: 24px 32px;
+        border: none;
+    }
+    
+    .scan-header h4 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    
+    .scan-body {
+        padding: 40px;
+    }
+    
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
+        background: #d1fae5;
+        color: #065f46;
+        border-radius: 50px;
+        font-weight: 500;
+        font-size: 1rem;
+        margin-bottom: 32px;
+    }
+    
+    .status-indicator::before {
+        content: '';
+        width: 10px;
+        height: 10px;
+        background: #10b981;
+        border-radius: 50%;
+        animation: pulse-dot 2s ease-in-out infinite;
+    }
+    
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.2); }
+    }
+    
+    .subject-select-wrapper {
+        margin-bottom: 32px;
+    }
+    
+    .subject-select-wrapper label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 12px;
+        font-size: 0.95rem;
+        display: block;
+    }
+    
+    .subject-select {
+        border: 2px solid #e5e7eb;
+        border-radius: 12px;
+        padding: 14px 18px;
+        font-size: 1.05rem;
+        transition: all 0.2s ease;
+        background: white;
+    }
+    
+    .subject-select:focus {
+        border-color: #10b981;
+        box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+        outline: none;
+    }
+    
+    .scan-input-wrapper {
+        position: relative;
+        margin-bottom: 32px;
+    }
+    
+    .scan-input-label {
+        font-weight: 600;
+        color: #374151;
+        margin-bottom: 16px;
+        font-size: 0.95rem;
+        text-align: center;
+        display: block;
+    }
+    
+    .scan-input-container {
+        position: relative;
+        background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+        border: 3px dashed #d1d5db;
+        border-radius: 16px;
+        padding: 50px 20px;
+        transition: all 0.3s ease;
+        min-height: 180px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .scan-input-container:focus-within {
+        border-color: #10b981;
+        border-style: solid;
+        background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1), 0 10px 15px -3px rgba(16, 185, 129, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    .scan-input {
+        border: none;
+        background: transparent;
+        text-align: center;
+        font-size: 1.75rem;
+        font-weight: 500;
+        color: #1f2937;
+        letter-spacing: 2px;
+        width: 100%;
+        padding: 0;
+    }
+    
+    .scan-input::placeholder {
+        color: #9ca3af;
+        letter-spacing: 0;
+        font-weight: 400;
+    }
+    
+    .scan-input:focus {
+        outline: none;
+    }
+    
+    .scan-icon {
+        position: absolute;
+        top: 24px;
+        left: 50%;
+        transform: translateX(-50%);
+        font-size: 3.5rem;
+        color: #d1d5db;
+        pointer-events: none;
+        transition: all 0.3s ease;
+        opacity: 0.6;
+    }
+    
+    .scan-input-container:focus-within .scan-icon {
+        color: #10b981;
+        transform: translateX(-50%) scale(1.15);
+        opacity: 0.8;
+    }
+    
+    .scan-actions {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+    
+    .btn-scan {
+        padding: 14px 32px;
+        font-size: 1.05rem;
+        font-weight: 600;
+        border-radius: 12px;
+        border: none;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .btn-scan-primary {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        color: white;
+    }
+    
+    .btn-scan-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3);
+    }
+    
+    .btn-scan-secondary {
+        background: white;
+        color: #6b7280;
+        border: 2px solid #e5e7eb;
+    }
+    
+    .btn-scan-secondary:hover {
+        background: #f9fafb;
+        border-color: #d1d5db;
+        color: #374151;
+    }
+    
+    .info-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        overflow: hidden;
+        background: white;
+    }
+    
+    .info-card-header {
+        padding: 16px 20px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    
+    .info-card-body {
+        padding: 20px;
+    }
+    
+    .schedule-item {
+        padding: 12px;
+        background: #f9fafb;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        border-left: 3px solid #3b82f6;
+    }
+    
+    .schedule-item:last-child {
+        margin-bottom: 0;
+    }
+    
+    .schedule-day {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 4px;
+    }
+    
+    .schedule-time {
+        font-size: 0.875rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+    
+    .last-scan-item {
+        padding: 12px 0;
+        border-bottom: 1px solid #f3f4f6;
+    }
+    
+    .last-scan-item:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+    }
+    
+    .last-scan-label {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-bottom: 4px;
+    }
+    
+    .last-scan-value {
+        font-weight: 600;
+        color: #1f2937;
+    }
+    
+    .quick-action-btn {
+        width: 100%;
+        padding: 12px;
+        border-radius: 8px;
+        margin-bottom: 8px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+    
+    .quick-action-btn:last-child {
+        margin-bottom: 0;
+    }
+    
+    @media (max-width: 768px) {
+        .scan-body {
+            padding: 24px;
+        }
+        
+        .scan-input {
+            font-size: 1.5rem;
+        }
+        
+        .scan-icon {
+            font-size: 2.5rem;
+        }
+        
+        .scan-actions {
+            flex-direction: column;
+        }
+        
+        .btn-scan {
+            width: 100%;
+        }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
-<div class="row">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header bg-success text-white">
-                <h4 class="mb-0"><i class="bi bi-credit-card"></i> RFID Attendance Scan</h4>
-            </div>
-            <div class="card-body">
-                <p class="lead mb-4 text-center">
-                    <span class="badge bg-success">Status: Ready for scanning...</span>
-                </p>
-                
-                <form method="POST" action="{% url 'scan' %}" id="scanForm">
-                    {% csrf_token %}
-                    <div class="mb-4">
-                        <label for="subject_id" class="form-label"><strong>Active Subject:</strong></label>
-                        {# Always show dropdown for easy subject selection #}
-                        <select class="form-select form-select-lg" id="subject_id" name="subject_id" onchange="changeSubject(this.value)" required>
-                            {% if not subject %}
-                            <option value="">-- Select Subject --</option>
-                            {% endif %}
-                            {% for subj in subjects %}
-                            <option value="{{ subj.id }}" {% if subject and subject.id == subj.id %}selected{% endif %}>
-                                {{ subj.code }} - {{ subj.name }}
-                            </option>
-                            {% endfor %}
-                        </select>
+<div class="scan-container">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="scan-main-card">
+                <div class="scan-header">
+                    <h4>
+                        <i class="bi bi-credit-card-2-front"></i>
+                        RFID Attendance Scanner
+                    </h4>
+                </div>
+                <div class="scan-body">
+                    <div class="text-center">
+                        <div class="status-indicator">
+                            Ready for scanning
+                        </div>
                     </div>
                     
-                    <div class="mb-4 text-center">
-                        <label for="rfid_id" class="form-label"><strong>Scanning Area:</strong></label>
-                        <input type="text" class="form-control form-control-lg text-center" 
-                               id="rfid_id" name="rfid_id" 
-                               placeholder="Tap RFID Card here..." 
-                               autofocus autocomplete="off" style="font-size: 1.5rem;">
-                    </div>
-                    
-                    <div class="d-flex gap-2 justify-content-center">
-                        <button type="submit" class="btn btn-primary btn-lg">
-                            <i class="bi bi-check-circle"></i> Submit
-                        </button>
-                        <a href="{% url 'manual_entry' %}" class="btn btn-secondary btn-lg">
-                            <i class="bi bi-pencil"></i> Manual Entry
-                        </a>
-                    </div>
-                </form>
+                    <form method="POST" action="{% url 'scan' %}" id="scanForm">
+                        {% csrf_token %}
+                        <div class="subject-select-wrapper">
+                            <label for="subject_id">
+                                <i class="bi bi-book"></i> Select Subject
+                            </label>
+                            <select class="form-select subject-select" id="subject_id" name="subject_id" onchange="changeSubject(this.value)" required>
+                                {% if not subject %}
+                                <option value="">-- Choose a subject --</option>
+                                {% endif %}
+                                {% for subj in subjects %}
+                                <option value="{{ subj.id }}" {% if subject and subject.id == subj.id %}selected{% endif %}>
+                                    {{ subj.code }} - {{ subj.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="scan-input-wrapper">
+                            <label for="rfid_id" class="scan-input-label">
+                                <i class="bi bi-credit-card"></i> Tap or Enter RFID Card
+                            </label>
+                            <div class="scan-input-container">
+                                <i class="bi bi-credit-card-2-front scan-icon"></i>
+                                <input type="text" 
+                                       class="scan-input" 
+                                       id="rfid_id" 
+                                       name="rfid_id" 
+                                       placeholder="Tap RFID card here..." 
+                                       autofocus 
+                                       autocomplete="off">
+                            </div>
+                        </div>
+                        
+                        <div class="scan-actions">
+                            <button type="submit" class="btn btn-scan btn-scan-primary">
+                                <i class="bi bi-check-circle-fill"></i>
+                                Submit Scan
+                            </button>
+                            <a href="{% url 'manual_entry' %}" class="btn btn-scan btn-scan-secondary">
+                                <i class="bi bi-pencil-square"></i>
+                                Manual Entry
+                            </a>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
-    </div>
-    
-    <div class="col-md-4">
-        {% if subject %}
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="bi bi-calendar-week"></i> Subject Schedule</h5>
-            </div>
-            <div class="card-body">
-                <p class="mb-2"><strong>{{ subject.code }}</strong> - {{ subject.name }}</p>
-                <p class="mb-3 text-muted"><small>{% if subject.instructor %}{{ subject.instructor.name }}{% else %}—{% endif %}</small></p>
-                
-                {% if subject.schedules.exists %}
-                    <div class="schedule-list">
-                        {% for schedule in subject.schedules.all %}
-                            {% if schedule.day_of_week is not None %}
-                            <div class="mb-2 p-2 bg-light rounded">
-                                <strong>{{ schedule.get_day_name }}</strong><br>
-                                <small class="text-muted">
-                                    <i class="bi bi-clock"></i> {{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }}
-                                </small>
-                            </div>
-                            {% elif schedule.date %}
-                            <div class="mb-2 p-2 bg-light rounded">
-                                <strong>{{ schedule.date|date:"M d, Y" }}</strong><br>
-                                <small class="text-muted">
-                                    <i class="bi bi-clock"></i> {{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }}
-                                </small>
-                            </div>
-                            {% endif %}
-                        {% endfor %}
+        
+        <div class="col-lg-4">
+            {% if subject %}
+            <div class="info-card">
+                <div class="info-card-header" style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white;">
+                    <i class="bi bi-calendar-week"></i>
+                    Subject Schedule
+                </div>
+                <div class="info-card-body">
+                    <div class="mb-3">
+                        <div style="font-weight: 600; color: #1f2937; font-size: 1.05rem; margin-bottom: 4px;">
+                            {{ subject.code }}
+                        </div>
+                        <div style="color: #6b7280; font-size: 0.9rem;">
+                            {{ subject.name }}
+                        </div>
+                        {% if subject.instructor %}
+                        <div style="color: #9ca3af; font-size: 0.85rem; margin-top: 8px;">
+                            <i class="bi bi-person"></i> {{ subject.instructor.name }}
+                        </div>
+                        {% endif %}
                     </div>
-                    {% if subject.schedule_days and subject.schedule_time_start %}
-                        <div class="mt-2 pt-2 border-top">
-                            <small class="text-muted">
-                                <em>General: {{ subject.schedule_days }}, {{ subject.schedule_time_start|time:"g:i A" }}-{{ subject.schedule_time_end|time:"g:i A" }}</em>
-                            </small>
+                    
+                    {% if subject.schedules.exists %}
+                        <div>
+                            {% for schedule in subject.schedules.all %}
+                                {% if schedule.day_of_week is not None %}
+                                <div class="schedule-item">
+                                    <div class="schedule-day">{{ schedule.get_day_name }}</div>
+                                    <div class="schedule-time">
+                                        <i class="bi bi-clock"></i>
+                                        {{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }}
+                                    </div>
+                                </div>
+                                {% elif schedule.date %}
+                                <div class="schedule-item">
+                                    <div class="schedule-day">{{ schedule.date|date:"M d, Y" }}</div>
+                                    <div class="schedule-time">
+                                        <i class="bi bi-clock"></i>
+                                        {{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }}
+                                    </div>
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                        {% if subject.schedule_days and subject.schedule_time_start %}
+                            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb;">
+                                <div style="font-size: 0.85rem; color: #6b7280;">
+                                    <em>{{ subject.schedule_days }}, {{ subject.schedule_time_start|time:"g:i A" }}-{{ subject.schedule_time_end|time:"g:i A" }}</em>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% elif subject.schedule_days and subject.schedule_time_start %}
+                        <div class="schedule-item">
+                            <div class="schedule-day">General Schedule</div>
+                            <div class="schedule-time">
+                                <i class="bi bi-calendar"></i> {{ subject.schedule_days }}<br>
+                                <i class="bi bi-clock"></i> {{ subject.schedule_time_start|time:"g:i A" }} - {{ subject.schedule_time_end|time:"g:i A" }}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div style="text-align: center; padding: 20px; color: #9ca3af;">
+                            <i class="bi bi-calendar-x" style="font-size: 2rem; margin-bottom: 8px; display: block;"></i>
+                            <small>No schedule defined</small>
                         </div>
                     {% endif %}
-                {% elif subject.schedule_days and subject.schedule_time_start %}
-                    <div class="p-2 bg-light rounded">
-                        <strong>General Schedule:</strong><br>
-                        <small class="text-muted">
-                            {{ subject.schedule_days }}<br>
-                            <i class="bi bi-clock"></i> {{ subject.schedule_time_start|time:"g:i A" }} - {{ subject.schedule_time_end|time:"g:i A" }}
-                        </small>
+                </div>
+            </div>
+            {% endif %}
+            
+            <div class="info-card">
+                <div class="info-card-header" style="background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%); color: white;">
+                    <i class="bi bi-clock-history"></i>
+                    Last Scan
+                </div>
+                <div class="info-card-body">
+                    {% if last_scan %}
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">Student Name</div>
+                        <div class="last-scan-value">{{ last_scan.student.name }}</div>
                     </div>
-                {% else %}
-                    <p class="text-muted"><small>No schedule defined for this subject.</small></p>
-                {% endif %}
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">RFID ID</div>
+                        <div class="last-scan-value" style="font-family: monospace; font-size: 0.9rem;">{{ last_scan.student.rfid_id }}</div>
+                    </div>
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">Subject</div>
+                        <div class="last-scan-value">{{ last_scan.subject.code }}</div>
+                    </div>
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">Date</div>
+                        <div class="last-scan-value">{{ last_scan.date|date:"M d, Y" }}</div>
+                    </div>
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">Time In</div>
+                        <div class="last-scan-value" style="color: #10b981;">
+                            <i class="bi bi-arrow-right-circle"></i> {{ last_scan.time_in|time:"g:i A"|default:"--:--" }}
+                        </div>
+                    </div>
+                    {% if last_scan.time_out %}
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">Time Out</div>
+                        <div class="last-scan-value" style="color: #3b82f6;">
+                            <i class="bi bi-arrow-left-circle"></i> {{ last_scan.time_out|time:"g:i A" }}
+                        </div>
+                    </div>
+                    {% endif %}
+                    <div class="last-scan-item">
+                        <div class="last-scan-label">Status</div>
+                        <div class="last-scan-value">
+                            <span class="badge bg-{% if last_scan.status == 'PRESENT' %}success{% elif last_scan.status == 'LATE' %}warning{% else %}danger{% endif %}" style="font-size: 0.875rem; padding: 6px 12px;">
+                                {{ last_scan.status }}
+                            </span>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div style="text-align: center; padding: 30px; color: #9ca3af;">
+                        <i class="bi bi-inbox" style="font-size: 3rem; margin-bottom: 12px; display: block; opacity: 0.5;"></i>
+                        <div style="font-size: 0.9rem;">No scans yet today</div>
+                    </div>
+                    {% endif %}
+                </div>
             </div>
-        </div>
-        {% endif %}
-        
-        <div class="card mt-3">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">Last Scan Details</h5>
-            </div>
-            <div class="card-body">
-                {% if last_scan %}
-                <p><strong>Student Name:</strong> {{ last_scan.student.name }}</p>
-                <p><strong>RFID ID:</strong> {{ last_scan.student.rfid_id }}</p>
-                <p><strong>Subject:</strong> {{ last_scan.subject.code }}</p>
-                <p><strong>Date:</strong> {{ last_scan.date|date:"m/d/Y" }}</p>
-                <p><strong>Time In:</strong> {{ last_scan.time_in|time:"g:i A"|default:"--:--" }}</p>
-                <p><strong>Time Out:</strong> {{ last_scan.time_out|time:"g:i A"|default:"--:--" }}</p>
-                <p>
-                    <strong>Status:</strong> 
-                    <span class="badge bg-{% if last_scan.status == 'PRESENT' %}success{% elif last_scan.status == 'LATE' %}warning{% else %}danger{% endif %}">
-                        {{ last_scan.status }} ✓
-                    </span>
-                </p>
-                {% else %}
-                <p class="text-muted">No scans yet today.</p>
-                {% endif %}
-            </div>
-        </div>
-        
-        <div class="card mt-3">
-            <div class="card-body">
-                <a href="{% url 'attendance_logs' %}" class="btn btn-outline-info w-100 mb-2">
-                    <i class="bi bi-list-check"></i> View Today's Scans
-                </a>
-                <a href="{% url 'live_monitor' %}" class="btn btn-outline-success w-100">
-                    <i class="bi bi-activity"></i> Live Monitor
-                </a>
+            
+            <div class="info-card">
+                <div class="info-card-body" style="padding: 16px;">
+                    <a href="{% url 'attendance_logs' %}" class="btn quick-action-btn" style="background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe;">
+                        <i class="bi bi-list-check"></i>
+                        View Today's Scans
+                    </a>
+                    <a href="{% url 'live_monitor' %}" class="btn quick-action-btn" style="background: #ecfdf5; color: #059669; border: 1px solid #a7f3d0;">
+                        <i class="bi bi-activity"></i>
+                        Live Monitor
+                    </a>
+                </div>
             </div>
         </div>
     </div>
@@ -150,82 +529,98 @@
 
 <!-- Student Scan Confirmation Modal -->
 {% if last_scanned_student %}
-<div class="modal fade show" id="studentScanModal" tabindex="-1" aria-labelledby="studentScanModalLabel" aria-modal="true" role="dialog" style="display: block; background-color: rgba(0,0,0,0.8);">
+<div class="modal fade show" id="studentScanModal" tabindex="-1" aria-labelledby="studentScanModalLabel" aria-modal="true" role="dialog" style="display: block; background-color: rgba(0,0,0,0.75); backdrop-filter: blur(4px);">
     <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px; overflow: hidden;">
-            <div class="modal-body text-center p-5" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                <div class="mb-4">
-                    <div class="position-relative d-inline-block">
-                        {% if last_scanned_student.profile_picture_url %}
-                            <img src="{{ last_scanned_student.profile_picture_url }}" 
-                                 alt="{{ last_scanned_student.name }}" 
-                                 class="rounded-circle border border-5 border-white shadow-lg" 
-                                 loading="eager"
-                                 fetchpriority="high"
-                                 onload="this.style.opacity='1'"
-                                 style="width: 250px; height: 250px; object-fit: cover; opacity: 0; transition: opacity 0.3s;">
-                        {% else %}
-                            <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" 
-                                 alt="{{ last_scanned_student.name }}" 
-                                 class="rounded-circle border border-5 border-white shadow-lg" 
-                                 loading="eager"
-                                 fetchpriority="high"
-                                 style="width: 250px; height: 250px; object-fit: cover;">
-                        {% endif %}
-                        <div class="position-absolute top-0 start-50 translate-middle">
-                            {% if last_scanned_student.action == 'time_in' %}
-                                <span class="badge bg-success rounded-pill px-4 py-2" style="font-size: 1rem;">
-                                    <i class="bi bi-check-circle-fill"></i> TIME IN
-                                </span>
+        <div class="modal-content border-0 shadow-2xl" style="border-radius: 24px; overflow: hidden; border: none;">
+            <div class="modal-body text-center p-0" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                <div style="padding: 48px 40px 32px;">
+                    <div class="mb-4">
+                        <div class="position-relative d-inline-block">
+                            {% if last_scanned_student.profile_picture_url %}
+                                <img src="{{ last_scanned_student.profile_picture_url }}" 
+                                     alt="{{ last_scanned_student.name }}" 
+                                     class="rounded-circle border border-5 border-white shadow-xl" 
+                                     loading="eager"
+                                     fetchpriority="high"
+                                     onload="this.style.opacity='1'"
+                                     style="width: 200px; height: 200px; object-fit: cover; opacity: 0; transition: opacity 0.3s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
                             {% else %}
-                                <span class="badge bg-info rounded-pill px-4 py-2" style="font-size: 1rem;">
-                                    <i class="bi bi-box-arrow-right"></i> TIME OUT
-                                </span>
+                                <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" 
+                                     alt="{{ last_scanned_student.name }}" 
+                                     class="rounded-circle border border-5 border-white shadow-xl" 
+                                     loading="eager"
+                                     fetchpriority="high"
+                                     style="width: 200px; height: 200px; object-fit: cover; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
                             {% endif %}
+                            <div class="position-absolute top-0 start-50 translate-middle" style="margin-top: -12px;">
+                                {% if last_scanned_student.action == 'time_in' %}
+                                    <span class="badge rounded-pill px-4 py-2" style="font-size: 0.9rem; font-weight: 600; background: white; color: #10b981; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                                        <i class="bi bi-check-circle-fill"></i> TIME IN
+                                    </span>
+                                {% else %}
+                                    <span class="badge rounded-pill px-4 py-2" style="font-size: 0.9rem; font-weight: 600; background: white; color: #3b82f6; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                                        <i class="bi bi-box-arrow-right"></i> TIME OUT
+                                    </span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
+                    
+                    <h2 class="text-white mb-0 fw-bold" style="font-size: 2rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2); line-height: 1.2;">
+                        {{ last_scanned_student.name }}
+                    </h2>
                 </div>
                 
-                <h2 class="text-white mb-3 fw-bold" style="font-size: 2.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.3);">
-                    {{ last_scanned_student.name }}
-                </h2>
-                
-                <div class="bg-white rounded-4 p-4 mt-4 shadow-lg">
-                    <div class="row text-center">
-                        <div class="col-md-6 mb-3 mb-md-0">
-                            <p class="mb-1 text-muted small">Subject</p>
-                            <p class="mb-0 fw-bold text-primary" style="font-size: 1.2rem;">{{ last_scanned_student.subject_code }}</p>
+                <div class="bg-white rounded-top-4 p-5" style="border-radius: 24px 24px 0 0; margin-top: 0;">
+                    <div class="row text-center g-4">
+                        <div class="col-md-6">
+                            <div style="padding: 16px; background: #f9fafb; border-radius: 12px;">
+                                <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Subject</p>
+                                <p class="mb-0 fw-bold" style="font-size: 1.1rem; color: #1f2937;">{{ last_scanned_student.subject_code }}</p>
+                            </div>
                         </div>
                         <div class="col-md-6">
-                            <p class="mb-1 text-muted small">Status</p>
-                            <p class="mb-0">
-                                <span class="badge bg-{% if last_scanned_student.status == 'PRESENT' %}success{% elif last_scanned_student.status == 'LATE' %}warning{% else %}danger{% endif %} px-3 py-2" style="font-size: 1rem;">
-                                    {{ last_scanned_student.status }}
-                                </span>
-                            </p>
+                            <div style="padding: 16px; background: #f9fafb; border-radius: 12px;">
+                                <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Status</p>
+                                <p class="mb-0">
+                                    <span class="badge px-3 py-2" style="font-size: 0.95rem; font-weight: 600; background: {% if last_scanned_student.status == 'PRESENT' %}#d1fae5; color: #065f46{% elif last_scanned_student.status == 'LATE' %}#fef3c7; color: #92400e{% else %}#fee2e2; color: #991b1b{% endif %};">
+                                        {{ last_scanned_student.status }}
+                                    </span>
+                                </p>
+                            </div>
                         </div>
                     </div>
                     
-                    <hr class="my-3">
-                    
-                    <div class="row text-center">
-                        {% if last_scanned_student.action == 'time_in' %}
-                            <div class="col-12">
-                                <p class="mb-1 text-muted small">Time In</p>
-                                <p class="mb-0 fw-bold text-success" style="font-size: 1.5rem;">
-                                    <i class="bi bi-clock-fill"></i> {{ last_scanned_student.time_in }}
-                                </p>
-                            </div>
-                        {% else %}
-                            <div class="col-6">
-                                <p class="mb-1 text-muted small">Time In</p>
-                                <p class="mb-0 fw-bold" style="font-size: 1.1rem;">{{ last_scanned_student.time_in }}</p>
-                            </div>
-                            <div class="col-6">
-                                <p class="mb-1 text-muted small">Time Out</p>
-                                <p class="mb-0 fw-bold text-info" style="font-size: 1.1rem;">{{ last_scanned_student.time_out }}</p>
-                            </div>
-                        {% endif %}
+                    <div class="mt-4 pt-4" style="border-top: 2px solid #f3f4f6;">
+                        <div class="row text-center g-3">
+                            {% if last_scanned_student.action == 'time_in' %}
+                                <div class="col-12">
+                                    <div style="padding: 20px; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 12px; border: 2px solid #a7f3d0;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.75rem; color: #059669;">
+                                            <i class="bi bi-clock-fill"></i> {{ last_scanned_student.time_in }}
+                                        </p>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="col-6">
+                                    <div style="padding: 16px; background: #f9fafb; border-radius: 12px;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.25rem; color: #1f2937;">
+                                            <i class="bi bi-arrow-right-circle-fill" style="color: #10b981;"></i> {{ last_scanned_student.time_in }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div style="padding: 16px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 12px; border: 2px solid #bfdbfe;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time Out</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.25rem; color: #2563eb;">
+                                            <i class="bi bi-arrow-left-circle-fill"></i> {{ last_scanned_student.time_out }}
+                                        </p>
+                                    </div>
+                                </div>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -241,7 +636,8 @@
 }
 
 #studentScanModal .modal-content {
-    animation: slideUp 0.4s ease-out;
+    animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: center;
 }
 
 @keyframes fadeIn {
@@ -251,26 +647,26 @@
 
 @keyframes slideUp {
     from {
-        transform: translateY(50px);
+        transform: translateY(30px) scale(0.95);
         opacity: 0;
     }
     to {
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
         opacity: 1;
     }
 }
 
 #studentScanModal .modal-body img {
-    animation: scaleIn 0.5s ease-out;
+    animation: scaleIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @keyframes scaleIn {
     from {
-        transform: scale(0.8);
+        transform: scale(0.7) rotate(-5deg);
         opacity: 0;
     }
     to {
-        transform: scale(1);
+        transform: scale(1) rotate(0deg);
         opacity: 1;
     }
 }
@@ -293,6 +689,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const input = document.getElementById('rfid_id');
     const form = document.getElementById('scanForm');
     const subjectSelect = document.getElementById('subject_id');
+    const scanIcon = document.querySelector('.scan-icon');
+    const scanContainer = document.querySelector('.scan-input-container');
     
     // Only add dropdown event listeners if it's a select element
     if (subjectSelect && subjectSelect.tagName === 'SELECT') {
@@ -347,8 +745,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    let submitTimeout;
+    // Toggle scan icon visibility based on input
+    function updateIconVisibility() {
+        if (scanIcon && scanContainer) {
+            if (input.value.trim().length > 0) {
+                scanIcon.style.opacity = '0.2';
+                scanIcon.style.transform = 'translateX(-50%) scale(0.9)';
+            } else {
+                scanIcon.style.opacity = '0.6';
+                scanIcon.style.transform = 'translateX(-50%)';
+            }
+        }
+    }
+    
     input.addEventListener('input', function() {
+        updateIconVisibility();
+        
         // Don't auto-submit if dropdown is focused or being changed
         if (isDropdownFocused || isChangingSubject) {
             clearTimeout(submitTimeout);
@@ -380,6 +792,7 @@ document.addEventListener('DOMContentLoaded', function() {
     // Clear input and focus after page load
     setTimeout(function() {
         input.value = '';
+        updateIconVisibility();
         input.focus();
     }, 100);
     

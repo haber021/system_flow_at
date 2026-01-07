@@ -4,80 +4,416 @@
 
 {% block extra_css %}
 <style>
-    .feature-card {
-        transition: transform 0.2s, box-shadow 0.2s;
-        border-left: 4px solid #007bff;
-        min-height: 150px;
+    :root {
+        --primary-color: #2563eb;
+        --primary-dark: #1e40af;
+        --success-color: #10b981;
+        --warning-color: #f59e0b;
+        --danger-color: #ef4444;
+        --info-color: #3b82f6;
+        --purple-color: #8b5cf6;
+        --gray-50: #f9fafb;
+        --gray-100: #f3f4f6;
+        --gray-200: #e5e7eb;
+        --gray-300: #d1d5db;
+        --gray-600: #4b5563;
+        --gray-700: #374151;
+        --gray-900: #111827;
     }
-    .feature-card:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+
+    /* Page Header */
+    .page-header {
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
     }
-    .feature-card.enrollment {
-        border-left-color: #ffc107;
+
+    .page-header h2 {
+        font-size: 1.875rem;
+        font-weight: 700;
+        color: var(--gray-900);
+        margin-bottom: 0.5rem;
     }
-    .feature-card.students {
-        border-left-color: #28a745;
+
+    .page-header p {
+        color: var(--gray-600);
+        font-size: 1rem;
+        margin: 0;
     }
-    .feature-card.attendance {
-        border-left-color: #3b82f6;
-    }
-    .feature-card.reports {
-        border-left-color: #6f42c1;
-    }
-    .feature-card.scan {
-        border-left-color: #dc3545;
-    }
+
+    /* Statistics Cards */
     .stat-card {
-        min-height: 120px;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 12px;
+        padding: 1.5rem;
+        transition: all 0.3s ease;
+        min-height: 140px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
     }
-    .recent-item {
-        border-left: 3px solid #dee2e6;
-        padding-left: 15px;
-        margin-bottom: 10px;
-        transition: border-color 0.2s;
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        border-color: var(--gray-300);
     }
-    .recent-item:hover {
-        border-left-color: #007bff;
+
+    .stat-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
     }
-    /* Purple color scheme for Reports section */
-    .bg-purple {
-        background-color: #6f42c1 !important;
+
+    .stat-card-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
     }
+
+    .stat-card-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--gray-600);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 0;
+    }
+
+    .stat-card-value {
+        font-size: 2.25rem;
+        font-weight: 700;
+        color: var(--gray-900);
+        line-height: 1;
+        margin: 0.5rem 0;
+    }
+
+    .stat-card-footer {
+        font-size: 0.8125rem;
+        color: var(--gray-600);
+        margin-top: auto;
+    }
+
+    /* Feature Cards */
+    .feature-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 12px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+        min-height: 200px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .feature-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        border-color: var(--gray-300);
+    }
+
+    .feature-card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+        background: var(--gray-50);
+    }
+
+    .feature-card-header h5 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--gray-900);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .feature-card-header i {
+        font-size: 1.25rem;
+    }
+
+    .feature-card-body {
+        padding: 1.5rem;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .feature-card-description {
+        color: var(--gray-600);
+        font-size: 0.9375rem;
+        margin-bottom: 1.25rem;
+        line-height: 1.6;
+    }
+
+    .feature-stats {
+        margin-bottom: 1.25rem;
+    }
+
+    .feature-stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.625rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+
+    .feature-stat-row:last-child {
+        border-bottom: none;
+    }
+
+    .feature-stat-label {
+        color: var(--gray-600);
+        font-size: 0.875rem;
+    }
+
+    .feature-stat-value {
+        font-weight: 600;
+        font-size: 0.9375rem;
+    }
+
+    .feature-card-actions {
+        margin-top: auto;
+    }
+
+    /* Color variations for feature cards */
+    .feature-card.enrollment .feature-card-header i { color: var(--warning-color); }
+    .feature-card.students .feature-card-header i { color: var(--success-color); }
+    .feature-card.attendance .feature-card-header i { color: var(--info-color); }
+    .feature-card.reports .feature-card-header i { color: var(--purple-color); }
+    .feature-card.scan .feature-card-header i { color: var(--danger-color); }
+
+    /* Buttons */
+    .btn {
+        border-radius: 8px;
+        font-weight: 500;
+        padding: 0.625rem 1.25rem;
+        transition: all 0.2s ease;
+        border: none;
+    }
+
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .btn:active {
+        transform: translateY(0);
+    }
+
     .btn-purple {
-        background-color: #6f42c1;
-        border-color: #6f42c1;
-        color: #ffffff;
+        background-color: var(--purple-color);
+        color: white;
     }
+
     .btn-purple:hover {
-        background-color: #5a32a3;
-        border-color: #5a32a3;
-        color: #ffffff;
+        background-color: #7c3aed;
+        color: white;
     }
+
     .btn-outline-purple {
-        color: #6f42c1;
-        border-color: #6f42c1;
+        color: var(--purple-color);
+        border: 1px solid var(--purple-color);
+        background: transparent;
     }
+
     .btn-outline-purple:hover {
-        background-color: #6f42c1;
-        border-color: #6f42c1;
-        color: #ffffff;
+        background-color: var(--purple-color);
+        color: white;
+    }
+
+    /* Recent Activity Cards */
+    .recent-activity-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .recent-activity-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+        background: var(--gray-50);
+    }
+
+    .recent-activity-header h5 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--gray-900);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .recent-item {
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid var(--gray-100);
+        transition: background-color 0.2s ease;
+    }
+
+    .recent-item:last-child {
+        border-bottom: none;
+    }
+
+    .recent-item:hover {
+        background-color: var(--gray-50);
+    }
+
+    .recent-item-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+    }
+
+    .recent-item-title {
+        font-weight: 600;
+        color: var(--gray-900);
+        font-size: 0.9375rem;
+        margin: 0;
+    }
+
+    .recent-item-content {
+        color: var(--gray-600);
+        font-size: 0.875rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .recent-item-time {
+        color: var(--gray-600);
+        font-size: 0.8125rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .badge {
+        padding: 0.375rem 0.75rem;
+        font-weight: 500;
+        border-radius: 6px;
+        font-size: 0.75rem;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1.5rem;
+        color: var(--gray-600);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        color: var(--gray-200);
+        margin-bottom: 1rem;
+    }
+
+    .empty-state p {
+        margin: 0;
+        font-size: 0.9375rem;
+    }
+
+    /* Table Improvements */
+    .table-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .table-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+        background: var(--gray-50);
+    }
+
+    .table-header h5 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--gray-900);
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .table {
+        margin: 0;
+    }
+
+    .table thead {
+        background: var(--gray-50);
+    }
+
+    .table thead th {
+        font-weight: 600;
+        color: var(--gray-700);
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 1rem 1.5rem;
+        border-bottom: 2px solid var(--gray-200);
+    }
+
+    .table tbody td {
+        padding: 1rem 1.5rem;
+        vertical-align: middle;
+        color: var(--gray-700);
+        font-size: 0.9375rem;
+    }
+
+    .table tbody tr {
+        transition: background-color 0.15s ease;
+    }
+
+    .table tbody tr:hover {
+        background-color: var(--gray-50);
+    }
+
+    /* Alert Improvements */
+    .alert {
+        border: none;
+        border-radius: 8px;
+        border-left: 4px solid;
+        padding: 1rem 1.25rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .stat-card {
+            min-height: auto;
+        }
+
+        .feature-card {
+            min-height: auto;
+        }
+
+        .page-header h2 {
+            font-size: 1.5rem;
+        }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="mb-4">
-    <h2 class="mb-1">
+<!-- Page Header -->
+<div class="page-header">
+    <h2>
         <i class="bi bi-person-badge"></i> Adviser Features Dashboard
     </h2>
-    <p class="text-muted">Welcome, <strong>{{ adviser_name }}</strong> - Manage your students and monitor attendance</p>
+    <p>Welcome, <strong>{{ adviser_name }}</strong> — Manage your students and monitor attendance</p>
     {% if not is_staff %}
-    <div class="alert alert-info">
+    <div class="alert alert-info mt-3">
         <i class="bi bi-info-circle"></i> You are viewing features for students assigned to you as their adviser.
     </div>
     {% else %}
-    <div class="alert alert-success">
+    <div class="alert alert-success mt-3">
         <i class="bi bi-shield-check"></i> <strong>Staff/Admin View:</strong> You have access to all features and data.
     </div>
     {% endif %}
@@ -85,45 +421,52 @@
 
 <!-- Statistics Overview -->
 <div class="row mb-4">
-    <div class="col-md-3 mb-3">
-        <div class="card text-white bg-primary stat-card">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-book"></i> Subject Enrollments
-                </h5>
-                <p class="card-text display-4">{{ enrolled_students_count }}</p>
-                <small class="text-white-50">Total subjects students enrolled in</small>
+    <div class="col-md-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <div class="stat-card-icon" style="background: #dbeafe; color: var(--info-color);">
+                    <i class="bi bi-book"></i>
+                </div>
+                <h6 class="stat-card-title">Subject Enrollments</h6>
             </div>
+            <div class="stat-card-value">{{ enrolled_students_count }}</div>
+            <div class="stat-card-footer">Total subjects students enrolled in</div>
         </div>
     </div>
-    <div class="col-md-3 mb-3">
-        <div class="card text-white bg-warning stat-card">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-clipboard-check"></i> Pending Requests
-                </h5>
-                <p class="card-text display-4">{{ pending_enrollments }}</p>
+    <div class="col-md-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <div class="stat-card-icon" style="background: #fef3c7; color: var(--warning-color);">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+                <h6 class="stat-card-title">Pending Requests</h6>
             </div>
+            <div class="stat-card-value">{{ pending_enrollments }}</div>
+            <div class="stat-card-footer">Awaiting your review</div>
         </div>
     </div>
-    <div class="col-md-3 mb-3">
-        <div class="card text-white bg-success stat-card">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-check-circle"></i> Present Today
-                </h5>
-                <p class="card-text display-4">{{ present_today }}</p>
+    <div class="col-md-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <div class="stat-card-icon" style="background: #d1fae5; color: var(--success-color);">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <h6 class="stat-card-title">Present Today</h6>
             </div>
+            <div class="stat-card-value">{{ present_today }}</div>
+            <div class="stat-card-footer">Students marked present</div>
         </div>
     </div>
-    <div class="col-md-3 mb-3">
-        <div class="card text-white bg-danger stat-card">
-            <div class="card-body">
-                <h5 class="card-title">
-                    <i class="bi bi-x-circle"></i> Absent Today
-                </h5>
-                <p class="card-text display-4">{{ absent_today }}</p>
+    <div class="col-md-3 mb-4">
+        <div class="stat-card">
+            <div class="stat-card-header">
+                <div class="stat-card-icon" style="background: #fee2e2; color: var(--danger-color);">
+                    <i class="bi bi-x-circle"></i>
+                </div>
+                <h6 class="stat-card-title">Absent Today</h6>
             </div>
+            <div class="stat-card-value">{{ absent_today }}</div>
+            <div class="stat-card-footer">Students marked absent</div>
         </div>
     </div>
 </div>
@@ -131,84 +474,89 @@
 <!-- Main Features -->
 <div class="row mb-4">
     <div class="col-md-6 mb-4">
-        <div class="card feature-card enrollment">
-            <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0">
+        <div class="feature-card enrollment">
+            <div class="feature-card-header">
+                <h5>
                     <i class="bi bi-clipboard-check"></i> Enrollment Management
                 </h5>
             </div>
-            <div class="card-body">
-                <p class="card-text">Review and manage student enrollment requests for subjects.</p>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Pending Requests:</span>
-                        <strong class="text-warning">{{ pending_enrollments }}</strong>
+            <div class="feature-card-body">
+                <p class="feature-card-description">Review and manage student enrollment requests for subjects.</p>
+                <div class="feature-stats">
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Pending Requests</span>
+                        <span class="feature-stat-value text-warning">{{ pending_enrollments }}</span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Approved:</span>
-                        <strong class="text-success">{{ approved_enrollments }}</strong>
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Approved</span>
+                        <span class="feature-stat-value text-success">{{ approved_enrollments }}</span>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span>Rejected:</span>
-                        <strong class="text-danger">{{ rejected_enrollments }}</strong>
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Rejected</span>
+                        <span class="feature-stat-value text-danger">{{ rejected_enrollments }}</span>
                     </div>
                 </div>
+                <div class="feature-card-actions">
                 <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-warning w-100">
                     <i class="bi bi-arrow-right-circle"></i> Manage Enrollment Requests
                 </a>
+                </div>
             </div>
         </div>
     </div>
     
     <div class="col-md-6 mb-4">
-        <div class="card feature-card students">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0">
+        <div class="feature-card students">
+            <div class="feature-card-header">
+                <h5>
                     <i class="bi bi-people"></i> Student Management
                 </h5>
             </div>
-            <div class="card-body">
-                <p class="card-text">View and manage your assigned students.</p>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Total Assigned Students:</span>
-                        <strong>{{ total_students }}</strong>
+            <div class="feature-card-body">
+                <p class="feature-card-description">View and manage your assigned students.</p>
+                <div class="feature-stats">
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Total Assigned Students</span>
+                        <span class="feature-stat-value">{{ total_students }}</span>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span>Late Today:</span>
-                        <strong class="text-warning">{{ late_today }}</strong>
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Late Today</span>
+                        <span class="feature-stat-value text-warning">{{ late_today }}</span>
                     </div>
                 </div>
+                <div class="feature-card-actions">
                 <a href="{% url 'student_list' %}?adviser={{ adviser_name }}" class="btn btn-success w-100">
                     <i class="bi bi-arrow-right-circle"></i> View My Students
                 </a>
+                </div>
             </div>
         </div>
     </div>
     
     <div class="col-md-6 mb-4">
-        <div class="card feature-card attendance">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
+        <div class="feature-card attendance">
+            <div class="feature-card-header">
+                <h5>
                     <i class="bi bi-list-check"></i> Attendance Monitoring
                 </h5>
             </div>
-            <div class="card-body">
-                <p class="card-text">Monitor attendance records and logs for your students.</p>
-                <div class="mb-3">
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Present Today:</span>
-                        <strong class="text-success">{{ present_today }}</strong>
+            <div class="feature-card-body">
+                <p class="feature-card-description">Monitor attendance records and logs for your students.</p>
+                <div class="feature-stats">
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Present Today</span>
+                        <span class="feature-stat-value text-success">{{ present_today }}</span>
                     </div>
-                    <div class="d-flex justify-content-between mb-2">
-                        <span>Absent Today:</span>
-                        <strong class="text-danger">{{ absent_today }}</strong>
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Absent Today</span>
+                        <span class="feature-stat-value text-danger">{{ absent_today }}</span>
                     </div>
-                    <div class="d-flex justify-content-between">
-                        <span>Late Today:</span>
-                        <strong class="text-warning">{{ late_today }}</strong>
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Late Today</span>
+                        <span class="feature-stat-value text-warning">{{ late_today }}</span>
                     </div>
                 </div>
+                <div class="feature-card-actions">
                 <div class="d-grid gap-2">
                     <a href="{% url 'attendance_logs' %}" class="btn btn-info">
                         <i class="bi bi-arrow-right-circle"></i> View Attendance Logs
@@ -216,23 +564,27 @@
                     <a href="{% url 'live_monitor' %}" class="btn btn-outline-info">
                         <i class="bi bi-activity"></i> Live Monitor
                     </a>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
     <div class="col-md-6 mb-4">
-        <div class="card feature-card reports">
-            <div class="card-header bg-purple text-white">
-                <h5 class="mb-0">
+        <div class="feature-card reports">
+            <div class="feature-card-header">
+                <h5>
                     <i class="bi bi-graph-up"></i> Reports & Analytics
                 </h5>
             </div>
-            <div class="card-body">
-                <p class="card-text">Generate reports and view attendance analytics.</p>
-                <div class="mb-3">
-                    <small class="text-muted">Access comprehensive attendance reports and student summaries.</small>
+            <div class="feature-card-body">
+                <p class="feature-card-description">Generate reports and view attendance analytics for comprehensive insights.</p>
+                <div class="feature-stats">
+                    <div class="feature-stat-row">
+                        <span class="feature-stat-label">Access comprehensive attendance reports and student summaries</span>
+                    </div>
                 </div>
+                <div class="feature-card-actions">
                 <div class="d-grid gap-2">
                     <a href="{% url 'student_summary' %}" class="btn btn-purple">
                         <i class="bi bi-arrow-right-circle"></i> Student Summary
@@ -240,6 +592,7 @@
                     <a href="{% url 'email_logs' %}" class="btn btn-outline-purple">
                         <i class="bi bi-envelope"></i> Email Logs
                     </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -249,16 +602,16 @@
 <!-- RFID Scan Feature -->
 <div class="row mb-4">
     <div class="col-md-12 mb-4">
-        <div class="card feature-card scan">
-            <div class="card-header bg-danger text-white">
-                <h5 class="mb-0">
+        <div class="feature-card scan">
+            <div class="feature-card-header">
+                <h5>
                     <i class="bi bi-credit-card"></i> RFID Attendance Scan
                 </h5>
             </div>
-            <div class="card-body">
+            <div class="feature-card-body">
                 <div class="row align-items-center">
                     <div class="col-md-8">
-                        <p class="card-text mb-3">Scan RFID cards to record student attendance in real-time. Select a subject and start scanning student cards.</p>
+                        <p class="feature-card-description mb-3">Scan RFID cards to record student attendance in real-time. Select a subject and start scanning student cards.</p>
                         <div class="mb-3">
                             <small class="text-muted">
                                 <i class="bi bi-info-circle"></i> The scan interface supports automatic card reading and manual entry options.
@@ -280,16 +633,15 @@
 {% if subject_stats %}
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0">
+        <div class="table-card">
+            <div class="table-header">
+                <h5>
                     <i class="bi bi-book"></i> Subject-Wise Attendance (Today)
                 </h5>
             </div>
-            <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead class="table-light">
+                <table class="table table-hover mb-0">
+                    <thead>
                             <tr>
                                 <th>Subject Code</th>
                                 <th>Subject Name</th>
@@ -325,12 +677,11 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="7" class="text-center text-muted">No subjects found for your students.</td>
+                            <td colspan="7" class="text-center text-muted py-4">No subjects found for your students.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
-                </div>
             </div>
         </div>
     </div>
@@ -340,77 +691,56 @@
 <!-- Recent Activity -->
 <div class="row">
     <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-header bg-warning text-dark">
-                <h5 class="mb-0">
+        <div class="recent-activity-card">
+            <div class="recent-activity-header">
+                <h5>
                     <i class="bi bi-clock-history"></i> Recent Enrollment Requests
                 </h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 {% if recent_requests %}
-                <div class="list-group list-group-flush">
                     {% for req in recent_requests %}
-                    <div class="list-group-item recent-item">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="mb-1">{{ req.student.name }}</h6>
-                                <p class="mb-1">
-                                    <small class="text-muted">
-                                        <strong>{{ req.subject.code }}</strong> - {{ req.subject.name }}
-                                    </small>
-                                </p>
-                                <small class="text-muted">
-                                    <i class="bi bi-calendar"></i> {{ req.requested_at|date:"M d, Y g:i A" }}
-                                </small>
-                            </div>
+                    <div class="recent-item">
+                        <div class="recent-item-header">
+                            <h6 class="recent-item-title">{{ req.student.name }}</h6>
                             <span class="badge bg-warning text-dark">Pending</span>
+                        </div>
+                        <div class="recent-item-content">
+                            <strong>{{ req.subject.code }}</strong> — {{ req.subject.name }}
+                        </div>
+                        <div class="recent-item-time">
+                            <i class="bi bi-calendar"></i> {{ req.requested_at|date:"M d, Y g:i A" }}
                         </div>
                     </div>
                     {% endfor %}
-                </div>
-                <div class="mt-3">
-                    <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-warning btn-sm w-100">
-                        <i class="bi bi-arrow-right"></i> View All Requests
-                    </a>
-                </div>
+                    <div class="p-3 border-top">
+                        <a href="{% url 'adviser_enrollment_requests' %}" class="btn btn-warning btn-sm w-100">
+                            <i class="bi bi-arrow-right"></i> View All Requests
+                        </a>
+                    </div>
                 {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                    <p class="mt-2">No pending enrollment requests</p>
-                </div>
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>No pending enrollment requests</p>
+                    </div>
                 {% endif %}
             </div>
         </div>
     </div>
     
     <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-header bg-info text-white">
-                <h5 class="mb-0">
+        <div class="recent-activity-card">
+            <div class="recent-activity-header">
+                <h5>
                     <i class="bi bi-activity"></i> Recent Attendance
                 </h5>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 {% if recent_attendance %}
-                <div class="list-group list-group-flush">
                     {% for att in recent_attendance %}
-                    <div class="list-group-item recent-item">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <h6 class="mb-1">{{ att.student.name }}</h6>
-                                <p class="mb-1">
-                                    <small class="text-muted">
-                                        <strong>{{ att.subject.code }}</strong> - {{ att.date|date:"M d, Y" }}
-                                    </small>
-                                </p>
-                                <small class="text-muted">
-                                    {% if att.time_in %}
-                                        <i class="bi bi-clock"></i> {{ att.time_in|time:"g:i A" }}
-                                    {% elif att.time %}
-                                        <i class="bi bi-clock"></i> {{ att.time|time:"g:i A" }}
-                                    {% endif %}
-                                </small>
-                            </div>
+                    <div class="recent-item">
+                        <div class="recent-item-header">
+                            <h6 class="recent-item-title">{{ att.student.name }}</h6>
                             <span class="badge 
                                 {% if att.status == 'PRESENT' %}bg-success
                                 {% elif att.status == 'ABSENT' %}bg-danger
@@ -419,19 +749,28 @@
                                 {{ att.status }}
                             </span>
                         </div>
+                        <div class="recent-item-content">
+                            <strong>{{ att.subject.code }}</strong> — {{ att.date|date:"M d, Y" }}
+                        </div>
+                        <div class="recent-item-time">
+                            {% if att.time_in %}
+                                <i class="bi bi-clock"></i> {{ att.time_in|time:"g:i A" }}
+                            {% elif att.time %}
+                                <i class="bi bi-clock"></i> {{ att.time|time:"g:i A" }}
+                            {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
-                </div>
-                <div class="mt-3">
-                    <a href="{% url 'attendance_logs' %}" class="btn btn-info btn-sm w-100">
-                        <i class="bi bi-arrow-right"></i> View All Attendance
-                    </a>
-                </div>
+                    <div class="p-3 border-top">
+                        <a href="{% url 'attendance_logs' %}" class="btn btn-info btn-sm w-100">
+                            <i class="bi bi-arrow-right"></i> View All Attendance
+                        </a>
+                    </div>
                 {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-                    <p class="mt-2">No recent attendance records</p>
-                </div>
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <p>No recent attendance records</p>
+                    </div>
                 {% endif %}
             </div>
         </div>

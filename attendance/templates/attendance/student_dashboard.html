@@ -335,6 +335,63 @@
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
     
+    /* Attendance Tabs Styling */
+    .attendance-tabs {
+        border-bottom: 2px solid #e2e8f0;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .attendance-tabs .nav-link {
+        border: none;
+        border-radius: 8px 8px 0 0;
+        padding: 0.75rem 1.25rem;
+        font-weight: 500;
+        color: #64748b;
+        background: #f1f5f9;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .attendance-tabs .nav-link:hover {
+        color: #1e293b;
+        background: #e2e8f0;
+    }
+    
+    .attendance-tabs .nav-link.active {
+        color: white;
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        border-bottom: 2px solid #2563eb;
+        margin-bottom: -2px;
+    }
+    
+    .attendance-tabs .nav-link .badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .attendance-tabs .nav-link.active .badge {
+        background: rgba(255, 255, 255, 0.3) !important;
+        color: white !important;
+    }
+    
+    .tab-date-header {
+        display: flex;
+        align-items: center;
+    }
+    
+    .tab-date-header .badge {
+        font-size: 0.85rem;
+        padding: 0.5rem 1rem;
+        font-weight: 500;
+    }
+    
+    .tab-content > .tab-pane {
+        padding-top: 0.5rem;
+    }
+    
     /* Responsive Adjustments */
     @media (max-width: 768px) {
         .page-header {
@@ -362,6 +419,19 @@
         .table thead th,
         .table tbody td {
             padding: 0.75rem 0.5rem;
+        }
+        
+        .attendance-tabs {
+            gap: 0.25rem;
+        }
+        
+        .attendance-tabs .nav-link {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.8rem;
+        }
+        
+        .attendance-tabs .nav-link i {
+            display: none;
         }
     }
 </style>
@@ -563,79 +633,352 @@
         </h5>
     </div>
     <div class="card-body">
-        {% if recent_attendances %}
-        <div class="table-responsive">
-            <table class="table table-hover">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Subject Code</th>
-                        <th>Subject Name</th>
-                        <th class="text-center">Time In</th>
-                        <th class="text-center">Time Out</th>
-                        <th class="text-center">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in recent_attendances %}
-                    {% with attendance=item.attendance %}
-                    <tr>
-                        <td>
-                            <div class="date-display">
-                                <strong>{{ attendance.date|date:"M d, Y" }}</strong>
-                                <small>{{ attendance.date|date:"l" }}</small>
-                            </div>
-                        </td>
-                        <td><strong>{{ attendance.subject.code }}</strong></td>
-                        <td>{{ attendance.subject.name }}</td>
-                        <td class="text-center">
-                            {% if item.time_in_formatted %}
-                                <span class="badge bg-success">
-                                    <i class="bi bi-arrow-right-circle"></i>{{ item.time_in_formatted }}
-                                </span>
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            {% if item.time_out_formatted %}
-                                <span class="badge bg-info">
-                                    <i class="bi bi-arrow-left-circle"></i>{{ item.time_out_formatted }}
-                                </span>
-                            {% else %}
-                                <span class="text-muted">—</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-center">
-                            {% if attendance.status == 'PRESENT' %}
-                                <span class="badge bg-success">
-                                    <i class="bi bi-check-circle"></i>{{ attendance.status }}
-                                </span>
-                            {% elif attendance.status == 'LATE' %}
-                                <span class="badge bg-warning text-dark">
-                                    <i class="bi bi-clock"></i>{{ attendance.status }}
-                                </span>
-                            {% elif attendance.status == 'ABSENT' %}
-                                <span class="badge bg-danger">
-                                    <i class="bi bi-x-circle"></i>{{ attendance.status }}
-                                </span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ attendance.status }}</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endwith %}
-                    {% endfor %}
-                </tbody>
-            </table>
+        <!-- Time Period Tabs -->
+        <ul class="nav nav-tabs attendance-tabs mb-4" id="attendanceTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="new-tab" data-bs-toggle="tab" data-bs-target="#new-records" type="button" role="tab" aria-controls="new-records" aria-selected="true">
+                    <i class="bi bi-calendar-check me-1"></i>New (Today)
+                    {% if today_count > 0 %}<span class="badge bg-success ms-1">{{ today_count }}</span>{% endif %}
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="yesterday-tab" data-bs-toggle="tab" data-bs-target="#yesterday-records" type="button" role="tab" aria-controls="yesterday-records" aria-selected="false">
+                    <i class="bi bi-calendar-minus me-1"></i>Yesterday
+                    {% if yesterday_count > 0 %}<span class="badge bg-info ms-1">{{ yesterday_count }}</span>{% endif %}
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="pastweek-tab" data-bs-toggle="tab" data-bs-target="#pastweek-records" type="button" role="tab" aria-controls="pastweek-records" aria-selected="false">
+                    <i class="bi bi-calendar-week me-1"></i>Past Week
+                    {% if past_week_count > 0 %}<span class="badge bg-warning text-dark ms-1">{{ past_week_count }}</span>{% endif %}
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="all-tab" data-bs-toggle="tab" data-bs-target="#all-records" type="button" role="tab" aria-controls="all-records" aria-selected="false">
+                    <i class="bi bi-calendar3 me-1"></i>All Records
+                </button>
+            </li>
+        </ul>
+        
+        <!-- Tab Content -->
+        <div class="tab-content" id="attendanceTabContent">
+            <!-- New (Today) Tab -->
+            <div class="tab-pane fade show active" id="new-records" role="tabpanel" aria-labelledby="new-tab">
+                <div class="tab-date-header mb-3">
+                    <span class="badge bg-primary"><i class="bi bi-calendar-event me-1"></i>{{ today_date|date:"l, F d, Y" }}</span>
+                </div>
+                {% if today_attendances %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th class="text-center">Time In</th>
+                                <th class="text-center">Time Out</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in today_attendances %}
+                            {% with attendance=item.attendance %}
+                            <tr>
+                                <td>
+                                    <div class="date-display">
+                                        <strong>{{ attendance.date|date:"M d, Y" }}</strong>
+                                        <small>{{ attendance.date|date:"l" }}</small>
+                                    </div>
+                                </td>
+                                <td><strong>{{ attendance.subject.code }}</strong></td>
+                                <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center">
+                                    {% if item.time_in_formatted %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-arrow-right-circle"></i>{{ item.time_in_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if item.time_out_formatted %}
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-arrow-left-circle"></i>{{ item.time_out_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if attendance.status == 'PRESENT' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'LATE' %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'ABSENT' %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ attendance.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-calendar-x"></i>
+                    <h6>No Records Today</h6>
+                    <p>You don't have any attendance records for today yet.</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Yesterday Tab -->
+            <div class="tab-pane fade" id="yesterday-records" role="tabpanel" aria-labelledby="yesterday-tab">
+                <div class="tab-date-header mb-3">
+                    <span class="badge bg-info"><i class="bi bi-calendar-event me-1"></i>{{ yesterday_date|date:"l, F d, Y" }}</span>
+                </div>
+                {% if yesterday_attendances %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th class="text-center">Time In</th>
+                                <th class="text-center">Time Out</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in yesterday_attendances %}
+                            {% with attendance=item.attendance %}
+                            <tr>
+                                <td>
+                                    <div class="date-display">
+                                        <strong>{{ attendance.date|date:"M d, Y" }}</strong>
+                                        <small>{{ attendance.date|date:"l" }}</small>
+                                    </div>
+                                </td>
+                                <td><strong>{{ attendance.subject.code }}</strong></td>
+                                <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center">
+                                    {% if item.time_in_formatted %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-arrow-right-circle"></i>{{ item.time_in_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if item.time_out_formatted %}
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-arrow-left-circle"></i>{{ item.time_out_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if attendance.status == 'PRESENT' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'LATE' %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'ABSENT' %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ attendance.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-calendar-x"></i>
+                    <h6>No Records Yesterday</h6>
+                    <p>You don't have any attendance records from yesterday.</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- Past Week Tab -->
+            <div class="tab-pane fade" id="pastweek-records" role="tabpanel" aria-labelledby="pastweek-tab">
+                <div class="tab-date-header mb-3">
+                    <span class="badge bg-warning text-dark"><i class="bi bi-calendar-range me-1"></i>{{ past_week_start|date:"M d" }} - {{ yesterday_date|date:"M d, Y" }}</span>
+                </div>
+                {% if past_week_attendances %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th class="text-center">Time In</th>
+                                <th class="text-center">Time Out</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in past_week_attendances %}
+                            {% with attendance=item.attendance %}
+                            <tr>
+                                <td>
+                                    <div class="date-display">
+                                        <strong>{{ attendance.date|date:"M d, Y" }}</strong>
+                                        <small>{{ attendance.date|date:"l" }}</small>
+                                    </div>
+                                </td>
+                                <td><strong>{{ attendance.subject.code }}</strong></td>
+                                <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center">
+                                    {% if item.time_in_formatted %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-arrow-right-circle"></i>{{ item.time_in_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if item.time_out_formatted %}
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-arrow-left-circle"></i>{{ item.time_out_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if attendance.status == 'PRESENT' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'LATE' %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'ABSENT' %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ attendance.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-calendar-x"></i>
+                    <h6>No Records This Past Week</h6>
+                    <p>You don't have any attendance records from the past 7 days.</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            <!-- All Records Tab -->
+            <div class="tab-pane fade" id="all-records" role="tabpanel" aria-labelledby="all-tab">
+                {% if recent_attendances %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Subject Code</th>
+                                <th>Subject Name</th>
+                                <th class="text-center">Time In</th>
+                                <th class="text-center">Time Out</th>
+                                <th class="text-center">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in recent_attendances %}
+                            {% with attendance=item.attendance %}
+                            <tr>
+                                <td>
+                                    <div class="date-display">
+                                        <strong>{{ attendance.date|date:"M d, Y" }}</strong>
+                                        <small>{{ attendance.date|date:"l" }}</small>
+                                    </div>
+                                </td>
+                                <td><strong>{{ attendance.subject.code }}</strong></td>
+                                <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center">
+                                    {% if item.time_in_formatted %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-arrow-right-circle"></i>{{ item.time_in_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if item.time_out_formatted %}
+                                        <span class="badge bg-info">
+                                            <i class="bi bi-arrow-left-circle"></i>{{ item.time_out_formatted }}
+                                        </span>
+                                    {% else %}
+                                        <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if attendance.status == 'PRESENT' %}
+                                        <span class="badge bg-success">
+                                            <i class="bi bi-check-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'LATE' %}
+                                        <span class="badge bg-warning text-dark">
+                                            <i class="bi bi-clock"></i>{{ attendance.status }}
+                                        </span>
+                                    {% elif attendance.status == 'ABSENT' %}
+                                        <span class="badge bg-danger">
+                                            <i class="bi bi-x-circle"></i>{{ attendance.status }}
+                                        </span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">{{ attendance.status }}</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-info-circle"></i>
+                    <h6>No Attendance Records Found</h6>
+                    <p>{% if selected_subject_id or date_from or date_to %}No records match your selected filters.{% else %}You don't have any attendance records yet.{% endif %}</p>
+                </div>
+                {% endif %}
+            </div>
         </div>
-        {% else %}
-        <div class="empty-state">
-            <i class="bi bi-info-circle"></i>
-            <h6>No Attendance Records Found</h6>
-            <p>{% if selected_subject_id or date_from or date_to %}No records match your selected filters.{% else %}You don't have any attendance records yet.{% endif %}</p>
-        </div>
-        {% endif %}
     </div>
 </div>
 

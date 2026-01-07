@@ -7,7 +7,7 @@ SECRET_KEY = 'django-insecure-change-me-in-production'
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['*', "attendance-monitor.local", "10.251.88.18", "localhost"]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -128,6 +128,8 @@ EMAIL_BACKEND = os.environ.get('EMAIL_BACKEND', 'django.core.mail.backends.smtp.
 EMAIL_HOST = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
 EMAIL_PORT = int(os.environ.get('MAIL_PORT', '587'))
 EMAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
+EMAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'False').lower() == 'true'  # set to True only when using SSL ports like 465
+EMAIL_TIMEOUT = int(os.environ.get('MAIL_TIMEOUT', '10'))  # avoid long hangs that look like delivery delays
 EMAIL_HOST_USER = os.environ.get('MAIL_USERNAME', 'habervincent21@gmail.com')
 EMAIL_HOST_PASSWORD = os.environ.get('MAIL_PASSWORD', 'nvli tbsz atiz mqwc')
 DEFAULT_FROM_EMAIL = os.environ.get('MAIL_DEFAULT_SENDER', 'DMMMSU ATTENDANCE MONITOR <habervincent21@gmail.com>')

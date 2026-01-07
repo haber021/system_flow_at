@@ -84,6 +84,10 @@ def send_attendance_email(
     """
     start_time = time.time()
     
+    # Respect student-level email preferences
+    if hasattr(student, 'email_opt_in') and student.email_opt_in is False:
+        return False, None, "Student has opted out of email notifications"
+    
     # Convert single email to list for consistency
     if isinstance(email_to, str):
         email_to_list = [email_to]
@@ -165,12 +169,14 @@ def send_attendance_email(
     if not silent:
         _print_email_info('SENDING', email_to_display, subject, student.name)
     
+    connection = None
     try:
-        # Create email connection once for better performance
+        # Create email connection once for better performance; include timeout to avoid long hangs
         connection = get_connection(
             username=settings.EMAIL_HOST_USER,
             password=settings.EMAIL_HOST_PASSWORD,
             fail_silently=False,
+            timeout=getattr(settings, 'EMAIL_TIMEOUT', None),
         )
         
         # Create email message
@@ -200,7 +206,6 @@ def send_attendance_email(
         
         # Send email
         email.send(fail_silently=False)
-        connection.close()
         
         # Calculate duration
         duration = time.time() - start_time
@@ -234,6 +239,12 @@ def send_attendance_email(
         
         logger.error(f"Failed to send email to {email_to} for student {student.name}: {error_msg}")
         return False, email_log, error_msg
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
 
 
 def resend_email(email_log, silent=False):
@@ -252,6 +263,7 @@ def resend_email(email_log, silent=False):
     if not silent:
         _print_email_info('SENDING', email_log.email_to, email_log.subject, email_log.student.name)
     
+    connection = None
     try:
         # Parse email addresses
         email_to_list = [email.strip() for email in email_log.email_to.split(',') if email.strip()]
@@ -263,6 +275,7 @@ def resend_email(email_log, silent=False):
             username=settings.EMAIL_HOST_USER,
             password=settings.EMAIL_HOST_PASSWORD,
             fail_silently=False,
+            timeout=getattr(settings, 'EMAIL_TIMEOUT', None),
         )
         
         # Create email message
@@ -278,7 +291,6 @@ def resend_email(email_log, silent=False):
         
         # Send email
         email.send(fail_silently=False)
-        connection.close()
         
         duration = time.time() - start_time
         
@@ -306,6 +318,12 @@ def resend_email(email_log, silent=False):
         
         logger.error(f"Failed to resend email to {email_log.email_to} for student {email_log.student.name}: {error_msg}")
         return False, error_msg
+    finally:
+        if connection:
+            try:
+                connection.close()
+            except Exception:
+                pass
 
 
 def send_emails_bulk(email_tasks, max_workers=5, silent=False):
