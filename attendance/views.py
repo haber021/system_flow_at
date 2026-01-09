@@ -4433,9 +4433,23 @@ def student_features_view(request):
     attendances_semester = attendances.filter(date__gte=start_date, date__lte=end_date)
     existing_keys = set(attendances_semester.values_list('subject_id', 'date'))
 
-    # Cap virtual absence generation to today to avoid marking future sessions as ABSENT
-    today_date = timezone.now().date()
-    effective_end_for_absences = end_date if end_date <= today_date else today_date
+    # Cap virtual absence generation to today only after the configured class end time
+    # This prevents today's sessions from being counted as ABSENT until the day has ended
+    manila_now = get_manila_now()
+    today_date = manila_now.date()
+    # If the semester end is before or equal to today, use semester end; otherwise
+    # only include today if current Manila time is on/after settings.class_end_time
+    if end_date <= today_date:
+        effective_end_for_absences = end_date
+    else:
+        try:
+            if manila_now.time() >= settings_obj.class_end_time:
+                effective_end_for_absences = today_date
+            else:
+                effective_end_for_absences = today_date - timedelta(days=1)
+        except Exception:
+            # Fallback: if any error, don't include today
+            effective_end_for_absences = today_date - timedelta(days=1)
 
     # Determine academic year and semester defaults from SystemSettings
     # Academic year default: "{start_year}-{end_year}"
@@ -4742,10 +4756,20 @@ def student_history(request):
         end_date = settings_obj.semester_end_date
 
     # Determine today's date and cap the generation of virtual absences
-    # to sessions that are on or before today. This prevents future
-    # scheduled sessions from being automatically marked as ABSENT.
-    today_date = timezone.now().date()
-    effective_end_for_absences = end_date if end_date <= today_date else today_date
+    # to sessions that are on or before the configured end-of-day time.
+    # Use Manila time for consistency with attendance timestamps.
+    manila_now = get_manila_now()
+    today_date = manila_now.date()
+    if end_date <= today_date:
+        effective_end_for_absences = end_date
+    else:
+        try:
+            if manila_now.time() >= settings_obj.class_end_time:
+                effective_end_for_absences = today_date
+            else:
+                effective_end_for_absences = today_date - timedelta(days=1)
+        except Exception:
+            effective_end_for_absences = today_date - timedelta(days=1)
 
     # Get persisted attendances in the date range and optional subject filter
     attendances_qs = attendances_qs.filter(date__gte=start_date, date__lte=end_date)
