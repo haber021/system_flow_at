@@ -741,7 +741,16 @@ def student_list(request):
                 Q(course__in=accessible_courses) | Q(adviser_id=current_adviser_id)
             ).distinct()
     else:
-        students = filter_by_user_courses(Student.objects.all(), request.user)
+        # Default behavior when no adviser filter is provided:
+        # - Superuser/staff: see all students
+        # - Adviser: see students assigned to them (regardless of course)
+        # - Other users: see students based on accessible courses
+        if request.user.is_superuser or request.user.is_staff:
+            students = Student.objects.all()
+        elif hasattr(request.user, 'adviser_profile'):
+            students = Student.objects.filter(adviser=request.user.adviser_profile)
+        else:
+            students = filter_by_user_courses(Student.objects.all(), request.user)
     
     # Apply search query based on selected search type
     if search_query:
