@@ -97,6 +97,40 @@
     </div>
 </div>
 
+<!-- Make Absent Modal -->
+<div class="modal fade" id="makeAbsentModal" tabindex="-1" aria-labelledby="makeAbsentModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title" id="makeAbsentModalLabel">
+                    <i class="bi bi-dash-circle"></i> Mark Absent
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form method="POST" action="{% url 'student_list' %}" id="makeAbsentForm">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="make_absent">
+                <input type="hidden" name="student_id" id="absent_student_id" value="">
+                <div class="modal-body">
+                    <p>Select subject(s) to mark absent for today:</p>
+                    <div id="absent-subjects-list">
+                        <div class="text-muted">Loading subjects…</div>
+                    </div>
+                    <div class="form-check mt-3">
+                        <input class="form-check-input" type="checkbox" value="" id="select_all_subjects">
+                        <label class="form-check-label" for="select_all_subjects">Select all</label>
+                    </div>
+                    <small class="text-muted d-block mt-2">Subjects with a schedule today are highlighted.</small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-warning">Mark Absent</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div class="card">
     <div class="card-body">
         <div class="table-responsive">
@@ -131,6 +165,26 @@
                                 <a href="{% url 'student_summary_detail' student.id %}" class="btn btn-outline-info" title="View Summary">
                                     <i class="bi bi-graph-up"></i>
                                 </a>
+                                <form method="POST" action="{% url 'student_list' %}" class="d-inline make-absent-form" data-message="Mark {{ student.name|upper }} absent for today?">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="make_absent">
+                                    <input type="hidden" name="student_id" value="{{ student.id }}">
+                                    {% if adviser_filter %}
+                                        <input type="hidden" name="adviser" value="{{ adviser_filter }}">
+                                    {% endif %}
+                                    {% if course_filter %}
+                                        <input type="hidden" name="course" value="{{ course_filter }}">
+                                    {% endif %}
+                                    {% if search_query %}
+                                        <input type="hidden" name="search" value="{{ search_query }}">
+                                    {% endif %}
+                                    {% if search_by and search_by != 'all' %}
+                                        <input type="hidden" name="search_by" value="{{ search_by }}">
+                                    {% endif %}
+                                    <button type="submit" class="btn btn-outline-warning" title="Mark Absent">
+                                        <i class="bi bi-dash-circle"></i>
+                                    </button>
+                                </form>
                                 <form method="POST" action="{% url 'student_delete' student.id %}" class="d-inline delete-form" data-message="Are you sure you want to delete {{ student.name|upper }}?">
                                     {% csrf_token %}
                                     {% if adviser_filter %}
@@ -382,6 +436,125 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     });
+
+    // Intercept make-absent forms to show subject selection modal
+    const studentSubjectsApiTemplate = '{% url "api_student_subjects" 0 %}';
+    document.querySelectorAll('.make-absent-form').forEach(function(form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const studentIdInput = form.querySelector('input[name="student_id"]');
+            if (!studentIdInput) return;
+            const studentId = studentIdInput.value;
+            const absentStudentIdField = document.getElementById('absent_student_id');
+            absentStudentIdField.value = studentId;
+
+            const listContainer = document.getElementById('absent-subjects-list');
+            listContainer.innerHTML = '<div class="text-muted">Loading subjects…</div>';
+
+            const apiUrl = studentSubjectsApiTemplate.replace('/0/', '/' + studentId + '/');
+            fetch(apiUrl, {
+                method: 'GET',
+                headers: { 'Accept': 'application/json' },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) throw response;
+                return response.json();
+            })
+            .then(data => {
+                if (!data.success) {
+                    listContainer.innerHTML = '<div class="text-danger">Error loading subjects.</div>';
+                    return;
+                }
+
+                listContainer.innerHTML = '';
+                data.subjects.forEach(s => {
+                    const div = document.createElement('div');
+                    div.className = 'form-check mb-1 p-2';
+                    if (s.has_schedule_today) div.classList.add('bg-warning', 'bg-opacity-10');
+                    div.innerHTML = `
+                        <input class="form-check-input subject-checkbox" type="checkbox" name="subject_ids" value="${s.id}" id="subject_${s.id}">
+                        <label class="form-check-label" for="subject_${s.id}">${s.display} ${s.has_schedule_today ? '<span class="badge bg-warning text-dark ms-2">Today</span>' : ''}</label>
+                    `;
+                    listContainer.appendChild(div);
+                });
+
+                // Populate hidden filter inputs into the modal form so redirects preserve current filters
+                const makeAbsentFormEl = document.getElementById('makeAbsentForm');
+                if (makeAbsentFormEl) {
+                    // Remove any existing filter inputs first
+                    ['adviser','course','search','search_by'].forEach(name => {
+                        const old = makeAbsentFormEl.querySelector('input[name="' + name + '"]');
+                        if (old) old.remove();
+                    });
+                    // Read current URL params
+                    const currentParams = new URLSearchParams(window.location.search);
+                    ['adviser','course','search','search_by'].forEach(name => {
+                        const val = currentParams.get(name);
+                        if (val !== null && val !== undefined && val !== '') {
+                            const inp = document.createElement('input');
+                            inp.type = 'hidden';
+                            inp.name = name;
+                            inp.value = val;
+                            makeAbsentFormEl.appendChild(inp);
+                        }
+                    });
+                }
+
+                // Show modal
+                const modalEl = document.getElementById('makeAbsentModal');
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            })
+            .catch(err => {
+                console.error('Error fetching student subjects:', err);
+                listContainer.innerHTML = '<div class="text-danger">Failed to load subjects.</div>';
+                const modalEl = document.getElementById('makeAbsentModal');
+                const modal = new bootstrap.Modal(modalEl);
+                modal.show();
+            });
+        });
+    });
+
+    // Select all subjects checkbox handling
+    const selectAllCheckbox = document.getElementById('select_all_subjects');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', function() {
+            document.querySelectorAll('#absent-subjects-list .subject-checkbox').forEach(cb => cb.checked = selectAllCheckbox.checked);
+        });
+    }
+
+    // Handle modal form submission: ensure at least one subject selected
+    const makeAbsentForm = document.getElementById('makeAbsentForm');
+    if (makeAbsentForm) {
+        makeAbsentForm.addEventListener('submit', function(e) {
+            const checked = Array.from(this.querySelectorAll('input[name="subject_ids"]:checked'));
+            if (checked.length === 0) {
+                e.preventDefault();
+                alert('Please select at least one subject to mark absent.');
+                return false;
+            }
+            // let the form submit normally (POST to server)
+        });
+
+        // Clear modal state when hidden (remove subject list and any injected hidden filter inputs)
+        const modalEl = document.getElementById('makeAbsentModal');
+        modalEl.addEventListener('hidden.bs.modal', function() {
+            const listContainer = document.getElementById('absent-subjects-list');
+            listContainer.innerHTML = '';
+            const selectAll = document.getElementById('select_all_subjects');
+            if (selectAll) selectAll.checked = false;
+
+            // Remove injected hidden inputs from the form
+            const makeAbsentFormEl = document.getElementById('makeAbsentForm');
+            if (makeAbsentFormEl) {
+                ['adviser','course','search','search_by'].forEach(name => {
+                    const old = makeAbsentFormEl.querySelector('input[name="' + name + '"]');
+                    if (old) old.remove();
+                });
+            }
+        });
+    }
     
     // Handle add student modal form submission
     const addStudentForm = document.getElementById('addStudentForm');

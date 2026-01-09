@@ -89,5 +89,6 @@ urlpatterns = [
     path('api/courses/', views.api_courses, name='api_courses'),
     path('api/sections/', views.api_sections, name='api_sections'),
     path('api/advisers/', views.api_advisers, name='api_advisers'),
+    path('api/student-subjects/<int:student_id>/', views.api_student_subjects, name='api_student_subjects'),
     path('api/instructors/', views.api_instructors, name='api_instructors'),
 ]

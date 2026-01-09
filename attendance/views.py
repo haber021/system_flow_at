@@ -8,7 +8,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.conf import settings as django_settings
 from django.db.models import Q, Count, Sum, F
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.cache import cache_page
@@ -518,7 +518,8 @@ def reset_password_view(request, token):
 def dashboard(request):
     # Cache static counts for 5 minutes, but refresh today's attendance more frequently
     cache_key_static = f'dashboard_static_counts_{request.user.id}'
-    cache_key_today = f'dashboard_today_{timezone.now().date()}_{request.user.id}'
+    # Use Manila timezone for 'today' so attendance recorded in Manila timezone
+    cache_key_today = f'dashboard_today_{get_manila_now().date()}_{request.user.id}'
     
     static_data = cache.get(cache_key_static)
     if static_data is None:
@@ -555,7 +556,7 @@ def dashboard(request):
     
     today_data = cache.get(cache_key_today)
     if today_data is None:
-        today = timezone.now().date()
+        today = get_manila_now().date()
         # Filter attendance by user's own data
         attendance_qs = Attendance.objects.filter(date=today)
         # Use the new helper function to filter by adviser's students
@@ -605,6 +606,105 @@ def dashboard(request):
 # Student Management
 @login_required
 def student_list(request):
+    # Handle POST actions on the student list page (e.g., mark student absent)
+    if request.method == 'POST':
+        action = request.POST.get('action')
+        # Support AJAX detection
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or request.content_type == 'application/json'
+
+        if action == 'make_absent':
+            student_id = request.POST.get('student_id')
+            try:
+                student = Student.objects.get(id=int(student_id))
+            except (Student.DoesNotExist, ValueError, TypeError):
+                msg = 'Student not found.'
+                messages.error(request, msg)
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': msg}, status=404)
+                return redirect('student_list')
+
+            # Security check: ensure user can access this student
+            accessible_courses = get_user_accessible_courses(request.user)
+            if not (request.user.is_superuser or request.user.is_staff):
+                if not hasattr(request.user, 'adviser_profile'):
+                    if student.course not in accessible_courses:
+                        msg = "You don't have permission to mark this student absent."
+                        messages.error(request, msg)
+                        if is_ajax:
+                            return JsonResponse({'success': False, 'error': msg}, status=403)
+                        return redirect('student_list')
+
+            # Mark absent for each subject the student is enrolled in for today
+            today = get_manila_now().date()
+            student_subjects = StudentSubject.objects.filter(student=student).select_related('subject')
+            # If specific subject IDs were provided from the form, filter to those only
+            subject_ids = request.POST.getlist('subject_ids')
+            if subject_ids:
+                try:
+                    subject_ids = [int(s) for s in subject_ids if s]
+                    student_subjects = student_subjects.filter(subject__id__in=subject_ids)
+                except ValueError:
+                    # ignore invalid ids and proceed with full list
+                    pass
+            created_count = 0
+            updated_count = 0
+            with transaction.atomic():
+                for ss in student_subjects:
+                    attendance, created = Attendance.objects.get_or_create(
+                        student=student,
+                        subject=ss.subject,
+                        date=today,
+                        defaults={
+                            'time_in': None,
+                            'status': 'ABSENT',
+                            'notes': f"Marked absent by {request.user.get_full_name() or request.user.username}"
+                        }
+                    )
+                    if created:
+                        created_count += 1
+                    else:
+                        # If existing attendance is not already marked ABSENT, update it
+                        if attendance.status != 'ABSENT':
+                            attendance.status = 'ABSENT'
+                            attendance.time_in = None
+                            attendance.time_out = None
+                            note_prefix = f"Marked absent by {request.user.get_full_name() or request.user.username}"
+                            if attendance.notes:
+                                attendance.notes = attendance.notes + "\n" + note_prefix
+                            else:
+                                attendance.notes = note_prefix
+                            attendance.save(update_fields=['status', 'time_in', 'time_out', 'notes'])
+                            updated_count += 1
+
+            total_changed = created_count + updated_count
+            if total_changed > 0:
+                msg = f"Marked {student.name} absent for {total_changed} subject(s)."
+                messages.success(request, msg)
+            else:
+                msg = f"No changes made. {student.name} already has attendance records for today."
+                messages.info(request, msg)
+
+            if is_ajax:
+                return JsonResponse({'success': True, 'message': msg})
+
+            # Preserve query params if present when redirecting back
+            redirect_url = reverse('student_list')
+            adviser_filter = request.POST.get('adviser', '')
+            course_filter = request.POST.get('course', '')
+            search_query = request.POST.get('search', '')
+            search_by = request.POST.get('search_by', '')
+            params = []
+            if adviser_filter:
+                params.append(f'adviser={adviser_filter}')
+            if course_filter:
+                params.append(f'course={course_filter}')
+            if search_query:
+                params.append(f'search={search_query}')
+            if search_by and search_by != 'all':
+                params.append(f'search_by={search_by}')
+            if params:
+                redirect_url += '?' + '&'.join(params)
+            return redirect(redirect_url)
     # Get search parameters
     search_query = request.GET.get('search', '').strip()
     search_by = request.GET.get('search_by', 'all')  # all, name, rfid_id, student_id, course, email, adviser
@@ -4015,12 +4115,12 @@ def student_dashboard(request):
     past_week_start = today - timedelta(days=7)
     
     # Get all attendances for this student
-    attendances = Attendance.objects.filter(student=student).select_related('subject').order_by('-date', '-time')
+    attendances = Attendance.objects.filter(student=student).select_related('subject')
     
     # Filter by subject if provided
     if subject_id:
         try:
-            attendances = attendances.filter(subject_id=int(subject_id))
+            attendances_qs = attendances_qs.filter(subject_id=int(subject_id))
         except (ValueError, TypeError):
             pass
     
@@ -4321,22 +4421,92 @@ def student_features_view(request):
     # Overall statistics
     total_attendances = attendances.count()
     total_present = attendances.filter(status='PRESENT').count()
-    total_absent = attendances.filter(status='ABSENT').count()
+    persisted_absent = attendances.filter(status='ABSENT').count()
     total_late = attendances.filter(status='LATE').count()
-    
-    attendance_rate = 0.0
-    if total_attendances > 0:
-        attendance_rate = round((total_present / total_attendances) * 100, 2)
-    
-    # Get enrolled subjects
-    academic_year = request.GET.get('academic_year', '2025-2026')
-    semester = request.GET.get('semester', '1st Semester')
-    
+
+    # Compute virtual absences based on schedules and system semester range
+    settings_obj = get_cached_settings()
+    start_date = settings_obj.semester_start_date
+    end_date = settings_obj.semester_end_date
+
+    # Persisted attendances within semester range
+    attendances_semester = attendances.filter(date__gte=start_date, date__lte=end_date)
+    existing_keys = set(attendances_semester.values_list('subject_id', 'date'))
+
+    # Cap virtual absence generation to today to avoid marking future sessions as ABSENT
+    today_date = timezone.now().date()
+    effective_end_for_absences = end_date if end_date <= today_date else today_date
+
+    # Determine academic year and semester defaults from SystemSettings
+    # Academic year default: "{start_year}-{end_year}"
+    # Semester default: split the semester range in half; dates on or before midpoint -> '1st Semester', otherwise '2nd Semester'
+    start = settings_obj.semester_start_date
+    end = settings_obj.semester_end_date
+    try:
+        academic_year_default = f"{start.year}-{end.year}"
+    except Exception:
+        academic_year_default = request.GET.get('academic_year', '2025-2026')
+
+    try:
+        today_date = timezone.now().date()
+        midpoint = start + (end - start) / 2
+        semester_default = '1st Semester' if today_date <= midpoint else '2nd Semester'
+    except Exception:
+        semester_default = request.GET.get('semester', '1st Semester')
+
+    academic_year = request.GET.get('academic_year', academic_year_default)
+    semester = request.GET.get('semester', semester_default)
+
+    # Enrolled subjects for this student in the selected academic year/semester
     student_subjects = StudentSubject.objects.filter(
         student=student,
         academic_year=academic_year,
         semester=semester
     ).select_related('subject')
+
+    total_virtual_absent = 0
+    subject_virtual_map = {}
+    for ss in student_subjects:
+        subj = ss.subject
+        virtual_count = 0
+
+        # Specific date schedules
+        date_scheds = SubjectSchedule.objects.filter(subject=subj, date__isnull=False)
+        for ds in date_scheds:
+            sess_date = ds.date
+            # Only count scheduled dates up to today (effective_end_for_absences)
+            if start_date <= sess_date <= effective_end_for_absences:
+                key = (subj.id, sess_date)
+                if key not in existing_keys:
+                    virtual_count += 1
+
+        # Weekly schedules
+        weekly_scheds = SubjectSchedule.objects.filter(subject=subj, date__isnull=True)
+        day_map = set([s.day_of_week for s in weekly_scheds if s.day_of_week is not None])
+        if day_map:
+            current = start_date
+            # Only iterate up to effective_end_for_absences to avoid future dates
+            while current <= effective_end_for_absences:
+                if current.weekday() in day_map:
+                    key = (subj.id, current)
+                    if key not in existing_keys:
+                        virtual_count += 1
+                current += timedelta(days=1)
+
+        subject_virtual_map[subj.id] = virtual_count
+        total_virtual_absent += virtual_count
+
+    # Final totals include persisted absents + virtual absents
+    total_absent = persisted_absent + total_virtual_absent
+
+    # Compute attendance rate. Treat LATE as attended for rate calculations.
+    attended_count = total_present + total_late
+    total_expected = attended_count + total_absent
+    attendance_rate = 0.0
+    if total_expected > 0:
+        attendance_rate = round((attended_count / total_expected) * 100, 2)
+    
+    # (student_subjects already initialized above using SystemSettings defaults)
     
     # Get pending enrollment requests
     pending_enrollments = EnrollmentRequest.objects.filter(
@@ -4353,11 +4523,16 @@ def student_features_view(request):
     subject_stats = []
     for ss in student_subjects:
         subject_attendances = attendances.filter(subject=ss.subject)
-        subject_total = subject_attendances.count()
         subject_present = subject_attendances.filter(status='PRESENT').count()
-        subject_absent = subject_attendances.filter(status='ABSENT').count()
         subject_late = subject_attendances.filter(status='LATE').count()
-        subject_rate = round((subject_present / subject_total * 100) if subject_total > 0 else 0, 2)
+        subject_absent_persisted = subject_attendances.filter(status='ABSENT').count()
+        subject_virtual = subject_virtual_map.get(ss.subject.id, 0)
+
+        # Total expected sessions for the subject (persisted + virtual absents)
+        subject_total_expected = subject_present + subject_late + subject_absent_persisted + subject_virtual
+        # Rate treats LATE as attended
+        subject_attended = subject_present + subject_late
+        subject_rate = round((subject_attended / subject_total_expected * 100) if subject_total_expected > 0 else 0, 2)
         
         # Today's stats for this subject
         subject_today = today_attendance.filter(subject=ss.subject)
@@ -4367,9 +4542,9 @@ def student_features_view(request):
         
         subject_stats.append({
             'subject': ss.subject,
-            'total': subject_total,
+            'total': subject_total_expected,
             'present': subject_present,
-            'absent': subject_absent,
+            'absent': subject_absent_persisted + subject_virtual,
             'late': subject_late,
             'rate': subject_rate,
             'present_today': subject_present_today,
@@ -4528,35 +4703,175 @@ def student_history(request):
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
     
-    # Get all attendances for this student
-    attendances = Attendance.objects.filter(student=student).select_related('subject').order_by('-date', '-time_in')
+    attendances_qs = Attendance.objects.filter(student=student).select_related('subject')
     
     # Filter by subject if provided
     if subject_id:
         try:
-            attendances = attendances.filter(subject_id=int(subject_id))
+            attendances_qs = attendances_qs.filter(subject_id=int(subject_id))
         except (ValueError, TypeError):
             pass
     
-    # Filter by date range if provided
-    if date_from:
+    # At this point `attendances_qs` contains any persisted Attendance records;
+    # we will also compute scheduled sessions within the selected date range and
+    # create virtual Attendance objects with status 'ABSENT' for missing sessions
+    # so the student history shows absences according to schedules and system settings.
+    # Determine effective date range for absence computation
+    settings_obj = get_cached_settings()
+
+    try:
+        if date_from:
+            start_date = datetime.strptime(date_from, '%Y-%m-%d').date()
+        else:
+            start_date = settings_obj.semester_start_date
+    except Exception:
+        start_date = settings_obj.semester_start_date
+
+    try:
+        if date_to:
+            end_date = datetime.strptime(date_to, '%Y-%m-%d').date()
+        else:
+            end_date = settings_obj.semester_end_date
+    except Exception:
+        end_date = settings_obj.semester_end_date
+
+    # Clip range to semester bounds
+    if start_date < settings_obj.semester_start_date:
+        start_date = settings_obj.semester_start_date
+    if end_date > settings_obj.semester_end_date:
+        end_date = settings_obj.semester_end_date
+
+    # Determine today's date and cap the generation of virtual absences
+    # to sessions that are on or before today. This prevents future
+    # scheduled sessions from being automatically marked as ABSENT.
+    today_date = timezone.now().date()
+    effective_end_for_absences = end_date if end_date <= today_date else today_date
+
+    # Get persisted attendances in the date range and optional subject filter
+    attendances_qs = attendances_qs.filter(date__gte=start_date, date__lte=end_date)
+    if subject_id:
         try:
-            attendances = attendances.filter(date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
-        except:
+            attendances_qs = attendances_qs.filter(subject_id=int(subject_id))
+        except (ValueError, TypeError):
             pass
-    
-    if date_to:
-        try:
-            attendances = attendances.filter(date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
-        except:
-            pass
-    
+
+    # Build set of existing (subject_id, date) for quick lookup
+    existing_keys = set(attendances_qs.values_list('subject_id', 'date'))
+
+    # Collect scheduled sessions for each subject the student is enrolled in
+    scheduled_sessions = []  # tuples of (subject, session_date)
+
+    student_subjects = StudentSubject.objects.filter(student=student).select_related('subject')
+    for ss in student_subjects:
+        subject = ss.subject
+        # Specific date schedules
+        date_schedules = SubjectSchedule.objects.filter(subject=subject, date__isnull=False)
+        for ds in date_schedules:
+            sess_date = ds.date
+            # Only consider scheduled dates within the requested range
+            # and not in the future (use effective_end_for_absences)
+            if start_date <= sess_date <= effective_end_for_absences:
+                # apply optional subject filter
+                if subject_id:
+                    try:
+                        if int(subject_id) != subject.id:
+                            continue
+                    except Exception:
+                        pass
+                scheduled_sessions.append((subject, sess_date))
+
+        # Weekly schedules (day_of_week)
+        weekly_schedules = SubjectSchedule.objects.filter(subject=subject, date__isnull=True)
+        if weekly_schedules.exists():
+            # iterate dates in range and add if weekday matches any schedule
+            day_map = set([s.day_of_week for s in weekly_schedules if s.day_of_week is not None])
+            if day_map:
+                current = start_date
+                # Only iterate up to effective_end_for_absences to avoid future dates
+                while current <= effective_end_for_absences:
+                    if current.weekday() in day_map:
+                        if subject_id:
+                            try:
+                                if int(subject_id) != subject.id:
+                                    current += timedelta(days=1)
+                                    continue
+                            except Exception:
+                                pass
+                        scheduled_sessions.append((subject, current))
+                    current += timedelta(days=1)
+        else:
+            # Fallback to Subject.schedule_time_start existence (non-scheduled subjects)
+            if subject.schedule_time_start and subject.schedule_time_end:
+                # If there are no weekly schedules, assume daily between semester range? Skip to avoid false absences.
+                pass
+
+    # Persist scheduled sessions missing persisted records as ABSENT in the DB
+    # (only up to today to avoid marking future sessions)
+    try:
+        with transaction.atomic():
+            for subject, sess_date in scheduled_sessions:
+                key = (subject.id, sess_date)
+                if sess_date > today_date:
+                    continue
+                if key not in existing_keys:
+                    # Create attendance row for the absent session (don't send emails here)
+                    try:
+                        Attendance.objects.get_or_create(
+                            student=student,
+                            subject=subject,
+                            date=sess_date,
+                            defaults={'time_in': None, 'time_out': None, 'status': 'ABSENT'}
+                        )
+                    except Exception:
+                        # Ignore individual create errors so history page still renders
+                        logger.exception(f"Failed to persist absent for student {student.id} subject {subject.id} date {sess_date}")
+        # Refresh persisted attendances queryset to include newly created ABSENT rows
+        attendances_qs = Attendance.objects.filter(student=student, date__gte=start_date, date__lte=end_date).select_related('subject')
+        if subject_id:
+            try:
+                attendances_qs = attendances_qs.filter(subject_id=int(subject_id))
+            except (ValueError, TypeError):
+                pass
+
+    except Exception:
+        # If the transaction fails for any reason, log and fall back to virtual absents
+        logger.exception("Failed to persist virtual absences; falling back to virtual-only display.")
+        # Create virtual absent Attendance objects for scheduled sessions missing persisted records
+        virtual_absents = []
+        for subject, sess_date in scheduled_sessions:
+            key = (subject.id, sess_date)
+            if sess_date > today_date:
+                continue
+            if key not in existing_keys:
+                a = Attendance(
+                    student=student,
+                    subject=subject,
+                    date=sess_date,
+                    time_in=None,
+                    time_out=None,
+                    status='ABSENT'
+                )
+                virtual_absents.append(a)
+
+        # Combine persisted attendances and virtual absents into a list for grouping
+        attendances_list = list(attendances_qs) + virtual_absents
+    else:
+        # Use persisted attendances for rendering (no virtual absents necessary)
+        attendances_list = list(attendances_qs)
+
+    # Sort attendances_list by date desc, then time_in (None last)
+    def _attendance_sort_key(a):
+        time_in = a.time_in if getattr(a, 'time_in', None) is not None else (datetime.min.time())
+        return (a.date, time_in)
+
+    attendances_list.sort(key=_attendance_sort_key, reverse=True)
+
     # Group attendances by week
     from collections import OrderedDict
-    
+
     weeks_dict = OrderedDict()
-    
-    for attendance in attendances:
+
+    for attendance in attendances_list:
         # Get ISO week number (year, week number, weekday)
         iso_calendar = attendance.date.isocalendar()
         week_key = (iso_calendar[0], iso_calendar[1])  # (year, week_number)
@@ -5338,6 +5653,47 @@ def api_courses(request):
     except Exception as e:
         username = getattr(request.user, 'username', 'unknown')
         logger.error(f"Error in api_courses for user {username}: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def api_student_subjects(request, student_id):
+    """Return JSON list of subjects the student is enrolled in, with a flag if the subject has a schedule today."""
+    try:
+        student = get_object_or_404(Student, id=student_id)
+
+        # Security: ensure requester can view this student's info
+        accessible_courses = get_user_accessible_courses(request.user)
+        if not (request.user.is_superuser or request.user.is_staff) and not hasattr(request.user, 'adviser_profile'):
+            if student.course not in accessible_courses:
+                return JsonResponse({'success': False, 'error': "Permission denied."}, status=403)
+
+        today = get_manila_now().date()
+        day_of_week = today.weekday()
+
+        subjects = StudentSubject.objects.filter(student=student).select_related('subject')
+        data = []
+        for ss in subjects:
+            subject = ss.subject
+            # Check if subject has a schedule for today (specific date or weekly)
+            has_schedule = SubjectSchedule.objects.filter(
+                subject=subject,
+            ).filter(
+                Q(date=today) | Q(date__isnull=True, day_of_week=day_of_week)
+            ).exists()
+
+            data.append({
+                'id': subject.id,
+                'code': subject.code,
+                'name': subject.name,
+                'display': f"{subject.code} - {subject.name}",
+                'has_schedule_today': has_schedule,
+            })
+
+        return JsonResponse({'success': True, 'subjects': data})
+    except Exception as e:
+        logger.error(f"Error in api_student_subjects: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 @login_required

@@ -457,7 +457,7 @@
             <span>Course: <strong>{{ student.course }}</strong></span>
             <span class="mx-2">•</span>
             <i class="bi bi-people"></i>
-            <span>Section: <strong>{{ student.get_section_display }}</strong></span>
+            <span>Section: <strong>{% if student.section %}{{ student.section.name }}{% if student.section.code %} ({{ student.section.code }}){% endif %}{% else %}N/A{% endif %}</strong></span>
         </div>
     </div>
 </div>

@@ -257,6 +257,14 @@ class Attendance(models.Model):
             ),
         ]
 
+
+class Absent(Attendance):
+    """Proxy model for Attendance records with status 'ABSENT' to expose in admin separately."""
+    class Meta:
+        proxy = True
+        verbose_name = 'Absent'
+        verbose_name_plural = 'Absences'
+
 class EmailLog(models.Model):
     STATUS_CHOICES = [
         ('SENT', 'Sent'),

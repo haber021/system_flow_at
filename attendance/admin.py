@@ -4,7 +4,7 @@ from django.contrib import messages
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
-from .models import Student, Subject, Attendance, SystemSettings, StudentSubject, EmailLog, SubjectSchedule, Adviser, Course, Instructor, Section
+from .models import Student, Subject, Attendance, Absent, SystemSettings, StudentSubject, EmailLog, SubjectSchedule, Adviser, Course, Instructor, Section
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
@@ -539,6 +539,25 @@ class AttendanceAdmin(admin.ModelAdmin):
     
     def get_adviser_display(self, obj):
         """Display the adviser name for the subject"""
+        if obj.subject and obj.subject.adviser:
+            return obj.subject.adviser.name
+        return "—"
+    get_adviser_display.short_description = "Adviser"
+    get_adviser_display.admin_order_field = 'subject__adviser__name'
+
+
+@admin.register(Absent)
+class AbsentAdmin(admin.ModelAdmin):
+    list_display = ['student', 'subject', 'get_adviser_display', 'date', 'time_in', 'time_out', 'notes']
+    list_filter = ['date', 'subject', 'subject__adviser']
+    search_fields = ['student__name', 'student__rfid_id', 'subject__code', 'subject__adviser__name']
+    date_hierarchy = 'date'
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request).select_related('student', 'subject', 'subject__adviser')
+        return qs.filter(status='ABSENT')
+
+    def get_adviser_display(self, obj):
         if obj.subject and obj.subject.adviser:
             return obj.subject.adviser.name
         return "—"
