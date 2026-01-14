@@ -20,6 +20,15 @@ from django.conf import settings as django_settings
 from django.template.loader import render_to_string
 import csv
 import json
+from io import BytesIO
+try:
+    from reportlab.lib.pagesizes import letter, landscape
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    REPORTLAB_AVAILABLE = True
+except Exception:
+    REPORTLAB_AVAILABLE = False
 import traceback
 import logging
 import os
@@ -27,11 +36,17 @@ import base64
 from datetime import datetime, timedelta
 from decimal import Decimal
 import pytz
+import threading
+try:
+    import requests
+except Exception:
+    requests = None
 
 from .models import (
-    Student, Subject, Attendance, SystemSettings, 
-    StudentSubject, EmailLog, SubjectSchedule, EnrollmentRequest, Adviser, Course, Instructor, Section, PasswordResetToken
+    Student, Subject, Attendance, SystemSettings,
+    StudentSubject, EmailLog, SubjectSchedule, EnrollmentRequest, Adviser, Course, Instructor, Section, PasswordResetToken, AbsenceEvidence
 )
+from .models import CalendarEvent
 from .email_utils import send_attendance_email, resend_email, send_emails_bulk
 
 # Get Manila timezone
@@ -55,6 +70,33 @@ def get_cached_settings():
 def invalidate_settings_cache():
     """Invalidate SystemSettings cache when settings are updated"""
     cache.delete(SETTINGS_CACHE_KEY)
+
+
+def _forward_attendance_payload(payload):
+    """Synchronously forward attendance payload to configured remote hosts.
+
+    This helper is intentionally simple: it tries each host and logs failures.
+    It is run in a background thread by `send_attendance_to_hosts_async`.
+    """
+    hosts = getattr(django_settings, 'ATTENDANCE_SAVE_HOSTS', []) or []
+    timeout = getattr(django_settings, 'ATTENDANCE_FORWARD_TIMEOUT', 2)
+    if not hosts or not requests:
+        return
+    headers = {'Content-Type': 'application/json'}
+    for host in hosts:
+        try:
+            requests.post(host, json=payload, headers=headers, timeout=timeout)
+        except Exception as e:
+            logger.warning(f"Failed to forward attendance to {host}: {e}")
+
+
+def send_attendance_to_hosts_async(payload):
+    """Fire-and-forget forwarder using a daemon thread."""
+    try:
+        t = threading.Thread(target=_forward_attendance_payload, args=(payload,), daemon=True)
+        t.start()
+    except Exception as e:
+        logger.warning(f"Failed to start forwarder thread: {e}")
 
 def mask_email(email):
     """
@@ -127,7 +169,7 @@ def filter_subjects_by_user(user):
     """
     Filter subjects based on user role:
     - Admin/Staff: All subjects
-    - Adviser: Subjects they created OR subjects their assigned students are enrolled in
+    - Adviser: Subjects they created, subjects their assigned students are enrolled in, OR subjects taught by their assigned instructors.
     - Others: Empty queryset
     Returns a filtered Subject queryset.
     """
@@ -143,9 +185,9 @@ def filter_subjects_by_user(user):
         enrolled_subject_ids = StudentSubject.objects.filter(
             student_id__in=adviser_student_ids
         ).values_list('subject_id', flat=True).distinct()
-        # Combine: subjects created by adviser OR subjects their students are enrolled in
+        # Combine: subjects created by adviser OR subjects their students are enrolled in OR subjects taught by their instructors
         return subjects.filter(
-            Q(adviser=adviser) | Q(id__in=enrolled_subject_ids)
+            Q(adviser=adviser) | Q(id__in=enrolled_subject_ids) | Q(instructor__adviser=adviser)
         ).distinct()
     else:
         # Other users see no subjects (unless they're students - handled separately)
@@ -689,13 +731,15 @@ def student_list(request):
 
             # Preserve query params if present when redirecting back
             redirect_url = reverse('student_list')
-            adviser_filter = request.POST.get('adviser', '')
+            section_filter = request.POST.get('section', '')
             course_filter = request.POST.get('course', '')
             search_query = request.POST.get('search', '')
             search_by = request.POST.get('search_by', '')
             params = []
-            if adviser_filter:
-                params.append(f'adviser={adviser_filter}')
+            adviser_filter = request.POST.get('adviser', '')
+            if adviser_filter: params.append(f'adviser={adviser_filter}')
+            if section_filter:
+                params.append(f'section={section_filter}')
             if course_filter:
                 params.append(f'course={course_filter}')
             if search_query:
@@ -705,10 +749,114 @@ def student_list(request):
             if params:
                 redirect_url += '?' + '&'.join(params)
             return redirect(redirect_url)
+        elif action == 'bulk_mark_attendance':
+            status = request.POST.get('status')
+            subject_id = request.POST.get('subject_id')
+
+            if not status or not subject_id:
+                messages.error(request, "Status and subject are required for bulk action.")
+                return redirect('student_list')
+
+            try:
+                subject = Subject.objects.get(id=int(subject_id))
+            except (Subject.DoesNotExist, ValueError):
+                messages.error(request, "Invalid subject selected.")
+                return redirect('student_list')
+
+            # Security check for subject access
+            is_authorized = False
+            if request.user.is_superuser or request.user.is_staff:
+                is_authorized = True
+            elif hasattr(request.user, 'adviser_profile'):
+                adviser = request.user.adviser_profile
+                if subject.instructor and subject.instructor.adviser == adviser:
+                    is_authorized = True
+
+            if not is_authorized:
+                messages.error(request, "You do not have permission to perform this action on the selected subject.")
+                return redirect('student_list')
+
+            # Re-apply filters from POST to get the list of students to update
+            search_query = request.POST.get('search', '').strip()
+            search_by = request.POST.get('search_by', 'all')
+            course_filter = request.POST.get('course', '')
+            section_filter = request.POST.get('section', '')
+            adviser_filter = request.POST.get('adviser', '')
+
+            if request.user.is_superuser or request.user.is_staff:
+                students_to_update = Student.objects.all()
+            elif hasattr(request.user, 'adviser_profile'):
+                students_to_update = Student.objects.filter(adviser=request.user.adviser_profile)
+            else:
+                students_to_update = filter_by_user_courses(Student.objects.all(), request.user)
+
+            if search_query:
+                if search_by == 'all':
+                    students_to_update = students_to_update.filter(
+                        Q(name__icontains=search_query) | Q(rfid_id__icontains=search_query) |
+                        Q(student_id__icontains=search_query) | Q(course__code__icontains=search_query) |
+                        Q(course__name__icontains=search_query) | Q(section__code__icontains=search_query) |
+                        Q(section__name__icontains=search_query) | Q(email__icontains=search_query)
+                    )
+                elif search_by == 'name': students_to_update = students_to_update.filter(name__icontains=search_query)
+                elif search_by == 'rfid_id': students_to_update = students_to_update.filter(rfid_id__icontains=search_query)
+                elif search_by == 'student_id': students_to_update = students_to_update.filter(student_id__icontains=search_query)
+                elif search_by == 'course': students_to_update = students_to_update.filter(Q(course__code__icontains=search_query) | Q(course__name__icontains=search_query))
+                elif search_by == 'section': students_to_update = students_to_update.filter(Q(section__code__icontains=search_query) | Q(section__name__icontains=search_query))
+                elif search_by == 'email': students_to_update = students_to_update.filter(email__icontains=search_query)
+
+            if adviser_filter:
+                try:
+                    students_to_update = students_to_update.filter(adviser_id=int(adviser_filter))
+                except (ValueError, TypeError):
+                    students_to_update = students_to_update.filter(adviser__name__icontains=adviser_filter)
+
+            if course_filter:
+                try: students_to_update = students_to_update.filter(course_id=int(course_filter))
+                except (ValueError, TypeError): students_to_update = students_to_update.filter(Q(course__code__icontains=course_filter) | Q(course__name__icontains=course_filter))
+            
+            if section_filter:
+                try: students_to_update = students_to_update.filter(section_id=int(section_filter))
+                except (ValueError, TypeError): students_to_update = students_to_update.filter(Q(section__code__iexact=section_filter) | Q(section__name__icontains=section_filter))
+
+            enrolled_student_ids = StudentSubject.objects.filter(subject=subject).values_list('student_id', flat=True)
+            target_students = students_to_update.filter(id__in=enrolled_student_ids)
+
+            today = get_manila_now().date()
+            updated_count, created_count = 0, 0
+
+            with transaction.atomic():
+                for student in target_students:
+                    defaults = {'status': status}
+                    if status == 'ABSENT':
+                        defaults['time_in'], defaults['time_out'] = None, None
+                    elif status == 'PRESENT':
+                        # Get schedule for today to set time_in and time_out
+                        day_of_week = today.weekday()
+                        schedule = SubjectSchedule.objects.filter(
+                            subject=subject,
+                            day_of_week=day_of_week,
+                            date__isnull=True
+                        ).first()
+
+                        if schedule:
+                            defaults['time_in'] = schedule.time_start
+                            defaults['time_out'] = schedule.time_end
+                        elif subject.schedule_time_start and subject.schedule_time_end:
+                            defaults['time_in'] = subject.schedule_time_start
+                            defaults['time_out'] = subject.schedule_time_end
+                        # If no schedule found, leave time_in and time_out as None (existing behavior)
+                    _, created = Attendance.objects.update_or_create(student=student, subject=subject, date=today, defaults=defaults)
+                    if created: created_count += 1
+                    else: updated_count += 1
+            
+            messages.success(request, f"Bulk action for {target_students.count()} student(s) completed. {created_count} created, {updated_count} updated.")
+            return redirect(request.get_full_path())
     # Get search parameters
     search_query = request.GET.get('search', '').strip()
-    search_by = request.GET.get('search_by', 'all')  # all, name, rfid_id, student_id, course, email, adviser
+    search_by = request.GET.get('search_by', 'all')  # all, name, rfid_id, student_id, course, email, section
     course_filter = request.GET.get('course', '')
+    section_filter = request.GET.get('section', '')
     adviser_filter = request.GET.get('adviser', '')
     
     # Determine if we should apply course filtering or adviser-based filtering
@@ -718,44 +866,17 @@ def student_list(request):
     if current_user_is_adviser:
         current_adviser_id = request.user.adviser_profile.id
     
-    # Check if filtering by current user's adviser profile
-    filter_by_current_adviser = False
-    if adviser_filter and current_adviser_id:
-        try:
-            filter_adviser_id = int(adviser_filter)
-            filter_by_current_adviser = (filter_adviser_id == current_adviser_id)
-        except (ValueError, TypeError):
-            # Try matching by name
-            if request.user.adviser_profile.name.lower() == adviser_filter.lower():
-                filter_by_current_adviser = True
-    
-    # Apply course-based security filtering
-    # If filtering by current adviser's own students, include them regardless of course
-    if filter_by_current_adviser:
-        # Get students from accessible courses OR students assigned to this adviser
-        accessible_courses = get_user_accessible_courses(request.user)
-        if request.user.is_superuser or request.user.is_staff:
-            students = Student.objects.all()
-        else:
-            students = Student.objects.filter(
-                Q(course__in=accessible_courses) | Q(adviser_id=current_adviser_id)
-            ).distinct()
+    if request.user.is_superuser or request.user.is_staff:
+        students = Student.objects.all()
+    elif hasattr(request.user, 'adviser_profile'):
+        students = Student.objects.filter(adviser=request.user.adviser_profile)
     else:
-        # Default behavior when no adviser filter is provided:
-        # - Superuser/staff: see all students
-        # - Adviser: see students assigned to them (regardless of course)
-        # - Other users: see students based on accessible courses
-        if request.user.is_superuser or request.user.is_staff:
-            students = Student.objects.all()
-        elif hasattr(request.user, 'adviser_profile'):
-            students = Student.objects.filter(adviser=request.user.adviser_profile)
-        else:
-            students = filter_by_user_courses(Student.objects.all(), request.user)
+        students = filter_by_user_courses(Student.objects.all(), request.user)
     
     # Apply search query based on selected search type
     if search_query:
         if search_by == 'all':
-            # Search across all fields
+            # Search across all fields (Note: adviser name intentionally excluded from 'all' search)
             students = students.filter(
                 Q(name__icontains=search_query) |
                 Q(rfid_id__icontains=search_query) |
@@ -764,8 +885,7 @@ def student_list(request):
                 Q(course__name__icontains=search_query) |
                 Q(section__code__icontains=search_query) |
                 Q(section__name__icontains=search_query) |
-                Q(email__icontains=search_query) |
-                Q(adviser__name__icontains=search_query)
+                Q(email__icontains=search_query)
             )
         elif search_by == 'name':
             students = students.filter(name__icontains=search_query)
@@ -785,8 +905,10 @@ def student_list(request):
             )
         elif search_by == 'email':
             students = students.filter(email__icontains=search_query)
-        elif search_by == 'adviser':
-            students = students.filter(adviser__name__icontains=search_query)
+        elif search_by == 'section':
+            students = students.filter(
+                Q(section__code__icontains=search_query) | Q(section__name__icontains=search_query)
+            )
     
     # Apply additional filters
     if course_filter:
@@ -799,27 +921,21 @@ def student_list(request):
                 Q(course__name__icontains=course_filter)
             )
     
-    # Resolve adviser filter to ID for template use
-    resolved_adviser_id = None
+    if section_filter:
+        try:
+            students = students.filter(section_id=int(section_filter))
+        except (ValueError, TypeError):
+            # If not an ID, try to find by code or name
+            students = students.filter(
+                Q(section__code__iexact=section_filter) | Q(section__name__icontains=section_filter)
+            )
+    
     if adviser_filter:
         try:
-            # First try to convert to int (ID)
             adviser_id = int(adviser_filter)
-            resolved_adviser_id = adviser_id
             students = students.filter(adviser_id=adviser_id)
         except (ValueError, TypeError):
-            # If not an ID, try to find adviser by exact name match first
-            try:
-                adviser_obj = Adviser.objects.get(name__iexact=adviser_filter)
-                resolved_adviser_id = adviser_obj.id
-                students = students.filter(adviser_id=adviser_obj.id)
-            except (Adviser.DoesNotExist, Adviser.MultipleObjectsReturned):
-                # If no exact match, fall back to partial name match
-                students = students.filter(adviser__name__icontains=adviser_filter)
-                # Try to get first matching adviser ID for pre-selection
-                matching_advisers = Adviser.objects.filter(name__icontains=adviser_filter)
-                if matching_advisers.exists():
-                    resolved_adviser_id = matching_advisers.first().id
+            students = students.filter(adviser__name__icontains=adviser_filter)
     
     # Get unique values for filter dropdowns
     # For the add student modal, match the logic from student_add view
@@ -842,19 +958,23 @@ def student_list(request):
     
     # For the filter dropdowns on the page, use accessible courses
     accessible_courses = get_user_accessible_courses(request.user)
-    if request.user.is_superuser or request.user.is_staff:
+    
+    # Subjects for adviser bulk actions
+    subjects_for_adviser = Subject.objects.none()
+    if request.user.is_staff or request.user.is_superuser:
+        subjects_for_adviser = Subject.objects.filter(is_active=True)
+    elif hasattr(request.user, 'adviser_profile'):
+        subjects_for_adviser = filter_subjects_by_user(request.user)
+
+    if request.user.is_superuser or request.user.is_staff or hasattr(request.user, 'adviser_profile'):
+        # Admin/staff/adviser: show all active courses
         filter_courses = Course.objects.filter(is_active=True).order_by('code')
     else:
+        # Non-staff: limit to accessible courses
         filter_courses = accessible_courses.order_by('code')
-    
-    # Filter advisers by accessible courses for the filter dropdown
-    if request.user.is_superuser or request.user.is_staff:
-        filter_advisers = Adviser.objects.all().order_by('name')
-    else:
-        if accessible_courses.exists():
-            filter_advisers = Adviser.objects.filter(courses__in=accessible_courses).distinct().order_by('name')
-        else:
-            filter_advisers = Adviser.objects.none()
+
+    # Get all active sections for the filter dropdown
+    filter_sections = Section.objects.filter(is_active=True).order_by('code')
     
     total_count = students.count()
     
@@ -889,6 +1009,8 @@ def student_list(request):
     query_parts = []
     if adviser_filter:
         query_parts.append(f'adviser={adviser_filter}')
+    if section_filter:
+        query_parts.append(f'section={section_filter}')
     if course_filter:
         query_parts.append(f'course={course_filter}')
     if search_query:
@@ -904,15 +1026,16 @@ def student_list(request):
         'search_query': search_query,
         'search_by': search_by,
         'course_filter': course_filter,
+        'section_filter': section_filter,
         'adviser_filter': adviser_filter,
-        'resolved_adviser_id': resolved_adviser_id,  # Add resolved adviser ID for pre-selection
         'current_adviser_id': current_adviser_id,  # Current user's adviser ID for auto-selection
         'total_count': total_count,
         'all_courses': all_courses,  # All courses for add modal
         'all_advisers': all_advisers,  # All advisers for add modal
         'filter_courses': filter_courses,  # Filtered courses for filter dropdown
-        'filter_advisers': filter_advisers,  # Filtered advisers for filter dropdown
+        'filter_sections': filter_sections,
         'sections': sections,
+        'subjects_for_adviser': subjects_for_adviser,
         'query_string': query_string,  # Query string for edit links
     }
     return render(request, 'attendance/student_list.html', context)
@@ -1368,6 +1491,198 @@ def student_export_csv(request):
     
     return response
 
+@login_required
+def send_student_summary_pdf_to_adviser(request):
+    academic_year = request.POST.get('academic_year', '').strip()
+    semester = request.POST.get('semester', '').strip()
+
+    if request.method != 'POST':
+        messages.error(request, "Invalid request method.")
+        return redirect(f"{reverse('student_summary')}?academic_year={academic_year}&semester={semester}")
+
+    if not (request.user.is_staff or request.user.is_superuser or hasattr(request.user, 'adviser_profile')):
+        messages.error(request, "You don't have permission to send summary PDFs.")
+        return redirect(f"{reverse('student_summary')}?academic_year={academic_year}&semester={semester}")
+
+    if not REPORTLAB_AVAILABLE:
+        messages.error(request, "PDF generator not available. Please install reportlab to enable PDF export.")
+        return redirect(f"{reverse('student_summary')}?academic_year={academic_year}&semester={semester}")
+
+    adviser = request.user.adviser_profile if hasattr(request.user, 'adviser_profile') else None
+    recipient_email = None
+    if adviser and getattr(adviser, 'email', None):
+        recipient_email = adviser.email
+    elif request.user.email:
+        recipient_email = request.user.email
+
+    if not recipient_email:
+        messages.error(request, "No recipient email found for adviser.")
+        return redirect(f"{reverse('student_summary')}?academic_year={academic_year}&semester={semester}")
+
+    # Use StudentSubject to find enrolled students for the specific AY/Semester
+    # This ensures we get students even if they have no attendance records yet
+    enrollments = StudentSubject.objects.filter(
+        academic_year=academic_year,
+        semester=semester
+    ).select_related('student', 'student__course', 'subject')
+
+    # Filter by adviser if not staff/superuser
+    if hasattr(request.user, 'adviser_profile') and not (request.user.is_staff or request.user.is_superuser):
+        enrollments = enrollments.filter(student__adviser=request.user.adviser_profile)
+    
+    # Exclude self if user is also a student
+    if hasattr(request.user, 'student_profile'):
+        enrollments = enrollments.exclude(student=request.user.student_profile)
+
+    # Group by student to aggregate stats
+    student_data = {}
+    for enrollment in enrollments:
+        student = enrollment.student
+        if student.id not in student_data:
+            student_data[student.id] = {
+                'student': student,
+                'subject_ids': set(),
+                'subject_codes': set()
+            }
+        student_data[student.id]['subject_ids'].add(enrollment.subject.id)
+        student_data[student.id]['subject_codes'].add(enrollment.subject.code)
+
+    summary = []
+    for sid, data in student_data.items():
+        student = data['student']
+        subject_ids = data['subject_ids']
+        subjects_str = ", ".join(sorted(data['subject_codes']))
+        
+        # Count attendance for this student in enrolled subjects
+        atts = Attendance.objects.filter(
+            student_id=sid,
+            subject_id__in=subject_ids
+        )
+        
+        present = atts.filter(status='PRESENT').count()
+        absent = atts.filter(status='ABSENT').count()
+        late = atts.filter(status='LATE').count()
+        total = atts.count()
+        
+        summary.append({
+            'student__name': student.name,
+            'student__student_id': student.student_id,
+            'student__course__code': student.course.code if student.course else '',
+            'subjects': subjects_str,
+            'total_present': present,
+            'total_absent': absent,
+            'total_late': late,
+            'total_records': total
+        })
+    
+    # Sort by name
+    summary.sort(key=lambda x: x['student__name'])
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=landscape(letter))
+    width, height = landscape(letter)
+
+    title = "Student Attendance Summary"
+    subtitle = f"AY: {academic_year or 'All'}  |  Semester: {semester or 'All'}"
+    recip_line = f"Adviser: {adviser.name if adviser else (request.user.get_full_name() or request.user.username)}"
+
+    y = height - 1*inch
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(1*inch, y, title)
+    y -= 18
+    c.setFont("Helvetica", 10)
+    c.drawString(1*inch, y, subtitle)
+    y -= 14
+    c.drawString(1*inch, y, recip_line)
+    y -= 24
+
+    headers = ["#", "Student Name", "ID", "Course", "Subjects", "Present", "Absent", "Late", "Total"]
+    col_x = [0.5*inch, 0.9*inch, 3.0*inch, 4.0*inch, 4.8*inch, 8.2*inch, 8.8*inch, 9.4*inch, 10.0*inch]
+    c.setFont("Helvetica-Bold", 9)
+    for i, htxt in enumerate(headers):
+        c.drawString(col_x[i], y, htxt)
+    y -= 12
+    c.setStrokeColor(colors.black)
+    c.line(0.5*inch, y, 10.5*inch, y)
+    y -= 8
+
+    c.setFont("Helvetica", 9)
+    row = 0
+    totals = { 'present': 0, 'absent': 0, 'late': 0, 'records': 0 }
+    for item in summary:
+        row += 1
+        if y < 1*inch:
+            c.showPage()
+            y = height - 1*inch
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(1*inch, y, title + " (cont.)")
+            y -= 18
+            c.setFont("Helvetica-Bold", 9)
+            for i, htxt in enumerate(headers):
+                c.drawString(col_x[i], y, htxt)
+            y -= 12
+            c.line(0.5*inch, y, 10.5*inch, y)
+            y -= 8
+            c.setFont("Helvetica", 9)
+        c.drawString(col_x[0], y, str(row))
+        c.drawString(col_x[1], y, item['student__name'] or '')
+        c.drawString(col_x[2], y, (item['student__student_id'] or ''))
+        c.drawString(col_x[3], y, (item['student__course__code'] or ''))
+        # Truncate subjects if too long
+        subj_text = item['subjects']
+        if len(subj_text) > 55:
+            subj_text = subj_text[:52] + "..."
+        c.drawString(col_x[4], y, subj_text)
+        c.drawRightString(col_x[5]+30, y, str(item['total_present']))
+        c.drawRightString(col_x[6]+30, y, str(item['total_absent']))
+        c.drawRightString(col_x[7]+30, y, str(item['total_late']))
+        c.drawRightString(col_x[8]+30, y, str(item['total_records']))
+        y -= 12
+        totals['present'] += item['total_present']
+        totals['absent'] += item['total_absent']
+        totals['late'] += item['total_late']
+        totals['records'] += item['total_records']
+
+    y -= 6
+    c.line(0.5*inch, y, 10.5*inch, y)
+    y -= 14
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(0.5*inch, y, "Totals:")
+    c.drawRightString(col_x[5]+30, y, str(totals['present']))
+    c.drawRightString(col_x[6]+30, y, str(totals['absent']))
+    c.drawRightString(col_x[7]+30, y, str(totals['late']))
+    c.drawRightString(col_x[8]+30, y, str(totals['records']))
+
+    c.showPage()
+    c.save()
+    pdf_data = buffer.getvalue()
+    buffer.close()
+
+    subject_line = f"Student Attendance Summary - {academic_year or 'All AY'} - {semester or 'All Semesters'}"
+    body = (
+        "Hello,\n\n"
+        f"Please find attached the attendance summary (present/absent/late) per student for {academic_year or 'all academic years'} - {semester or 'all semesters'}.\n\n"
+        f"This report was generated by {request.user.get_full_name() or request.user.username}.\n\n"
+        "Regards,\nAttendance Monitoring System"
+    )
+
+    try:
+        email_message = EmailMessage(
+            subject=subject_line,
+            body=body,
+            from_email=django_settings.DEFAULT_FROM_EMAIL,
+            to=[recipient_email],
+        )
+        filename = f"attendance_summary_{academic_year or 'ALL'}_{semester or 'ALL'}.pdf".replace(' ', '_')
+        email_message.attach(filename, pdf_data, 'application/pdf')
+        email_message.send(fail_silently=False)
+        messages.success(request, f"Summary PDF sent to {recipient_email}.")
+    except Exception as e:
+        logger.error(f"Failed to send summary PDF: {e}")
+        messages.error(request, "Failed to send summary PDF. Please check email settings.")
+
+    return redirect(f"{reverse('student_summary')}?academic_year={academic_year}&semester={semester}")
+
 # Subject Management
 @login_required
 def subject_list(request):
@@ -1524,6 +1839,7 @@ def subject_add(request):
             # Get course code and course number (optional)
             course_code = request.POST.get('course_code', '').strip()
             course_number = request.POST.get('course_number', '').strip()
+            semester = request.POST.get('semester', '1st Semester').strip()
             
             # Create subject with adviser
             subject = Subject.objects.create(
@@ -1534,6 +1850,7 @@ def subject_add(request):
                 course=course_obj,
                 course_code=course_code,
                 course_number=course_number,
+                semester=semester,
                 schedule_days=schedule_days,
                 schedule_time_start=None,  # Will be set from first schedule entry if available
                 schedule_time_end=None,     # Will be set from first schedule entry if available
@@ -1740,6 +2057,7 @@ def subject_edit(request, subject_id):
             # Get course code and course number (optional)
             course_code = request.POST.get('course_code', '').strip()
             course_number = request.POST.get('course_number', '').strip()
+            semester = request.POST.get('semester', '1st Semester').strip()
             
             # Update subject basic info
             subject.code = code
@@ -1748,6 +2066,7 @@ def subject_edit(request, subject_id):
             subject.course = course_obj
             subject.course_code = course_code
             subject.course_number = course_number
+            subject.semester = semester
             subject.schedule_days = schedule_days
             subject.is_active = is_active
             
@@ -2432,9 +2751,20 @@ def scan_view(request):
                         
                         if should_do_timeout:
                             # Valid time-out - student is checking out
+                            # Prefer using the scheduled class end time as the time-out when available
+                            class_end_time = None
+                            if schedule and getattr(schedule, 'time_end', None):
+                                class_end_time = schedule.time_end
+                            elif subject.schedule_time_end:
+                                class_end_time = subject.schedule_time_end
+                            else:
+                                class_end_time = getattr(settings, 'class_end_time', None)
+
+                            time_out_to_set = class_end_time if class_end_time else stored_time
+
                             # Only update if time_out is not already set or if new time is different
-                            if existing_attendance.time_out is None or existing_attendance.time_out != stored_time:
-                                existing_attendance.time_out = stored_time
+                            if existing_attendance.time_out is None or existing_attendance.time_out != time_out_to_set:
+                                existing_attendance.time_out = time_out_to_set
                                 existing_attendance.save(update_fields=['time_out'])
                                 time_in_str = existing_attendance.time_in.strftime('%I:%M %p') if existing_attendance.time_in else 'N/A'
                                 time_out_str = existing_attendance.time_out.strftime('%I:%M %p')
@@ -2465,6 +2795,22 @@ def scan_view(request):
                                     time_out=existing_attendance.time_out,
                                     status=existing_attendance.status
                                 )
+                                # Forward attendance to configured remote hosts asynchronously
+                                try:
+                                    payload = {
+                                        'student_rfid': student.rfid_id,
+                                        'student_id': getattr(student, 'student_id', None),
+                                        'student_name': student.name,
+                                        'subject_code': subject.code,
+                                        'date': attendance_date.strftime('%Y-%m-%d'),
+                                        'time_in': existing_attendance.time_in.strftime('%H:%M') if existing_attendance.time_in else None,
+                                        'time_out': existing_attendance.time_out.strftime('%H:%M') if existing_attendance.time_out else None,
+                                        'status': existing_attendance.status,
+                                        'action': 'time_out'
+                                    }
+                                    send_attendance_to_hosts_async(payload)
+                                except Exception:
+                                    logger.exception('Failed to enqueue attendance forward for time_out')
                             else:
                                 # Time-out already recorded at this time - no duplicate
                                 time_in_str = existing_attendance.time_in.strftime('%I:%M %p') if existing_attendance.time_in else 'N/A'
@@ -2515,6 +2861,23 @@ def scan_view(request):
                                     time_out=None,
                                     status=status
                                 )
+
+                                # Forward attendance to configured remote hosts asynchronously
+                                try:
+                                    payload = {
+                                        'student_rfid': student.rfid_id,
+                                        'student_id': getattr(student, 'student_id', None),
+                                        'student_name': student.name,
+                                        'subject_code': subject.code,
+                                        'date': attendance_date.strftime('%Y-%m-%d'),
+                                        'time_in': stored_time.strftime('%H:%M') if stored_time else None,
+                                        'time_out': None,
+                                        'status': status,
+                                        'action': 'time_in'
+                                    }
+                                    send_attendance_to_hosts_async(payload)
+                                except Exception:
+                                    logger.exception('Failed to enqueue attendance forward for time_in')
 
                                 # Check and send warning email if student has reached absence threshold
                                 if status == 'ABSENT':
@@ -2633,10 +2996,40 @@ def manual_entry(request):
                     if updated:
                         existing.save()
                         messages.success(request, "Attendance updated successfully!")
+                        try:
+                            payload = {
+                                'student_rfid': existing.student.rfid_id,
+                                'student_id': getattr(existing.student, 'student_id', None),
+                                'student_name': existing.student.name,
+                                'subject_code': existing.subject.code,
+                                'date': existing.date.strftime('%Y-%m-%d'),
+                                'time_in': existing.time_in.strftime('%H:%M') if existing.time_in else None,
+                                'time_out': existing.time_out.strftime('%H:%M') if existing.time_out else None,
+                                'status': existing.status,
+                                'action': 'manual_update'
+                            }
+                            send_attendance_to_hosts_async(payload)
+                        except Exception:
+                            logger.exception('Failed to enqueue attendance forward for manual update')
                     else:
                         messages.info(request, "Attendance already exists with the same data. No duplicate created.")
                 else:
                     messages.success(request, "Attendance recorded successfully!")
+                    try:
+                        payload = {
+                            'student_rfid': student.rfid_id,
+                            'student_id': getattr(student, 'student_id', None),
+                            'student_name': student.name,
+                            'subject_code': subject.code,
+                            'date': attendance_date.strftime('%Y-%m-%d'),
+                            'time_in': time_in.strftime('%H:%M') if time_in else None,
+                            'time_out': time_out.strftime('%H:%M') if time_out else None,
+                            'status': status,
+                            'action': 'manual_create'
+                        }
+                        send_attendance_to_hosts_async(payload)
+                    except Exception:
+                        logger.exception('Failed to enqueue attendance forward for manual create')
                     
                     # Check and send warning email if status is ABSENT
                     if status == 'ABSENT':
@@ -2721,21 +3114,34 @@ def attendance_logs(request):
                 else:
                     all_students = all_students.none()
         
-        # Create attendance records for absent students
-        present_student_ids = attendances.values_list('student_id', flat=True)
-        absent_students = all_students.exclude(id__in=present_student_ids)
-        
-        for student in absent_students:
-            attendance, created = Attendance.objects.get_or_create(
-                student=student,
-                subject_id=subject_id_int,
-                date=filter_date,
-                defaults={'status': 'ABSENT'}
-            )
-            # Check and send warning email if attendance was just created as ABSENT
-            if created and attendance.status == 'ABSENT':
-                subject = Subject.objects.get(id=subject_id_int)
-                check_and_send_warning_email(student, subject)
+        # Create attendance records for absent students, unless a holiday is set for this date/subject
+        # Check for holiday events that are global or specific to this subject
+        is_holiday = False
+        try:
+            is_holiday = CalendarEvent.objects.filter(date=filter_date, event_type='holiday').filter(
+                Q(subject__isnull=True) | Q(subject_id=subject_id_int)
+            ).exists()
+        except Exception:
+            is_holiday = False
+
+        if is_holiday:
+            messages.info(request, 'Holiday detected for this date. Absences will not be created for this subject.')
+            absent_students = []
+        else:
+            present_student_ids = attendances.values_list('student_id', flat=True)
+            absent_students = all_students.exclude(id__in=present_student_ids)
+
+            for student in absent_students:
+                attendance, created = Attendance.objects.get_or_create(
+                    student=student,
+                    subject_id=subject_id_int,
+                    date=filter_date,
+                    defaults={'status': 'ABSENT'}
+                )
+                # Check and send warning email if attendance was just created as ABSENT
+                if created and attendance.status == 'ABSENT':
+                    subject = Subject.objects.get(id=subject_id_int)
+                    check_and_send_warning_email(student, subject)
         
         attendances = Attendance.objects.filter(date=filter_date, subject_id=subject_id_int).select_related('student', 'subject')
         # Use the new helper function to filter by adviser's students
@@ -2860,12 +3266,16 @@ def student_attendance_summary(request, student_id=None):
     """
     Display all subjects with their enrolled students for a given academic year and semester.
     """
-    academic_year = request.GET.get('academic_year', '2025-2026')
+    # Get unique academic years and semesters for filter dropdowns
+    academic_years = list(StudentSubject.objects.values_list('academic_year', flat=True).distinct().order_by('-academic_year'))
+    semesters = list(StudentSubject.objects.values_list('semester', flat=True).distinct().order_by('semester'))
+
+    default_ay = academic_years[0] if academic_years else '2025-2026'
+    academic_year = request.GET.get('academic_year', default_ay)
     semester = request.GET.get('semester', '1st Semester')
     
     # Get accessible subjects based on user permissions (includes subjects where adviser's students are enrolled)
-    subjects = filter_subjects_by_user(request.user)
-    subjects = filter_by_user_courses(subjects.filter(is_active=True), request.user, course_field='course')
+    subjects = filter_subjects_by_user(request.user).filter(is_active=True)
     
     # Prepare data for each subject with enrolled students
     subjects_data = []
@@ -2877,9 +3287,15 @@ def student_attendance_summary(request, student_id=None):
         academic_year=academic_year,
         semester=semester
     ).select_related('student', 'student__course', 'student__adviser', 'subject')
+
+    # If user is an adviser, filter enrollments to only their students
+    if hasattr(request.user, 'adviser_profile') and not (request.user.is_superuser or request.user.is_staff):
+        adviser = request.user.adviser_profile
+        all_enrollments = all_enrollments.filter(student__adviser=adviser)
     
-    # Filter enrollments by adviser's students
-    all_enrollments = filter_by_adviser_students(all_enrollments, request.user, student_field='student')
+    # Exclude the adviser's own student profile if they are also a student
+    if hasattr(request.user, 'student_profile'):
+        all_enrollments = all_enrollments.exclude(student=request.user.student_profile)
     
     # Group enrollments by subject
     enrollments_by_subject = {}
@@ -2888,6 +3304,28 @@ def student_attendance_summary(request, student_id=None):
         if subject_id not in enrollments_by_subject:
             enrollments_by_subject[subject_id] = []
         enrollments_by_subject[subject_id].append(enrollment)
+    
+    # Build mapping of student -> enrolled subject ids for the selected academic year/semester
+    student_subject_map = {}
+    student_ids = set()
+    subject_ids = set()
+    for enrollment in all_enrollments:
+        sid = enrollment.student.id
+        student_ids.add(sid)
+        sid_subj_set = student_subject_map.setdefault(sid, set())
+        sid_subj_set.add(enrollment.subject.id)
+        subject_ids.add(enrollment.subject.id)
+    
+    # Efficiently compute absence counts per student across their enrolled subjects
+    absent_counts = {}
+    if student_ids and subject_ids:
+        attendance_qs = Attendance.objects.filter(
+            student_id__in=student_ids,
+            subject_id__in=subject_ids,
+            status='ABSENT'
+        ).values('student_id').annotate(absent_count=Count('id'))
+        for item in attendance_qs:
+            absent_counts[item['student_id']] = item['absent_count']
     
     for subject in subjects.order_by('code'):
         # Get enrolled students for this subject
@@ -2899,16 +3337,19 @@ def student_attendance_summary(request, student_id=None):
             students_list.append({
                 'student': enrollment.student,
                 'enrollment': enrollment,
+                'absent_count': absent_counts.get(enrollment.student.id, 0),
             })
         
         enrollment_count = len(students_list)
-        total_enrollments += enrollment_count
         
-        subjects_data.append({
-            'subject': subject,
-            'students': students_list,
-            'enrollment_count': enrollment_count,
-        })
+        if enrollment_count > 0:
+            total_enrollments += enrollment_count
+            
+            subjects_data.append({
+                'subject': subject,
+                'students': students_list,
+                'enrollment_count': enrollment_count,
+            })
     
     # Calculate statistics
     total_subjects = len(subjects_data)
@@ -2921,6 +3362,8 @@ def student_attendance_summary(request, student_id=None):
         'total_subjects': total_subjects,
         'total_enrollments': total_enrollments,
         'avg_enrollments': avg_enrollments,
+        'academic_years': academic_years,
+        'semesters': semesters,
     }
     return render(request, 'attendance/student_summary.html', context)
 
@@ -4129,7 +4572,7 @@ def student_dashboard(request):
     # Filter by subject if provided
     if subject_id:
         try:
-            attendances_qs = attendances_qs.filter(subject_id=int(subject_id))
+            attendances = attendances.filter(subject_id=int(subject_id))
         except (ValueError, TypeError):
             pass
     
@@ -4288,6 +4731,107 @@ def student_dashboard(request):
     return render(request, 'attendance/student_dashboard.html', context)
 
 @login_required
+def student_absences(request):
+    """Student view showing only absences and allowing justification submission."""
+    try:
+        student = request.user.student_profile
+    except Student.DoesNotExist:
+        messages.error(request, "Student profile not found. Please contact administrator.")
+        logout(request)
+        return redirect('student_login')
+
+    if request.method == 'POST':
+        absence_id = request.POST.get('absence_id')
+        reason = request.POST.get('reason', '').strip()
+        evidence_files = request.FILES.getlist('evidence')
+
+        if not absence_id:
+            messages.error(request, "Invalid request. Absence ID is missing.")
+            return redirect('student_absences')
+
+        try:
+            # Get the absence record and ensure it belongs to the logged-in student
+            absence = Attendance.objects.get(id=int(absence_id), student=student, status='ABSENT')
+
+            if reason:
+                absence.reason = reason
+
+            # Handle multiple evidence files
+            if evidence_files:
+                for evidence_file in evidence_files:
+                    # You might want to add validation for file size and type here
+                    AbsenceEvidence.objects.create(
+                        attendance=absence,
+                        file=evidence_file
+                    )
+
+            if reason or evidence_files:
+                absence.save()
+                messages.success(request, "Your absence justification has been submitted successfully.")
+            else:
+                messages.warning(request, "Please provide a reason or upload an evidence file.")
+
+        except (Attendance.DoesNotExist, ValueError):
+            messages.error(request, "Invalid absence record.")
+        
+        # Redirect back to the same page, preserving filters
+        query_params = request.GET.urlencode()
+        return redirect(f"{reverse('student_absences')}?{query_params}")
+
+    # Filters
+    subject_id = request.GET.get('subject_id', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    academic_year = request.GET.get('academic_year', '2025-2026')
+    semester = request.GET.get('semester', '1st Semester')
+
+    # Base queryset for absences
+    absences_qs = Attendance.objects.filter(student=student, status='ABSENT').select_related('subject')
+
+    # Apply filters
+    if subject_id:
+        try:
+            absences_qs = absences_qs.filter(subject_id=int(subject_id))
+        except (ValueError, TypeError):
+            pass
+
+    if date_from:
+        try:
+            absences_qs = absences_qs.filter(date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+        except Exception:
+            pass
+
+    if date_to:
+        try:
+            absences_qs = absences_qs.filter(date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+        except Exception:
+            pass
+
+    # Pagination
+    paginator = Paginator(absences_qs.order_by('-date', '-time'), 20)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Subjects for filter dropdown
+    student_subjects = StudentSubject.objects.filter(
+        student=student,
+        academic_year=academic_year,
+        semester=semester
+    ).select_related('subject')
+
+    context = {
+        'student': student,
+        'absences': page_obj,
+        'subjects': [ss.subject for ss in student_subjects],
+        'academic_year': academic_year,
+        'semester': semester,
+        'selected_subject_id': subject_id,
+        'date_from': date_from,
+        'date_to': date_to,
+    }
+    return render(request, 'attendance/student_absences.html', context)
+
+@login_required
 def student_enroll_subjects(request):
     """Student view to enroll/unenroll in subjects"""
     try:
@@ -4361,8 +4905,8 @@ def student_enroll_subjects(request):
         except Exception as e:
             messages.error(request, f"An error occurred: {str(e)}")
     
-    # Get all active subjects with prefetched schedules
-    all_subjects = Subject.objects.filter(is_active=True).prefetch_related('schedules').order_by('code')
+    # Get all active subjects for the selected semester with prefetched schedules
+    all_subjects = Subject.objects.filter(is_active=True, semester=semester).prefetch_related('schedules').order_by('code')
     
     # Get enrolled subject IDs for current academic year and semester
     enrolled_subject_ids = StudentSubject.objects.filter(
@@ -5540,6 +6084,78 @@ def adviser_subjects_monitor(request):
     return render(request, 'attendance/adviser_subjects_monitor.html', context)
 
 @login_required
+def adviser_absent_students(request):
+    """Show absent students across adviser's subjects"""
+    # Determine adviser scope
+    if request.user.is_staff or request.user.is_superuser:
+        adviser_name = "All Advisers"
+        subjects = Subject.objects.all()
+    else:
+        if hasattr(request.user, 'adviser_profile'):
+            adviser = request.user.adviser_profile
+            adviser_name = adviser.name
+            subjects = Subject.objects.filter(instructor__adviser=adviser)
+        else:
+            adviser_name = request.user.get_full_name() or request.user.username
+            subjects = Subject.objects.none()
+
+    # Filters
+    subject_id = request.GET.get('subject_id', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    student_q = request.GET.get('student_q', '').strip()
+
+    # Base queryset: absences in adviser's subjects
+    absences_qs = Attendance.objects.filter(status='ABSENT', subject__in=subjects).select_related('student', 'subject').prefetch_related('evidences')
+
+    if subject_id:
+        try:
+            absences_qs = absences_qs.filter(subject_id=int(subject_id))
+        except (ValueError, TypeError):
+            pass
+
+    if date_from:
+        try:
+            absences_qs = absences_qs.filter(date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+        except Exception:
+            pass
+
+    if date_to:
+        try:
+            absences_qs = absences_qs.filter(date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+        except Exception:
+            pass
+
+    if student_q:
+        absences_qs = absences_qs.filter(
+            Q(student__name__icontains=student_q) |
+            Q(student__student_id__icontains=student_q) |
+            Q(student__email__icontains=student_q)
+        )
+
+    absences_qs = absences_qs.order_by('-date', '-time')
+
+    # Pagination
+    paginator = Paginator(absences_qs, 25)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+
+    # Subjects list for filter dropdown
+    subjects_list = subjects.order_by('code')
+
+    context = {
+        'adviser_name': adviser_name,
+        'absences': page_obj,
+        'subjects': subjects_list,
+        'subject_id': subject_id,
+        'date_from': date_from,
+        'date_to': date_to,
+        'student_q': student_q,
+        'is_staff': request.user.is_staff or request.user.is_superuser,
+    }
+    return render(request, 'attendance/adviser_absent_students.html', context)
+
+@login_required
 def section_list(request):
     """List all sections"""
     sections = Section.objects.all().order_by('code')
@@ -5686,6 +6302,285 @@ def api_courses(request):
     except Exception as e:
         username = getattr(request.user, 'username', 'unknown')
         logger.error(f"Error in api_courses for user {username}: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def api_subjects(request):
+    """Return list of subjects for dropdowns."""
+    try:
+        # Basic permission: show active subjects. More filtering can be added later.
+        subjects = Subject.objects.filter(is_active=True).order_by('code')
+        out = []
+        for s in subjects:
+            out.append({'id': s.id, 'code': s.code, 'name': s.name, 'display': f"{s.code} - {s.name}"})
+        return JsonResponse({'success': True, 'subjects': out})
+    except Exception as e:
+        logger.error(f"Error in api_subjects: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def events_create_api(request):
+    """
+    Create a calendar event.
+
+    - Supports JSON POST (application/json) for API clients.
+    - Supports regular HTML form POST (multipart/form-data or application/x-www-form-urlencoded)
+      for the calendar modal form.
+    Returns JSON with success flag and created id.
+    """
+    # Accept both JSON and regular form submissions
+    if request.content_type and 'application/json' in request.content_type:
+        try:
+            data = json.loads(request.body.decode('utf-8') or '{}')
+        except Exception:
+            return JsonResponse({'success': False, 'error': 'Invalid JSON'}, status=400)
+    else:
+        data = request.POST
+
+    title = (data.get('title') or '').strip()
+    date_str = data.get('date')
+    start_time_str = data.get('start_time')
+    end_time_str = data.get('end_time')
+    event_type = data.get('type', 'event')
+    description = data.get('description', '')
+    subject_id = data.get('subject_id')
+
+    if not title or not date_str:
+        return JsonResponse({'success': False, 'error': 'Title and date are required'}, status=400)
+
+    try:
+        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except Exception:
+        return JsonResponse({'success': False, 'error': 'Invalid date format, use YYYY-MM-DD'}, status=400)
+
+    start_time = None
+    end_time = None
+    try:
+        if start_time_str:
+            start_time = datetime.strptime(start_time_str, '%H:%M').time()
+    except Exception:
+        start_time = None
+    try:
+        if end_time_str:
+            end_time = datetime.strptime(end_time_str, '%H:%M').time()
+    except Exception:
+        end_time = None
+
+    subject = None
+    if subject_id:
+        try:
+            subject = Subject.objects.filter(id=subject_id).first()
+        except Exception:
+            subject = None
+
+    try:
+        # Normalize title (collapse multiple spaces and trim)
+        normalized_title = ' '.join(title.strip().split())
+
+        # Primary matching: avoid creating more than one event for the same
+        # date/event_type/subject combination. This prevents duplicate entries
+        # when the user accidentally submits twice or when titles differ only
+        # in casing/spacing.
+        match_kwargs = {
+            'date': date_obj,
+            'event_type': event_type,
+            'subject': subject,
+        }
+
+        defaults = {
+            'title': normalized_title,
+            'description': description,
+            'created_by': request.user,
+            'start_time': start_time,
+            'end_time': end_time,
+        }
+
+        # Use get_or_create which handles race conditions by catching
+        # IntegrityError internally and retrying the lookup.
+        try:
+            with transaction.atomic():
+                ev, created = CalendarEvent.objects.get_or_create(defaults=defaults, **match_kwargs)
+                # If the existing event had a different title but the same
+                # date/type/subject, update the title to the normalized one
+                if not created and ev.title != normalized_title:
+                    ev.title = normalized_title
+                    ev.description = description or ev.description
+                    ev.start_time = start_time or ev.start_time
+                    ev.end_time = end_time or ev.end_time
+                    ev.save(update_fields=['title', 'description', 'start_time', 'end_time'])
+        except IntegrityError:
+            # Another process may have created the same event concurrently.
+            # Re-fetch the existing event and proceed.
+            ev = CalendarEvent.objects.filter(**match_kwargs).first()
+            created = False
+
+        # Only apply holiday attendances when the event was newly created
+        if created and ev.event_type == 'holiday':
+            try:
+                subjects_to_apply = [subject] if subject else Subject.objects.filter(is_active=True)
+                settings = get_cached_settings()
+                for subj in subjects_to_apply:
+                    schedule = SubjectSchedule.objects.filter(subject=subj).filter(
+                        Q(date=date_obj) | Q(day_of_week=date_obj.weekday())
+                    ).first()
+
+                    class_start = None
+                    class_end = None
+                    if schedule:
+                        class_start = getattr(schedule, 'time_start', None)
+                        class_end = getattr(schedule, 'time_end', None)
+                    if not class_start:
+                        class_start = subj.schedule_time_start
+                    if not class_end:
+                        class_end = subj.schedule_time_end
+                    if not class_start:
+                        class_start = getattr(settings, 'class_start_time', None)
+                    if not class_end:
+                        class_end = getattr(settings, 'class_end_time', None)
+
+                    student_ids = StudentSubject.objects.filter(subject=subj).values_list('student_id', flat=True)
+                    students = Student.objects.filter(id__in=student_ids)
+
+                    for stud in students:
+                        try:
+                            with transaction.atomic():
+                                attendance, created_att = Attendance.objects.select_for_update().get_or_create(
+                                    student=stud,
+                                    subject=subj,
+                                    date=date_obj,
+                                    defaults={'status': 'PRESENT', 'time_in': class_start, 'time_out': class_end, 'calendar_event': ev}
+                                )
+                                updated = False
+                                if not created_att:
+                                    if attendance.time_in != class_start:
+                                        attendance.time_in = class_start
+                                        updated = True
+                                    if attendance.time_out != class_end:
+                                        attendance.time_out = class_end
+                                        updated = True
+                                    if attendance.status != 'PRESENT':
+                                        attendance.status = 'PRESENT'
+                                        updated = True
+                                    if attendance.calendar_event_id != ev.id:
+                                        attendance.calendar_event = ev
+                                        updated = True
+                                    if updated:
+                                        attendance.save()
+                        except Exception:
+                            logger.exception('Failed to apply holiday attendance for student %s on %s', stud.id, date_obj)
+            except Exception:
+                logger.exception('Failed to apply holiday attendance after creating CalendarEvent')
+
+        # Provide a helpful message for the frontend to show a notification. Include a created flag for clarity.
+        if created:
+            try:
+                date_display = ev.date.strftime('%Y-%m-%d')
+            except Exception:
+                date_display = str(ev.date)
+            message = f"Event '{ev.title}' created for {date_display}"
+        else:
+            message = f"Event '{ev.title}' exists; updated"
+
+        return JsonResponse({'success': True, 'id': ev.id, 'created': created, 'message': message})
+    except Exception as e:
+        logger.error(f"Failed to create CalendarEvent: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["GET"])
+def events_list_api(request):
+    """Return JSON list of calendar events visible to the user.
+
+    To avoid confusing client displays with duplicate rows in the database,
+    we group events by (date, type, subject, title) and return one representative
+    record per group with a `count` and `ids` list so the client can show a
+    single entry with duplicate information and optionally allow deletion of
+    duplicates.
+    """
+    try:
+        if request.user.is_superuser or request.user.is_staff:
+            evs = CalendarEvent.objects.all().order_by('date', 'id')
+        else:
+            evs = CalendarEvent.objects.filter(created_by=request.user).order_by('date', 'id')
+        
+        groups = {}
+        def normalize_title(title: str) -> str:
+            return ' '.join((title or '').strip().split()).lower()
+
+        def normalize_type(t: str) -> str:
+            return (t or '').strip().lower()
+
+        for e in evs:
+            subject_id = e.subject.id if e.subject else None
+            title_key = normalize_title(e.title)
+            type_key = normalize_type(e.event_type)
+            key = (e.date, type_key, subject_id, title_key)
+            k = f"{key[0] or ''}|{key[1] or ''}|{key[2] or ''}|{key[3] or ''}"
+
+            if k not in groups:
+                groups[k] = {
+                    'id': e.id,
+                    'title': e.title,
+                    'date': e.date.strftime('%Y-%m-%d') if e.date else None,
+                    'type': e.event_type,
+                    'description': e.description or '',
+                    'subject_id': subject_id,
+                    'count': 1,
+                    'ids': [e.id],
+                }
+            else:
+                groups[k]['count'] += 1
+                if e.id not in groups[k]['ids']:
+                    groups[k]['ids'].append(e.id)
+
+        out = list(groups.values())
+        return JsonResponse({'success': True, 'events': out})
+    except Exception as e:
+        logger.error(f"Failed to list CalendarEvent: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+def calendar_events_view(request):
+    """
+    Simple HTML view to display calendar events in a table.
+
+    This is meant for users who prefer a full-page view of events
+    instead of the JavaScript-powered modal calendar.
+    """
+    if request.user.is_superuser or request.user.is_staff:
+        events = CalendarEvent.objects.select_related('subject', 'created_by').all()
+    else:
+        events = CalendarEvent.objects.filter(created_by=request.user).select_related('subject', 'created_by')
+    
+    events = events.order_by('-date', 'start_time', 'id')
+
+    context = {
+        'events': events,
+    }
+    return render(request, 'attendance/calendar_events.html', context)
+
+
+@login_required
+@require_http_methods(["POST"])
+def events_delete_api(request, event_id):
+    try:
+        ev = CalendarEvent.objects.filter(id=event_id).first()
+        if not ev:
+            return JsonResponse({'success': False, 'error': 'Event not found'}, status=404)
+        # Remove any attendance records that were created/applied because of this calendar event
+        try:
+            Attendance.objects.filter(calendar_event=ev).delete()
+        except Exception:
+            logger.exception('Failed to remove attendances linked to CalendarEvent %s', event_id)
+        ev.delete()
+        return JsonResponse({'success': True})
+    except Exception as e:
+        logger.error(f"Failed to delete CalendarEvent {event_id}: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 

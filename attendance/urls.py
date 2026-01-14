@@ -44,6 +44,7 @@ urlpatterns = [
     path('student-summary/', views.student_attendance_summary, name='student_summary'),
     path('student-summary/<int:student_id>/', views.student_attendance_summary, name='student_summary_detail'),
     path('bulk-send-emails/', views.bulk_send_emails, name='bulk_send_emails'),
+    path('student-summary/send-adviser-pdf/', views.send_student_summary_pdf_to_adviser, name='send_student_summary_pdf_to_adviser'),
     
     # Semester Report
     path('semester-report/<int:student_id>/', views.semester_report, name='semester_report'),
@@ -73,6 +74,7 @@ urlpatterns = [
     path('student/register/', views.student_register, name='student_register'),
     path('student/login/', views.student_login, name='student_login'),
     path('student/dashboard/', views.student_dashboard, name='student_dashboard'),
+    path('student/absences/', views.student_absences, name='student_absences'),
     path('student/enroll-subjects/', views.student_enroll_subjects, name='student_enroll_subjects'),
     path('student/features/', views.student_features_view, name='student_features'),
     path('student/profile/', views.student_profile_view, name='student_profile'),
@@ -83,12 +85,19 @@ urlpatterns = [
     path('adviser/enrollment-requests/', views.adviser_enrollment_requests, name='adviser_enrollment_requests'),
     path('adviser/features/', views.subject_list, name='adviser_features'),  # Redirects to subject_list which shows features for advisers
     path('adviser/subjects-monitor/', views.adviser_subjects_monitor, name='adviser_subjects_monitor'),
+    path('adviser/absences/', views.adviser_absent_students, name='adviser_absent_students'),
     path('api/enrollment-requests-count/', views.enrollment_requests_count_api, name='enrollment_requests_count_api'),
     
     # API Endpoints for Form Dropdowns
     path('api/courses/', views.api_courses, name='api_courses'),
     path('api/sections/', views.api_sections, name='api_sections'),
+    path('api/subjects/', views.api_subjects, name='api_subjects'),
     path('api/advisers/', views.api_advisers, name='api_advisers'),
     path('api/student-subjects/<int:student_id>/', views.api_student_subjects, name='api_student_subjects'),
     path('api/instructors/', views.api_instructors, name='api_instructors'),
+    # Calendar views and API
+    path('calendar/', views.calendar_events_view, name='calendar_events'),
+    path('events/create/', views.events_create_api, name='events_create_api'),
+    path('events/list/', views.events_list_api, name='events_list_api'),
+    path('events/<int:event_id>/delete/', views.events_delete_api, name='events_delete_api'),
 ]

@@ -375,6 +375,7 @@
                     <tr>
                         <th>Code</th>
                         <th>Subject Name</th>
+                        <th>Semester</th>
                         <th>Instructor</th>
                         <th>Schedule</th>
                         <th>Enrolled</th>
@@ -387,6 +388,11 @@
                     <tr>
                         <td><span class="subject-code">{{ subject.code }}</span></td>
                         <td><span class="subject-name">{{ subject.name }}</span></td>
+                        <td>
+                            <span class="badge" style="background: #dbeafe; color: #1e40af; padding: 0.375rem 0.625rem; border-radius: 6px; font-weight: 500;">
+                                {{ subject.semester }}
+                            </span>
+                        </td>
                         <td>
                             <span class="instructor-name">
                                 {% if subject.instructor %}

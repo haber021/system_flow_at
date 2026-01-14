@@ -168,6 +168,13 @@ class Subject(models.Model):
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
 
+    SEMESTER_CHOICES = [
+        ('1st Semester', '1st Semester'),
+        ('2nd Semester', '2nd Semester'),
+        ('Summer', 'Summer'),
+    ]
+    semester = models.CharField(max_length=20, choices=SEMESTER_CHOICES, default='1st Semester', help_text="Semester this subject is offered")
+
     def __str__(self):
         return f"{self.code} - {self.name}"
     
@@ -220,6 +227,27 @@ class StudentSubject(models.Model):
         unique_together = ['student', 'subject', 'academic_year', 'semester']
         ordering = ['subject__code']
 
+def absence_evidence_path(instance, filename):
+    """Generate path for absence evidence files"""
+    ext = filename.split('.')[-1]
+    # Check if instance is AbsenceEvidence (has 'attendance' field)
+    if hasattr(instance, 'attendance'):
+        attendance_instance = instance.attendance
+    else:
+        # Assume instance is Attendance or Absent
+        attendance_instance = instance
+
+    student_id = attendance_instance.student.id
+    subject_id = attendance_instance.subject.id
+    date_str = attendance_instance.date.strftime('%Y-%m-%d')
+    
+    # Generate a unique filename
+    random_str = secrets.token_hex(4)
+    filename = f"absence_{student_id}_{subject_id}_{date_str}_{random_str}.{ext}"
+    
+    return os.path.join('absence_evidence', filename)
+
+
 class Attendance(models.Model):
     STATUS_CHOICES = [
         ('PRESENT', 'Present'),
@@ -234,8 +262,15 @@ class Attendance(models.Model):
     time_in = models.TimeField(null=True, blank=True, help_text="Time when student checked in")
     time_out = models.TimeField(null=True, blank=True, help_text="Time when student checked out")
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PRESENT')
+    # If this attendance record was created or applied because of a CalendarEvent (e.g., holiday),
+    # link it here so we can revert/delete it if the event is removed.
+    calendar_event = models.ForeignKey('CalendarEvent', on_delete=models.SET_NULL, null=True, blank=True, related_name='applied_attendances')
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
     notes = models.TextField(blank=True, default='')
+
+    # Fields for absence justification
+    reason = models.TextField(blank=True, default='', help_text="Reason for absence, if applicable")
+    # evidence field removed, replaced with AbsenceEvidence model for multiple files
 
     def __str__(self):
         return f"{self.student.name} - {self.subject.code} - {self.date} - {self.status}"
@@ -258,8 +293,28 @@ class Attendance(models.Model):
         ]
 
 
+class AbsenceEvidence(models.Model):
+    """Model for multiple evidence files per attendance record"""
+    attendance = models.ForeignKey(Attendance, on_delete=models.CASCADE, related_name='evidences')
+    file = models.FileField(upload_to=absence_evidence_path, help_text="Evidence file (image or document)")
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['uploaded_at']
+        verbose_name = 'Absence Evidence'
+        verbose_name_plural = 'Absence Evidences'
+
+    def __str__(self):
+        return f"Evidence for {self.attendance} - {self.file.name}"
+
+
 class Absent(Attendance):
     """Proxy model for Attendance records with status 'ABSENT' to expose in admin separately."""
+    
+    def save(self, *args, **kwargs):
+        self.status = 'ABSENT'
+        super().save(*args, **kwargs)
+
     class Meta:
         proxy = True
         verbose_name = 'Absent'
@@ -384,3 +439,31 @@ class PasswordResetToken(models.Model):
         """Mark token as used"""
         self.used = True
         self.save()
+
+
+class CalendarEvent(models.Model):
+    EVENT_TYPE_CHOICES = [
+        ('holiday', 'Holiday'),
+        ('event', 'Event'),
+        ('other', 'Other'),
+    ]
+
+    title = models.CharField(max_length=200)
+    date = models.DateField(db_index=True)
+    start_time = models.TimeField(null=True, blank=True)
+    end_time = models.TimeField(null=True, blank=True)
+    event_type = models.CharField(max_length=20, choices=EVENT_TYPE_CHOICES, default='event')
+    description = models.TextField(blank=True, default='')
+    # Optional: associate an event to a specific subject; if null, event is global
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='calendar_events')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_calendar_events')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date', 'start_time']
+        indexes = [
+            models.Index(fields=['date', 'event_type']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} - {self.date} ({self.event_type})"

@@ -1,0 +1,150 @@
+{% extends "attendance/base.html" %}
+
+{% block content %}
+<div class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="h4">My Absences</h2>
+        <a href="{% url 'student_enroll_subjects' %}" class="btn btn-outline-secondary btn-sm">Enroll Subjects</a>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-auto">
+            <select name="subject_id" class="form-select">
+                <option value="">All Subjects</option>
+                {% for subject in subjects %}
+                    <option value="{{ subject.id }}" {% if selected_subject_id and selected_subject_id|add:"" == subject.id|add:"" %}selected{% endif %}>{{ subject.code }} - {{ subject.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <input type="date" name="date_from" value="{{ date_from }}" class="form-control" placeholder="From">
+        </div>
+        <div class="col-auto">
+            <input type="date" name="date_to" value="{{ date_to }}" class="form-control" placeholder="To">
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary">Filter</button>
+        </div>
+    </form>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped mb-0">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Subject</th>
+                            <th>Justification</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for attendance in absences %}
+                        <tr>
+                            <td>{{ attendance.date }}</td>
+                            <td>{{ attendance.subject.code }} - {{ attendance.subject.name }}</td>
+                            <td>
+                                {% if attendance.reason or attendance.evidences.exists %}
+                                    <p class="mb-1"><strong>Reason:</strong> {{ attendance.reason|default:"-" }}</p>
+                                    {% if attendance.evidences.exists %}
+                                        <button type="button" class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#evidenceModal{{ attendance.id }}">
+                                            View Evidence
+                                        </button>
+                                    {% endif %}
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#justifyModal{{ attendance.id }}">
+                                    Justify
+                                </button>
+
+                                <!-- Modal -->
+                                <div class="modal fade" id="justifyModal{{ attendance.id }}" tabindex="-1" aria-labelledby="justifyModalLabel{{ attendance.id }}" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="justifyModalLabel{{ attendance.id }}">Justify Absence</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <form method="post" enctype="multipart/form-data">
+                                                {% csrf_token %}
+                                                <div class="modal-body">
+                                                    <input type="hidden" name="absence_id" value="{{ attendance.id }}">
+                                                    <div class="mb-3">
+                                                        <label for="reason{{ attendance.id }}" class="form-label">Reason</label>
+                                                        <textarea class="form-control" id="reason{{ attendance.id }}" name="reason" rows="3">{{ attendance.reason }}</textarea>
+                                                    </div>
+                                                    <div class="mb-3">
+                                                        <label for="evidence{{ attendance.id }}" class="form-label">Evidence (e.g., medical certificate) - Multiple files allowed</label>
+                                                        <input class="form-control" type="file" id="evidence{{ attendance.id }}" name="evidence" multiple>
+                                                    </div>
+                                                </div>
+                                                <div class="modal-footer">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                                                    <button type="submit" class="btn btn-primary">Submit Justification</button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Evidence Modal -->
+                                {% if attendance.evidences.exists %}
+                                <div class="modal fade" id="evidenceModal{{ attendance.id }}" tabindex="-1" aria-labelledby="evidenceModalLabel{{ attendance.id }}" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title" id="evidenceModalLabel{{ attendance.id }}">Evidence</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body text-center">
+                                                {% for evidence in attendance.evidences.all %}
+                                                    <img src="{{ evidence.file.url }}" alt="Evidence" class="img-fluid mb-3">
+                                                {% empty %}
+                                                    <p>No evidence uploaded yet.</p>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="4" class="text-center">No absences found.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <nav class="mt-3" aria-label="Page navigation">
+        <ul class="pagination">
+            {% if absences.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ absences.previous_page_number }}&subject_id={{ selected_subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}">Previous</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+
+            <li class="page-item disabled"><span class="page-link">Page {{ absences.number }} of {{ absences.paginator.num_pages }}</span></li>
+
+            {% if absences.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ absences.next_page_number }}&subject_id={{ selected_subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}">Next</a>
+                </li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Next</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+
+</div>
+{% endblock %}

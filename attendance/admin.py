@@ -4,7 +4,8 @@ from django.contrib import messages
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
-from .models import Student, Subject, Attendance, Absent, SystemSettings, StudentSubject, EmailLog, SubjectSchedule, Adviser, Course, Instructor, Section
+from django.utils.html import format_html
+from .models import Student, Subject, Attendance, Absent, SystemSettings, StudentSubject, EmailLog, SubjectSchedule, Adviser, Course, Instructor, Section, CalendarEvent, AbsenceEvidence
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
@@ -391,14 +392,14 @@ class SubjectAdminForm(forms.ModelForm):
 @admin.register(Subject)
 class SubjectAdmin(admin.ModelAdmin):
     form = SubjectAdminForm
-    list_display = ['code', 'name', 'get_instructor_display', 'get_adviser_display', 'course', 'is_active', 'schedule_count']
+    list_display = ['code', 'name', 'semester', 'get_instructor_display', 'get_adviser_display', 'course', 'is_active', 'schedule_count']
     search_fields = ['code', 'name', 'instructor__name', 'instructor__adviser__name', 'instructor__adviser__email', 'course__code', 'course__name']
-    list_filter = ['is_active', 'instructor', 'course', 'instructor__adviser']
+    list_filter = ['is_active', 'semester', 'instructor', 'course', 'instructor__adviser']
     autocomplete_fields = ['course', 'instructor']
     inlines = [SubjectScheduleInline]
     fieldsets = (
         ('Basic Information', {
-            'fields': ('code', 'name', 'instructor', 'course', 'is_active'),
+            'fields': ('code', 'name', 'semester', 'instructor', 'course', 'is_active'),
             'description': 'The adviser is automatically determined from the instructor. Select an instructor to assign the subject to their adviser.'
         }),
         ('General Schedule (Fallback)', {
@@ -499,12 +500,24 @@ class SubjectAdmin(admin.ModelAdmin):
         return f"{count} schedule(s)"
     schedule_count.short_description = "Schedules"
 
+class AbsenceEvidenceInline(admin.TabularInline):
+    model = AbsenceEvidence
+    extra = 0
+    readonly_fields = ['file_preview']
+
+    def file_preview(self, obj):
+        if obj.file:
+            return format_html('<a href="{0}" target="_blank"><img src="{0}" style="max-height: 100px; max-width: 150px;" /></a>', obj.file.url)
+        return "No file"
+    file_preview.short_description = "Preview"
+
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
     list_display = ['student', 'subject', 'get_adviser_display', 'date', 'time', 'status']
     list_filter = ['status', 'date', 'subject', 'subject__adviser']
     search_fields = ['student__name', 'student__rfid_id', 'subject__code', 'subject__adviser__name']
     date_hierarchy = 'date'
+    inlines = [AbsenceEvidenceInline]
     
     def get_queryset(self, request):
         """Filter attendance records so advisers only see their own attendance records"""
@@ -548,14 +561,32 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(Absent)
 class AbsentAdmin(admin.ModelAdmin):
-    list_display = ['student', 'subject', 'get_adviser_display', 'date', 'time_in', 'time_out', 'notes']
+    list_display = ['student', 'subject', 'get_adviser_display', 'date', 'time_in', 'time_out', 'notes', 'evidence_preview']
     list_filter = ['date', 'subject', 'subject__adviser']
     search_fields = ['student__name', 'student__rfid_id', 'subject__code', 'subject__adviser__name']
     date_hierarchy = 'date'
+    inlines = [AbsenceEvidenceInline]
 
     def get_queryset(self, request):
-        qs = super().get_queryset(request).select_related('student', 'subject', 'subject__adviser')
+        qs = super().get_queryset(request).select_related('student', 'subject', 'subject__adviser').prefetch_related('evidences')
         return qs.filter(status='ABSENT')
+
+    def evidence_preview(self, obj):
+        evidences = obj.evidences.all()
+        if not evidences:
+            return "-"
+        
+        html_parts = []
+        for evidence in evidences:
+            if evidence.file:
+                url = evidence.file.url
+                if url.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')):
+                    html_parts.append(f'<a href="{url}" target="_blank"><img src="{url}" style="height: 30px; margin-right: 5px; border: 1px solid #ccc;" /></a>')
+                else:
+                    html_parts.append(f'<a href="{url}" target="_blank" style="margin-right: 5px;">[File]</a>')
+        return format_html("".join(html_parts))
+    
+    evidence_preview.short_description = "Evidence"
 
     def get_adviser_display(self, obj):
         if obj.subject and obj.subject.adviser:
@@ -598,3 +629,18 @@ class SubjectScheduleAdmin(admin.ModelAdmin):
             return dict(SubjectSchedule.DAY_CHOICES).get(obj.day_of_week, 'Unknown')
         return 'N/A'
     get_day_name.short_description = 'Day'
+
+
+@admin.register(CalendarEvent)
+class CalendarEventAdmin(admin.ModelAdmin):
+    list_display = ['title', 'date', 'event_type', 'subject', 'created_by', 'created_at']
+    search_fields = ['title', 'description', 'subject__code', 'subject__name', 'created_by__username']
+    list_filter = ['event_type', 'date', 'subject']
+    date_hierarchy = 'date'
+    readonly_fields = ['created_at', 'created_by']
+    autocomplete_fields = ['subject', 'created_by']
+
+    def save_model(self, request, obj, form, change):
+        if not obj.created_by:
+            obj.created_by = request.user
+        super().save_model(request, obj, form, change)

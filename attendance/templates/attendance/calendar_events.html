@@ -1,0 +1,235 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Calendar Events{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4" id="calendarPage" data-has-events="{{ events|length }}">
+    <div class="row mb-3">
+        <div class="col-md-8">
+            <h1 class="h3 d-flex align-items-center gap-2 mb-1">
+                <i class="bi bi-calendar-event"></i>
+                Calendar Events
+            </h1>
+            <p class="text-muted mb-0">
+                View all configured holidays and events and manage them easily.
+            </p>
+        </div>
+        <div class="col-md-4 text-md-end mt-3 mt-md-0">
+            <button
+                type="button"
+                class="btn btn-primary"
+                data-bs-toggle="modal"
+                data-bs-target="#calendarModal"
+                id="addCalendarBtn"
+            >
+                <i class="bi bi-plus-circle"></i>
+                Add Event / Holiday
+            </button>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <!-- Loading placeholder (shown briefly while the page 'loads') -->
+            <div id="calendarLoading" class="d-none text-center py-4">
+                <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+                <div class="small text-muted mt-2">Loading events...</div>
+            </div>
+
+            <!-- Gentle reminder shown when there are no events -->
+            <div id="calendarReminder" class="alert alert-info d-none d-flex align-items-center justify-content-between" role="alert">
+                <div class="me-3">
+                    <strong>No calendar events yet.</strong>
+                    <div class="small">Create your first event to manage holidays and reminders.</div>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-primary" id="reminderAddBtn">Add Event</button>
+                </div>
+            </div>
+
+            {% if events %}
+                <div class="row g-3">
+                    {% for ev in events %}
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card h-100 border-0 shadow-sm">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title mb-0 text-truncate" title="{{ ev.title }}">{{ ev.title }}</h6>
+                                    {% if ev.event_type == 'holiday' %}
+                                        <span class="badge bg-danger ms-2">Holiday</span>
+                                    {% elif ev.event_type == 'event' %}
+                                        <span class="badge bg-primary ms-2">Event</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary ms-2">{{ ev.get_event_type_display }}</span>
+                                    {% endif %}
+                                </div>
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-calendar"></i> {{ ev.date|date:"M d, Y" }}
+                                        {% if ev.start_time or ev.end_time %}
+                                            <br><i class="bi bi-clock"></i>
+                                            {% if ev.start_time %}{{ ev.start_time|time:"H:i" }}{% endif %}
+                                            {% if ev.end_time %} - {{ ev.end_time|time:"H:i" }}{% endif %}
+                                        {% endif %}
+                                    </small>
+                                </div>
+                                {% if ev.subject %}
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-book"></i> {{ ev.subject.code }} - {{ ev.subject.name }}
+                                    </small>
+                                </div>
+                                {% else %}
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-globe"></i> Global
+                                    </small>
+                                </div>
+                                {% endif %}
+                                <p class="card-text flex-grow-1">
+                                    {% if ev.description %}
+                                        {{ ev.description|truncatechars:100 }}
+                                    {% else %}
+                                        <span class="text-muted">No description</span>
+                                    {% endif %}
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center mt-auto">
+                                    <small class="text-muted">
+                                        {% if ev.created_by %}
+                                            By {{ ev.created_by.username }}
+                                        {% else %}
+                                            System
+                                        {% endif %}
+                                    </small>
+                                    <button
+                                        type="button"
+                                        class="btn btn-outline-danger btn-sm js-delete-event"
+                                        data-event-id="{{ ev.id }}"
+                                        title="Delete this event"
+                                    >
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>
+                    <p class="mt-3 mb-0">No calendar events found.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function() {
+        function getCSRFToken() {
+            const name = 'csrftoken=';
+            const decoded = decodeURIComponent(document.cookie || '');
+            const parts = decoded.split(';');
+            for (let p of parts) {
+                p = p.trim();
+                if (p.indexOf(name) === 0) return p.substring(name.length);
+            }
+            return '';
+        }
+
+        async function deleteEvent(id) {
+            if (!id) return;
+            if (!window.confirm('Delete this event?')) return;
+            try {
+                const resp = await fetch(`/events/${id}/delete/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCSRFToken() }
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data && data.success) {
+                    if (window.showNotification) {
+                        window.showNotification('Event deleted', 'success');
+                    }
+                    window.location.reload();
+                } else {
+                    const msg = (data && data.error) ? data.error : 'Failed to delete event';
+                    if (window.showNotification) {
+                        window.showNotification(msg, 'error');
+                    } else {
+                        alert(msg);
+                    }
+                }
+            } catch (e) {
+                if (window.showNotification) {
+                    window.showNotification('Failed to delete event', 'error');
+                } else {
+                    alert('Failed to delete event');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.js-delete-event').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const id = this.getAttribute('data-event-id');
+                    deleteEvent(id);
+                });
+            });
+
+            // Show a short loading state, then show a reminder if there are no events
+            const pageEl = document.getElementById('calendarPage');
+            const loadingEl = document.getElementById('calendarLoading');
+            const reminderEl = document.getElementById('calendarReminder');
+            const addBtn = document.getElementById('addCalendarBtn');
+            const reminderAddBtn = document.getElementById('reminderAddBtn');
+
+            function showLoader() {
+                if (loadingEl) loadingEl.classList.remove('d-none');
+                if (reminderEl) reminderEl.classList.add('d-none');
+            }
+            function hideLoader() {
+                if (loadingEl) loadingEl.classList.add('d-none');
+            }
+
+            // Trigger a short loading animation so the user knows data is being checked
+            showLoader();
+            setTimeout(function() {
+                hideLoader();
+                const hasEvents = pageEl && parseInt(pageEl.getAttribute('data-has-events') || '0', 10) > 0;
+                if (!hasEvents) {
+                    // Show the gentle reminder and make the Add button pulse to draw attention
+                    if (reminderEl) reminderEl.classList.remove('d-none');
+                    if (addBtn) addBtn.classList.add('pulse-button');
+
+                    // Optionally show a toast-style notification as a reminder
+                    if (window.showNotification) {
+                        window.showNotification('No calendar events yet — create your first event', 'info');
+                    }
+                }
+            }, 700);
+
+            if (reminderAddBtn) {
+                reminderAddBtn.addEventListener('click', function() {
+                    // Open the modal for creating events
+                    const modalEl = document.getElementById('calendarModal');
+                    if (modalEl && modalEl._bsModal) {
+                        modalEl._bsModal.show();
+                    } else if (modalEl && typeof bootstrap !== 'undefined') {
+                        const m = new bootstrap.Modal(modalEl); m.show();
+                    }
+                });
+            }
+
+            // Remove pulse after user opens modal
+            if (addBtn) {
+                addBtn.addEventListener('click', function() {
+                    addBtn.classList.remove('pulse-button');
+                });
+            }
+        });
+    })();
+</script>
+{% endblock %}

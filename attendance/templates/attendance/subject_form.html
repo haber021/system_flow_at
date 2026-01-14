@@ -85,6 +85,15 @@
                         </select>
                         <small class="text-muted">Select a course this subject belongs to. Leave blank for general subjects.</small>
                     </div>
+                    <div class="mb-3">
+                        <label for="semester" class="form-label">Semester</label>
+                        <select class="form-select" id="semester" name="semester" required>
+                            <option value="1st Semester" {% if subject.semester|default:'1st Semester' == '1st Semester' %}selected{% endif %}>1st Semester</option>
+                            <option value="2nd Semester" {% if subject.semester == '2nd Semester' %}selected{% endif %}>2nd Semester</option>
+                            <option value="Summer" {% if subject.semester == 'Summer' %}selected{% endif %}>Summer</option>
+                        </select>
+                        <small class="text-muted">Select the semester this subject is offered.</small>
+                    </div>
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="course_code" class="form-label">Course Code (Optional)</label>

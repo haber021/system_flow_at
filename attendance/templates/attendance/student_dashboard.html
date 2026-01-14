@@ -460,6 +460,52 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <script>
+    // Inject calendar events into attendance rows by date
+    (function(){
+        async function getEvents() {
+            try {
+                const resp = await fetch('/events/list/');
+                if (!resp.ok) return [];
+                const data = await resp.json();
+                if (data && data.success && Array.isArray(data.events)) return data.events;
+            } catch (e) {}
+            return [];
+        }
+
+        function renderBadges(events) {
+            const map = {};
+            events.forEach(ev => {
+                if (!ev.date) return;
+                map[ev.date] = map[ev.date] || [];
+                map[ev.date].push(ev);
+            });
+
+            document.querySelectorAll('tr[data-att-date]').forEach(function(row){
+                const d = row.getAttribute('data-att-date');
+                const cell = row.querySelector('.attendance-events-cell');
+                if (!cell) return;
+                cell.innerHTML = '';
+                const todays = map[d] || [];
+                todays.forEach(ev => {
+                    const span = document.createElement('span');
+                    span.className = 'badge bg-secondary me-1';
+                    span.title = ev.description || '';
+                    span.textContent = ev.title || (ev.type || 'Event');
+                    cell.appendChild(span);
+                });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async function(){
+            const evs = await getEvents();
+            renderBadges(evs);
+        });
+    })();
+    </script>
+        </div>
         <a href="{% url 'student_enroll_subjects' %}" class="header-action-btn">
             <i class="bi bi-book-plus me-2"></i>Enroll in Subjects
         </a>
@@ -675,6 +721,7 @@
                                 <th>Date</th>
                                 <th>Subject Code</th>
                                 <th>Subject Name</th>
+                                <th class="text-center">Events</th>
                                 <th class="text-center">Time In</th>
                                 <th class="text-center">Time Out</th>
                                 <th class="text-center">Status</th>
@@ -683,7 +730,7 @@
                         <tbody>
                             {% for item in today_attendances %}
                             {% with attendance=item.attendance %}
-                            <tr>
+                            <tr data-att-date="{{ attendance.date|date:'Y-m-d' }}">
                                 <td>
                                     <div class="date-display">
                                         <strong>{{ attendance.date|date:"M d, Y" }}</strong>
@@ -692,6 +739,9 @@
                                 </td>
                                 <td><strong>{{ attendance.subject.code }}</strong></td>
                                 <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center attendance-events-cell">
+                                    <!-- events will be injected here -->
+                                </td>
                                 <td class="text-center">
                                     {% if item.time_in_formatted %}
                                         <span class="badge bg-success">
@@ -755,6 +805,7 @@
                                 <th>Date</th>
                                 <th>Subject Code</th>
                                 <th>Subject Name</th>
+                                <th class="text-center">Events</th>
                                 <th class="text-center">Time In</th>
                                 <th class="text-center">Time Out</th>
                                 <th class="text-center">Status</th>
@@ -763,7 +814,7 @@
                         <tbody>
                             {% for item in yesterday_attendances %}
                             {% with attendance=item.attendance %}
-                            <tr>
+                            <tr data-att-date="{{ attendance.date|date:'Y-m-d' }}">
                                 <td>
                                     <div class="date-display">
                                         <strong>{{ attendance.date|date:"M d, Y" }}</strong>
@@ -772,6 +823,9 @@
                                 </td>
                                 <td><strong>{{ attendance.subject.code }}</strong></td>
                                 <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center attendance-events-cell">
+                                    <!-- events will be injected here -->
+                                </td>
                                 <td class="text-center">
                                     {% if item.time_in_formatted %}
                                         <span class="badge bg-success">
@@ -835,6 +889,7 @@
                                 <th>Date</th>
                                 <th>Subject Code</th>
                                 <th>Subject Name</th>
+                                <th class="text-center">Events</th>
                                 <th class="text-center">Time In</th>
                                 <th class="text-center">Time Out</th>
                                 <th class="text-center">Status</th>
@@ -843,7 +898,7 @@
                         <tbody>
                             {% for item in past_week_attendances %}
                             {% with attendance=item.attendance %}
-                            <tr>
+                            <tr data-att-date="{{ attendance.date|date:'Y-m-d' }}">
                                 <td>
                                     <div class="date-display">
                                         <strong>{{ attendance.date|date:"M d, Y" }}</strong>
@@ -852,6 +907,9 @@
                                 </td>
                                 <td><strong>{{ attendance.subject.code }}</strong></td>
                                 <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center attendance-events-cell">
+                                    <!-- events will be injected here -->
+                                </td>
                                 <td class="text-center">
                                     {% if item.time_in_formatted %}
                                         <span class="badge bg-success">
@@ -912,6 +970,7 @@
                                 <th>Date</th>
                                 <th>Subject Code</th>
                                 <th>Subject Name</th>
+                                <th class="text-center">Events</th>
                                 <th class="text-center">Time In</th>
                                 <th class="text-center">Time Out</th>
                                 <th class="text-center">Status</th>
@@ -920,7 +979,7 @@
                         <tbody>
                             {% for item in recent_attendances %}
                             {% with attendance=item.attendance %}
-                            <tr>
+                            <tr data-att-date="{{ attendance.date|date:'Y-m-d' }}">
                                 <td>
                                     <div class="date-display">
                                         <strong>{{ attendance.date|date:"M d, Y" }}</strong>
@@ -929,6 +988,9 @@
                                 </td>
                                 <td><strong>{{ attendance.subject.code }}</strong></td>
                                 <td>{{ attendance.subject.name }}</td>
+                                <td class="text-center attendance-events-cell">
+                                    <!-- events will be injected here -->
+                                </td>
                                 <td class="text-center">
                                     {% if item.time_in_formatted %}
                                         <span class="badge bg-success">

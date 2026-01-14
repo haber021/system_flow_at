@@ -1,0 +1,283 @@
+{% extends "attendance/base.html" %}
+
+{% block title %}Absent Students - Adviser{% endblock %}
+
+{% block extra_css %}
+<style>
+        .page-header {
+        background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+        color: white;
+        padding: 2rem;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+
+    .page-header h2 {
+        font-size: 1.75rem;
+        font-weight: 600;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .filter-card {
+        border: none;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        margin-bottom: 2rem;
+    }
+    
+    .card-header {
+        background: #f8fafc;
+        border-bottom: 1px solid #e5e7eb;
+        padding: 1rem 1.5rem;
+        border-radius: 12px 12px 0 0;
+        font-weight: 600;
+        color: #374151;
+    }
+    
+    .card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+    
+    .table > thead > tr > th {
+        background-color: #f8fafc;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        color: #64748b;
+        padding: 1rem 1.5rem;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .table > tbody > tr > td {
+        padding: 1rem 1.5rem;
+        vertical-align: middle;
+        color: #334155;
+    }
+    
+    .student-info {
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .student-name {
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .student-meta {
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+    
+    .evidence-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.25rem 0.75rem;
+        background-color: #f1f5f9;
+        border-radius: 6px;
+        color: #475569;
+        text-decoration: none;
+        font-size: 0.85rem;
+        transition: all 0.2s;
+    }
+    
+    .evidence-link:hover {
+        background-color: #e2e8f0;
+        color: #1e293b;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+    }
+
+    .empty-state .bi {
+        font-size: 3rem;
+        color: #cbd5e1;
+        margin-bottom: 1rem;
+    }
+
+    .pagination .page-item .page-link {
+        border-radius: 0.5rem;
+        margin: 0 0.25rem;
+        border: none;
+        color: #475569;
+    }
+
+    .pagination .page-item.active .page-link {
+        background-color: #ef4444;
+        border-color: #ef4444;
+        color: white;
+    }
+
+    .pagination .page-item.disabled .page-link {
+        color: #9ca3af;
+    }
+    </style>
+    {% endblock %}
+    
+    {% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <h2>
+        <i class="bi bi-person-x-fill"></i>
+        Absent Students Monitor
+    </h2>
+    <p class="mb-0 opacity-75">Track and review student absences and justifications across your subjects.</p>
+</div>
+    
+<!-- Filter Section -->
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-funnel"></i> Filter Absences
+    </div>
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Subject</label>
+                <select name="subject_id" class="form-select">
+                    <option value="">All Subjects</option>
+                    {% for subject in subjects %}
+                        <option value="{{ subject.id }}" {% if subject_id and subject_id|add:"" == subject.id|add:"" %}selected{% endif %}>{{ subject.code }} - {{ subject.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Date Range</label>
+                <div class="input-group">
+                    <input type="date" name="date_from" value="{{ date_from }}" class="form-control" placeholder="From">
+                    <span class="input-group-text bg-light border-start-0 border-end-0">to</span>
+                    <input type="date" name="date_to" value="{{ date_to }}" class="form-control" placeholder="To">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Search Student</label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-search text-muted"></i></span>
+                    <input type="text" name="student_q" class="form-control" placeholder="Name, ID, or Email" value="{{ student_q }}">
+                </div>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button class="btn btn-primary w-100">
+                    Apply Filters
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+    
+<!-- Absences Table -->
+<div class="card">
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Student Details</th>
+                    <th>Subject</th>
+                    <th>Reason / Justification</th>
+                    <th>Evidence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for att in absences %}
+                <tr>
+                    <td>
+                        <div class="fw-semibold text-dark">{{ att.date|date:"M d, Y" }}</div>
+                        <small class="text-muted">{{ att.date|date:"l" }}</small>
+                    </td>
+                    <td>
+                        <div class="student-info">
+                            <span class="student-name">{{ att.student.name }}</span>
+                            <span class="student-meta">
+                                <i class="bi bi-card-heading"></i> {{ att.student.student_id|default:"N/A" }}
+                            </span>
+                            <span class="student-meta">
+                                <i class="bi bi-envelope"></i> {{ att.student.email }}
+                            </span>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="fw-medium text-primary">{{ att.subject.code }}</div>
+                        <small class="text-muted">{{ att.subject.name }}</small>
+                    </td>
+                    <td>
+                        {% if att.reason %}
+                            <div class="p-2 bg-light rounded border border-light">
+                                <small class="text-dark fst-italic">"{{ att.reason }}"</small>
+                            </div>
+                        {% else %}
+                            <span class="text-muted small">No justification provided</span>
+                        {% endif %}
+                        {% if att.notes %}
+                            <div class="mt-1">
+                                <small class="text-muted"><i class="bi bi-sticky"></i> Note: {{ att.notes }}</small>
+                            </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if att.evidences.exists %}
+                            <div class="d-flex flex-column gap-2">
+                                {% for evidence in att.evidences.all %}
+                                    <a href="{{ evidence.file.url }}" target="_blank" class="evidence-link">
+                                        <i class="bi bi-paperclip"></i> View File {{ forloop.counter }}
+                                    </a>
+                                {% endfor %}
+                            </div>
+                        {% else %}
+                            <span class="text-muted small">-</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5">
+                        <div class="empty-state">
+                            <i class="bi bi-check-circle"></i>
+                            <h5>No Absences Found</h5>
+                            <p class="text-muted">There are no absent students matching your criteria.</p>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+    </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if absences.has_other_pages %}
+    <div class="card-footer bg-white border-top-0 py-3">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                {% if absences.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ absences.previous_page_number }}&subject_id={{ subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}&student_q={{ student_q }}">Previous</a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                {% endif %}
+
+                <li class="page-item active" aria-current="page"><span class="page-link">Page {{ absences.number }} of {{ absences.paginator.num_pages }}</span></li>
+
+                {% if absences.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ absences.next_page_number }}&subject_id={{ subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}&student_q={{ student_q }}">Next</a>
+                    </li>
+                {% else %}
+                    <li class="page-item disabled"><span class="page-link">Next</span></li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+    </div>
+    {% endblock %}

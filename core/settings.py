@@ -133,3 +133,11 @@ EMAIL_TIMEOUT = int(os.environ.get('MAIL_TIMEOUT', '10'))  # avoid long hangs th
 EMAIL_HOST_USER = os.environ.get('MAIL_USERNAME', 'habervincent21@gmail.com')
 EMAIL_HOST_PASSWORD = os.environ.get('MAIL_PASSWORD', 'nvli tbsz atiz mqwc')
 DEFAULT_FROM_EMAIL = os.environ.get('MAIL_DEFAULT_SENDER', 'DMMMSU ATTENDANCE MONITOR <habervincent21@gmail.com>')
+
+# Optional: list of remote endpoints to replicate/forward attendance payloads to.
+# Provide as a comma-separated list in env: ATTENDANCE_SAVE_HOSTS=https://host1/save,https://host2/save
+ATTENDANCE_SAVE_HOSTS = [h.strip() for h in os.environ.get('ATTENDANCE_SAVE_HOSTS', '').split(',') if h.strip()]
+# Mode: 'replicate' (save locally AND forward asynchronously) or 'forward_only' (forward-only behavior)
+ATTENDANCE_SAVE_MODE = os.environ.get('ATTENDANCE_SAVE_MODE', 'replicate')
+# Timeout in seconds for forwarding HTTP requests (used by async forwarder)
+ATTENDANCE_FORWARD_TIMEOUT = int(os.environ.get('ATTENDANCE_FORWARD_TIMEOUT', '2'))

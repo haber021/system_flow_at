@@ -13,11 +13,19 @@
         <form method="GET" action="{% url 'student_summary' %}" class="row g-3">
             <div class="col-md-5">
                 <label for="academic_year" class="form-label">Academic Year:</label>
-                <input type="text" class="form-control" id="academic_year" name="academic_year" value="{{ academic_year }}" placeholder="e.g., 2025-2026">
+                <select class="form-select" id="academic_year" name="academic_year">
+                    {% for ay in academic_years %}
+                        <option value="{{ ay }}" {% if ay == academic_year %}selected{% endif %}>{{ ay }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-5">
                 <label for="semester" class="form-label">Semester:</label>
-                <input type="text" class="form-control" id="semester" name="semester" value="{{ semester }}" placeholder="e.g., 1st Semester">
+                <select class="form-select" id="semester" name="semester">
+                    {% for s in semesters %}
+                        <option value="{{ s }}" {% if s == semester %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div class="col-md-2">
                 <label class="form-label">&nbsp;</label>
@@ -25,6 +33,14 @@
                     <i class="bi bi-search"></i> Filter
                 </button>
             </div>
+        </form>
+        <form method="POST" action="{% url 'send_student_summary_pdf_to_adviser' %}" class="mt-3">
+            {% csrf_token %}
+            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+            <input type="hidden" name="semester" value="{{ semester }}">
+            <button type="submit" class="btn btn-outline-danger">
+                <i class="bi bi-filetype-pdf"></i> Send Summary PDF to Adviser
+            </button>
         </form>
     </div>
 </div>
@@ -104,6 +120,7 @@
                                 <th>#</th>
                                 <th>Student</th>
                                 <th>Course</th>
+                                <th>Absences</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -128,6 +145,9 @@
                                 </td>
                                 <td>
                                     <span class="badge bg-secondary">{{ student_item.student.course.code }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-danger">{{ student_item.absent_count|default:0 }}</span>
                                 </td>
                                 <td>
                                     <a href="{% url 'email_preview' student_item.student.id %}?academic_year={{ academic_year }}&semester={{ semester }}" 
