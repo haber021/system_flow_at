@@ -3,48 +3,244 @@
 {% block title %}Student Login - RFID Attendance System{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
-    <div class="col-md-4">
-        <div class="card shadow">
-            <div class="card-header bg-success text-white text-center">
-                <h4 class="mb-0">
-                    <i class="bi bi-credit-card"></i><br>
-                    Student Login
-                </h4>
-                <small>Login with your RFID ID</small>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{% url 'student_login' %}">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="rfid_id" class="form-label">
-                            <i class="bi bi-credit-card"></i> RFID ID:
-                        </label>
-                        <input type="text" class="form-control" id="rfid_id" name="rfid_id" 
-                               placeholder="Scan or enter your RFID ID" required autofocus>
-                        <small class="form-text text-muted">Enter your RFID card ID to access your attendance records.</small>
-                    </div>
-                    <button type="submit" class="btn btn-success w-100 mb-2">
-                        <i class="bi bi-box-arrow-in-right"></i> LOGIN
-                    </button>
-                    <div class="text-center mb-2">
-                        <small class="text-muted">
-                            Don't have an account? 
-                            <a href="{% url 'student_register' %}" class="text-decoration-none">Register here</a>
-                        </small>
-                    </div>
-                    <div class="text-center">
-                        <small class="text-muted">Need help? Contact your administrator.</small>
-                    </div>
-                </form>
-            </div>
-            <div class="card-footer text-center">
-                <small class="text-muted">
-                    <a href="{% url 'login' %}" class="text-decoration-none">Staff/Admin Login</a>
-                </small>
-            </div>
+<style>
+    .login-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #059669 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    .login-card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 420px;
+        overflow: hidden;
+    }
+
+    .login-header {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        padding: 40px 30px;
+        text-align: center;
+        color: white;
+    }
+
+    .login-header-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        display: block;
+    }
+
+    .login-header h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: -0.02em;
+    }
+
+    .login-header p {
+        font-size: 14px;
+        margin: 8px 0 0 0;
+        opacity: 0.9;
+        font-weight: 500;
+    }
+
+    .login-body {
+        padding: 40px;
+    }
+
+    .form-group {
+        margin-bottom: 24px;
+    }
+
+    .form-label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 10px;
+        letter-spacing: -0.01em;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 15px;
+        transition: all 0.3s ease;
+        background-color: #f8fafc;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #059669;
+        background-color: white;
+        box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    }
+
+    .form-help {
+        font-size: 13px;
+        color: #64748b;
+        margin-top: 8px;
+        line-height: 1.5;
+    }
+
+    .login-button {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        letter-spacing: -0.01em;
+    }
+
+    .login-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(5, 150, 105, 0.3);
+    }
+
+    .login-button:active {
+        transform: translateY(0);
+    }
+
+    .login-footer {
+        padding: 24px 40px;
+        background-color: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        text-align: center;
+    }
+
+    .footer-link {
+        display: inline-block;
+        font-size: 14px;
+        color: #059669;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.3s ease;
+        margin: 8px 0;
+    }
+
+    .footer-link:hover {
+        color: #047857;
+        text-decoration: underline;
+    }
+
+    .divider {
+        margin: 16px 0;
+        text-align: center;
+        font-size: 13px;
+        color: #94a3b8;
+    }
+
+    .support-text {
+        font-size: 13px;
+        color: #64748b;
+        margin-top: 12px;
+        line-height: 1.5;
+    }
+</style>
+
+<div class="login-container">
+    <div class="login-card">
+        <div class="login-header">
+            <span class="login-header-icon">
+                <i class="bi bi-credit-card"></i>
+            </span>
+            <h1>Welcome Back</h1>
+            <p>Attendance Management System</p>
         </div>
+
+        <form method="POST" action="{% url 'student_login' %}" id="student-login-form">
+            <div class="login-body">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label for="rfid_id" class="form-label">
+                        <i class="bi bi-credit-card"></i> RFID ID
+                    </label>
+                    <input 
+                        type="text" 
+                        class="form-control" 
+                        id="rfid_id" 
+                        name="rfid_id" 
+                        placeholder="Scan your card or enter ID" 
+                        required 
+                        autofocus 
+                        autocomplete="off" 
+                        inputmode="numeric">
+                    <div class="form-help">
+                        <i class="bi bi-info-circle"></i> Scan your RFID card or enter your card ID to access your attendance records
+                    </div>
+                </div>
+
+                <button type="submit" class="login-button">
+                    <i class="bi bi-box-arrow-in-right"></i> Sign In
+                </button>
+            </div>
+
+            <div class="login-footer">
+                <div class="support-text">
+                    <strong>New to the system?</strong><br>
+                    <a href="{% url 'student_register' %}" class="footer-link">Create your account</a>
+                </div>
+                
+                <div class="divider">or</div>
+
+                <a href="{% url 'login' %}" class="footer-link">
+                    <i class="bi bi-shield-lock"></i> Staff/Admin Login
+                </a>
+
+                <div class="support-text" style="margin-top: 16px;">
+                    <i class="bi bi-question-circle"></i> 
+                    <a href="#" class="footer-link" onclick="alert('Contact your administrator for assistance'); return false;">Need help?</a>
+                </div>
+            </div>
+        </form>
     </div>
 </div>
+<script>
+    (function() {
+        const REQUIRED_LENGTH = 10; // Auto-submit when 10 digits are entered
+        const form = document.getElementById('student-login-form');
+        const input = document.getElementById('rfid_id');
+        let submitted = false;
+
+        function trySubmit(value) {
+            if (submitted) return;
+            const digits = (value || '').replace(/\D+/g, '');
+            if (digits.length === REQUIRED_LENGTH) {
+                // Keep only digits in the field to avoid backend surprises
+                input.value = digits;
+                submitted = true;
+                form.submit();
+            }
+        }
+
+        // Handle typing/scanner input
+        input.addEventListener('input', (e) => {
+            trySubmit(e.target.value);
+        });
+
+        // Handle paste
+        input.addEventListener('paste', (e) => {
+            // Give the input time to receive pasted value
+            setTimeout(() => trySubmit(input.value), 0);
+        });
+
+        // Focus input on load (in case autofocus is ignored)
+        window.addEventListener('load', () => {
+            input && input.focus && input.focus();
+        });
+    })();
+    </script>
 {% endblock %}
 

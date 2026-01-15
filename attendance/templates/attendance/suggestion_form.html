@@ -1,0 +1,187 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}Suggest a Feature{% endblock %}
+
+{% block content %}
+<style>
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(2px);
+        z-index: 9999;
+        display: none;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+        transition: opacity 0.3s ease;
+    }
+    .loading-overlay.active { display: flex; }
+    .loading-spinner {
+        width: 60px; height: 60px; border: 5px solid #e3e3e3; border-top: 5px solid #2563eb; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .loading-message { font-size: 18px; font-weight: 500; color: #2563eb; text-align: center; }
+    .loading-submessage { font-size: 14px; color: #6b7280; margin-top: 10px; text-align: center; }
+    .loading-content { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.08); text-align: center; min-width: 280px; }
+</style>
+
+<!-- Loading Overlay for Suggestion Submission -->
+<div class="loading-overlay" id="suggestionLoadingOverlay">
+    <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-message">Submitting Suggestion...</div>
+        <div class="loading-submessage">Please wait while we submit your feedback</div>
+    </div>
+</div>
+
+<div class="page-header">
+    <h2>
+        <i class="bi bi-lightbulb-fill me-2"></i>Suggest a Feature
+    </h2>
+    <div class="student-info">
+        <div>
+            <i class="bi bi-person-fill"></i>
+            <span>Submit a suggestion or feedback to improve the system</span>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card content-card">
+            <div class="card-body">
+                <form method="post" id="suggestionForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label class="form-label">Title</label>
+                        {{ suggestion_form.title }}
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        {{ suggestion_form.description }}
+                    </div>
+                    <button type="submit" class="btn btn-primary" id="submitSuggestionButton">
+                        <span id="submitSuggestionText">
+                            <i class="bi bi-send"></i> Submit Suggestion
+                        </span>
+                        <span id="submitSuggestionLoading" style="display: none;">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Submitting...
+                        </span>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="mt-4 card">
+            <div class="card-header">
+                <h5 class="mb-0">Your Suggestions</h5>
+            </div>
+            <div class="card-body">
+                {% if suggestions %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Title</th>
+                                <th>Status</th>
+                                <th>Submitted</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for s in suggestions %}
+                            <tr>
+                                <td>{{ s.title }}</td>
+                                <td><span class="badge {% if s.status == 'NEW' %}bg-secondary{% elif s.status == 'REVIEWED' %}bg-info{% elif s.status == 'IMPLEMENTED' %}bg-success{% elif s.status == 'REJECTED' %}bg-danger{% endif %}">{{ s.get_status_display }}</span></td>
+                                <td>{{ s.created_at|date:"M d, Y" }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <i class="bi bi-lightbulb"></i>
+                    <h6>No Suggestions Yet</h6>
+                    <p>You haven't submitted any feature suggestions yet.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card content-card">
+            <div class="card-body">
+                <h6>Tips for Good Suggestions</h6>
+                <ul>
+                    <li>Be specific about the feature and how it helps</li>
+                    <li>Include steps or examples if possible</li>
+                    <li>Keep suggestions concise</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        const suggestionForm = document.getElementById('suggestionForm');
+        const overlay = document.getElementById('suggestionLoadingOverlay');
+        const submitButton = document.getElementById('submitSuggestionButton');
+        const submitText = document.getElementById('submitSuggestionText');
+        const submitLoading = document.getElementById('submitSuggestionLoading');
+        let isSubmitting = false;
+
+        if (!suggestionForm) return;
+
+        suggestionForm.addEventListener('submit', function(e){
+            if (isSubmitting) {
+                e.preventDefault();
+                return false;
+            }
+
+            // Let browser run required-field validation first
+            if (!suggestionForm.checkValidity()) {
+                // If invalid, allow browser to show validation UI
+                return true;
+            }
+
+            isSubmitting = true;
+            // Show overlay and update button
+            if (overlay) overlay.classList.add('active');
+            if (submitText) submitText.style.display = 'none';
+            if (submitLoading) submitLoading.style.display = 'inline';
+            if (submitButton) submitButton.disabled = true;
+
+            // Small UX polish: update overlay message after a short delay
+            const loadingMessage = overlay ? overlay.querySelector('.loading-message') : null;
+            const loadingSubmessage = overlay ? overlay.querySelector('.loading-submessage') : null;
+            setTimeout(() => {
+                if (loadingMessage) loadingMessage.textContent = 'Validating suggestion...';
+            }, 400);
+            setTimeout(() => {
+                if (loadingMessage) loadingMessage.textContent = 'Submitting suggestion...';
+                if (loadingSubmessage) loadingSubmessage.textContent = 'Thank you for your feedback';
+            }, 1200);
+            // Allow form to submit normally (page reload/redirect will clear overlay)
+        });
+
+        // Reset overlay/button state when navigating back (pageshow)
+        window.addEventListener('pageshow', function(event){
+            if (event.persisted) {
+                isSubmitting = false;
+                if (overlay) overlay.classList.remove('active');
+                if (submitButton) submitButton.disabled = false;
+                if (submitText) submitText.style.display = 'inline';
+                if (submitLoading) submitLoading.style.display = 'none';
+            }
+        });
+    })();
+</script>
+
+{% endblock %}

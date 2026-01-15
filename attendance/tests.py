@@ -1,7 +1,24 @@
 from django.test import TestCase, RequestFactory
 from django.contrib.auth.models import User
-from .models import Adviser, Instructor, Student, Subject, StudentSubject, Course, Section
+from .models import Adviser, Instructor, Student, Subject, StudentSubject, Course, Section, FeatureSuggestion
 from .views import filter_subjects_by_user
+
+from django.test import Client
+
+
+class FeatureSuggestionTest(TestCase):
+    def setUp(self):
+        self.student_user = User.objects.create_user(username='student2', password='password', email='student2@example.com')
+        self.course = Course.objects.create(code='BSIT', name='Bachelor of Science in IT')
+        self.section = Section.objects.create(code='S1', name='Section 1')
+        self.student = Student.objects.create(user=self.student_user, name='Feature Student', course=self.course, section=self.section, email='student2@example.com')
+        self.client = Client()
+
+    def test_student_can_submit_feature_suggestion(self):
+        self.client.login(username='student2', password='password')
+        response = self.client.post('/student/suggest/', {'title': 'Improve UI', 'description': 'Please add dark mode.'}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(FeatureSuggestion.objects.filter(student=self.student, title='Improve UI').exists())
 
 class SubjectFilterTest(TestCase):
     def setUp(self):
@@ -20,7 +37,7 @@ class SubjectFilterTest(TestCase):
 
 
         # Create instructor and assign to adviser
-        self.instructor = Instructor.objects.create(user=self.instructor_user, name='Mr. Instructor', adviser=self.adviser)
+        self.instructor = Instructor.objects.create(name='Mr. Instructor', adviser=self.adviser)
 
         # Create student
         self.student = Student.objects.create(
@@ -48,7 +65,8 @@ class SubjectFilterTest(TestCase):
         )
 
         # Create a subject where the adviser's student is enrolled
-        self.other_instructor = Instructor.objects.create(name='Other Instructor')
+        self.other_adviser = Adviser.objects.create(name='Other Adviser', email='other@example.com')
+        self.other_instructor = Instructor.objects.create(name='Other Instructor', adviser=self.other_adviser)
         self.subject_with_student = Subject.objects.create(
             code='MATH101',
             name='Mathematics 101',

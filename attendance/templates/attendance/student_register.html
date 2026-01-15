@@ -4,14 +4,215 @@
 
 {% block content %}
 <style>
+    .register-container {
+        min-height: 100vh;
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #2563eb 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 40px 20px;
+    }
+
+    .register-card {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        width: 100%;
+        max-width: 700px;
+        overflow: hidden;
+    }
+
+    .register-header {
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        padding: 40px 30px;
+        text-align: center;
+        color: white;
+    }
+
+    .register-header-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        display: block;
+    }
+
+    .register-header h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: -0.02em;
+    }
+
+    .register-header p {
+        font-size: 14px;
+        margin: 8px 0 0 0;
+        opacity: 0.9;
+        font-weight: 500;
+    }
+
+    .register-body {
+        padding: 40px;
+    }
+
+    .form-section-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1e293b;
+        margin: 24px 0 16px 0;
+        padding-bottom: 8px;
+        border-bottom: 2px solid #e2e8f0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-size: 13px;
+    }
+
+    .form-section-title:first-child {
+        margin-top: 0;
+    }
+
+    .form-group {
+        margin-bottom: 20px;
+    }
+
+    .form-label {
+        display: block;
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 8px;
+        letter-spacing: -0.01em;
+    }
+
+    .form-label .text-danger {
+        color: #dc2626;
+    }
+
+    .form-control, .form-select {
+        width: 100%;
+        padding: 10px 14px;
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        background-color: #f8fafc;
+    }
+
+    .form-control:focus, .form-select:focus {
+        outline: none;
+        border-color: #2563eb;
+        background-color: white;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+
+    .form-control.is-valid {
+        border-color: #10b981;
+        background-color: #f0fdf4;
+    }
+
+    .form-control.is-invalid {
+        border-color: #ef4444;
+        background-color: #fef2f2;
+    }
+
+    .form-help {
+        font-size: 12px;
+        color: #64748b;
+        margin-top: 6px;
+        line-height: 1.4;
+    }
+
+    .register-button {
+        width: 100%;
+        padding: 12px;
+        background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        letter-spacing: -0.01em;
+        margin-top: 24px;
+    }
+
+    .register-button:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+    }
+
+    .register-button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    .register-button:active:not(:disabled) {
+        transform: translateY(0);
+    }
+
+    .register-footer {
+        padding: 24px 40px;
+        background-color: #f8fafc;
+        border-top: 1px solid #e2e8f0;
+        text-align: center;
+    }
+
+    .footer-link {
+        display: inline-block;
+        font-size: 14px;
+        color: #2563eb;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.3s ease;
+        margin: 4px 0;
+    }
+
+    .footer-link:hover {
+        color: #1e40af;
+        text-decoration: underline;
+    }
+
+    .divider {
+        margin: 12px 0;
+        text-align: center;
+        font-size: 13px;
+        color: #94a3b8;
+    }
+
+    .form-check {
+        display: flex;
+        align-items: center;
+        margin: 20px 0;
+    }
+
+    .form-check-input {
+        width: 18px;
+        height: 18px;
+        margin-right: 8px;
+        cursor: pointer;
+        border: 2px solid #cbd5e1;
+        border-radius: 4px;
+    }
+
+    .form-check-input:checked {
+        background-color: #2563eb;
+        border-color: #2563eb;
+    }
+
+    .form-check-label {
+        font-size: 14px;
+        color: #334155;
+        cursor: pointer;
+        user-select: none;
+    }
+
     .loading-overlay {
         position: fixed;
         top: 0;
         left: 0;
         width: 100%;
         height: 100%;
-        background-color: rgba(255, 255, 255, 0.85);
-        backdrop-filter: blur(2px);
+        background-color: rgba(15, 23, 42, 0.9);
+        backdrop-filter: blur(4px);
         z-index: 9999;
         display: none;
         justify-content: center;
@@ -27,7 +228,7 @@
     .loading-spinner {
         width: 60px;
         height: 60px;
-        border: 5px solid #e3e3e3;
+        border: 5px solid rgba(255, 255, 255, 0.2);
         border-top: 5px solid #2563eb;
         border-radius: 50%;
         animation: spin 1s linear infinite;
@@ -41,14 +242,14 @@
     
     .loading-message {
         font-size: 18px;
-        font-weight: 500;
-        color: #2563eb;
+        font-weight: 600;
+        color: white;
         text-align: center;
     }
     
     .loading-submessage {
         font-size: 14px;
-        color: #6b7280;
+        color: rgba(255, 255, 255, 0.7);
         margin-top: 10px;
         text-align: center;
     }
@@ -56,10 +257,33 @@
     .loading-content {
         background: white;
         padding: 40px;
-        border-radius: 12px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        border-radius: 16px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
         text-align: center;
         min-width: 300px;
+    }
+
+    .loading-content .loading-spinner {
+        border: 5px solid #e2e8f0;
+        border-top: 5px solid #2563eb;
+    }
+
+    .loading-content .loading-message {
+        color: #1e293b;
+    }
+
+    .loading-content .loading-submessage {
+        color: #64748b;
+    }
+
+    @media (max-width: 768px) {
+        .register-body {
+            padding: 24px;
+        }
+
+        .register-header {
+            padding: 30px 20px;
+        }
     }
 </style>
 
@@ -72,175 +296,251 @@
     </div>
 </div>
 
-<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
-    <div class="col-md-6">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white text-center">
-                <h4 class="mb-0">
-                    <i class="bi bi-person-plus"></i><br>
-                    Student Registration
-                </h4>
-                <small>Create your account to access the attendance system</small>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{% url 'student_register' %}" id="registerForm">
-                    {% csrf_token %}
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
+<div class="register-container">
+    <div class="register-card">
+        <div class="register-header">
+            <span class="register-header-icon">
+                <i class="bi bi-person-plus"></i>
+            </span>
+            <h1>Create Your Account</h1>
+            <p>Join the RFID Attendance System</p>
+        </div>
+
+        <form method="POST" action="{% url 'student_register' %}" id="registerForm">
+            <div class="register-body">
+                {% csrf_token %}
+                
+                <div class="form-section-title">
+                    <i class="bi bi-credit-card"></i> Account Credentials
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
                             <label for="rfid_id" class="form-label">
-                                <i class="bi bi-credit-card"></i> RFID ID <span class="text-danger">*</span>:
+                                <i class="bi bi-credit-card"></i> RFID ID <span class="text-danger">*</span>
                             </label>
                             <input type="text" class="form-control" id="rfid_id" name="rfid_id" 
-                                   placeholder="Enter your RFID card ID" required autofocus>
-                            <small class="form-text text-muted">Your unique RFID card identifier.</small>
+                                   placeholder="Scan or enter RFID ID" required autofocus autocomplete="off">
+                            <div class="form-help">Your unique RFID card identifier</div>
                         </div>
-                        
-                        <div class="col-md-6 mb-3">
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group">
                             <label for="student_id" class="form-label">
-                                <i class="bi bi-person-badge"></i> Student ID:
+                                <i class="bi bi-person-badge"></i> Student ID
                             </label>
                             <input type="text" class="form-control" id="student_id" name="student_id" 
-                                   placeholder="Enter your student ID (optional)">
-                            <small class="form-text text-muted">Your official student identification number.</small>
+                                   placeholder="Enter student ID (optional)" autocomplete="off">
+                            <div class="form-help">Your official student number</div>
                         </div>
                     </div>
-                    
-                    <div class="row">
-                        <div class="col-md-4 mb-3">
+                </div>
+                
+                <div class="form-section-title">
+                    <i class="bi bi-person"></i> Personal Information
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group">
                             <label for="first_name" class="form-label">
-                                <i class="bi bi-person"></i> First Name <span class="text-danger">*</span>:
+                                First Name <span class="text-danger">*</span>
                             </label>
                             <input type="text" class="form-control" id="first_name" name="first_name" 
-                                   placeholder="Enter first name" required>
+                                   placeholder="First name" required autocomplete="given-name">
                         </div>
-                        
-                        <div class="col-md-4 mb-3">
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group">
                             <label for="middle_name" class="form-label">
-                                <i class="bi bi-person"></i> Middle Name:
+                                Middle Name
                             </label>
                             <input type="text" class="form-control" id="middle_name" name="middle_name" 
-                                   placeholder="Enter middle name (optional)">
+                                   placeholder="Middle name" autocomplete="additional-name">
                         </div>
-                        
-                        <div class="col-md-4 mb-3">
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="form-group">
                             <label for="last_name" class="form-label">
-                                <i class="bi bi-person"></i> Last Name <span class="text-danger">*</span>:
+                                Last Name <span class="text-danger">*</span>
                             </label>
                             <input type="text" class="form-control" id="last_name" name="last_name" 
-                                   placeholder="Enter last name" required>
+                                   placeholder="Last name" required autocomplete="family-name">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email" class="form-label">
+                        <i class="bi bi-envelope"></i> Email Address <span class="text-danger">*</span>
+                    </label>
+                    <input type="email" class="form-control" id="email" name="email" 
+                           placeholder="your.email@example.com" required autocomplete="email">
+                    <div class="form-help">Used for notifications and account recovery</div>
+                </div>
+                
+                <div class="form-section-title">
+                    <i class="bi bi-book"></i> Academic Information
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="course" class="form-label">
+                                Course <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="course" name="course" required>
+                                <option value="">Select your course</option>
+                                {% for course in courses %}
+                                    <option value="{{ course.id }}">{{ course.code }} - {{ course.name }}</option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
                     
-                    <div class="mb-3">
-                        <label for="email" class="form-label">
-                            <i class="bi bi-envelope"></i> Email Address <span class="text-danger">*</span>:
-                        </label>
-                        <input type="email" class="form-control" id="email" name="email" 
-                               placeholder="Enter your email address" required>
-                        <small class="form-text text-muted">This will be used for notifications and account recovery.</small>
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label for="section" class="form-label">
+                                Section <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-select" id="section" name="section" required>
+                                <option value="">Select your section</option>
+                                {% for section in sections %}
+                                    <option value="{{ section.id }}">{{ section.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <label for="course" class="form-label">
-                            <i class="bi bi-book"></i> Course <span class="text-danger">*</span>:
-                        </label>
-                        <select class="form-control" id="course" name="course" required>
-                            <option value="">-- Select Course --</option>
-                            {% for course in courses %}
-                                <option value="{{ course.id }}">{{ course.code }} - {{ course.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <small class="form-text text-muted">Select your enrolled course from the list.</small>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="section" class="form-label">
-                            <i class="bi bi-collection"></i> Section <span class="text-danger">*</span>:
-                        </label>
-                        <select class="form-control" id="section" name="section" required>
-                            <option value="">-- Select Section --</option>
-                            {% for section in sections %}
-                                <option value="{{ section.id }}">{{ section.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <small class="form-text text-muted">Select your section from the list.</small>
-                    </div>
-                    
-                    <div class="mb-3">
-                        <label for="adviser" class="form-label">
-                            <i class="bi bi-person-badge"></i> Adviser:
-                        </label>
-                        <select class="form-control" id="adviser" name="adviser">
-                            <option value="">-- Select Adviser (Optional) --</option>
-                            {% for adviser in advisers %}
-                                <option value="{{ adviser.id }}">{{ adviser.name }} {% if adviser.email %}({{ adviser.email }}){% endif %}</option>
-                            {% endfor %}
-                        </select>
-                        <small class="form-text text-muted">Select your assigned adviser (optional).</small>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
+                </div>
+                
+                <div class="form-group">
+                    <label for="adviser" class="form-label">
+                        <i class="bi bi-person-badge"></i> Adviser
+                    </label>
+                    <select class="form-select" id="adviser" name="adviser">
+                        <option value="">Select adviser (optional)</option>
+                        {% for adviser in advisers %}
+                            <option value="{{ adviser.id }}">{{ adviser.name }} {% if adviser.email %}({{ adviser.email }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="form-section-title">
+                    <i class="bi bi-lock"></i> Security
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
                             <label for="password" class="form-label">
-                                <i class="bi bi-lock"></i> Password <span class="text-danger">*</span>:
+                                Password <span class="text-danger">*</span>
                             </label>
                             <input type="password" class="form-control" id="password" name="password" 
-                                   placeholder="Enter password (min. 8 characters)" required minlength="8">
-                            <small class="form-text text-muted">Minimum 8 characters.</small>
+                                   placeholder="Min. 8 characters" required minlength="8" autocomplete="new-password">
+                            <div class="form-help">At least 8 characters</div>
                         </div>
-                        
-                        <div class="col-md-6 mb-3">
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="form-group">
                             <label for="password_confirm" class="form-label">
-                                <i class="bi bi-lock-fill"></i> Confirm Password <span class="text-danger">*</span>:
+                                Confirm Password <span class="text-danger">*</span>
                             </label>
                             <input type="password" class="form-control" id="password_confirm" name="password_confirm" 
-                                   placeholder="Confirm your password" required minlength="8">
+                                   placeholder="Re-enter password" required minlength="8" autocomplete="new-password">
+                            <div class="form-help" id="password-match-help">Must match password</div>
                         </div>
                     </div>
-                    
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="terms" required>
-                            <label class="form-check-label" for="terms">
-                                I agree to the terms and conditions
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <button type="submit" class="btn btn-primary w-100 mb-2" id="submitButton">
-                        <span id="submitText">
-                            <i class="bi bi-person-plus"></i> REGISTER
-                        </span>
-                        <span id="submitLoading" style="display: none;">
-                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                            Processing...
-                        </span>
-                    </button>
-                    
-                    <div class="text-center">
-                        <small class="text-muted">
-                            Already have an account? 
-                            <a href="{% url 'student_login' %}" class="text-decoration-none">Login here</a>
-                        </small>
-                    </div>
-                </form>
+                </div>
+                
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="terms" required>
+                    <label class="form-check-label" for="terms">
+                        I agree to the terms and conditions of the attendance system
+                    </label>
+                </div>
+                
+                <button type="submit" class="register-button" id="submitButton">
+                    <span id="submitText">
+                        <i class="bi bi-check-circle"></i> Create Account
+                    </span>
+                    <span id="submitLoading" style="display: none;">
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        Processing...
+                    </span>
+                </button>
             </div>
-            <div class="card-footer text-center">
-                <small class="text-muted">
-                    <a href="{% url 'login' %}" class="text-decoration-none">Staff/Admin Login</a>
-                </small>
+
+            <div class="register-footer">
+                <div style="font-size: 14px; color: #64748b; margin-bottom: 8px;">
+                    <strong>Already have an account?</strong>
+                </div>
+                <a href="{% url 'student_login' %}" class="footer-link">
+                    <i class="bi bi-box-arrow-in-right"></i> Sign in to your account
+                </a>
+                
+                <div class="divider">or</div>
+
+                <a href="{% url 'login' %}" class="footer-link">
+                    <i class="bi bi-shield-lock"></i> Staff/Admin Login
+                </a>
             </div>
-        </div>
+        </form>
     </div>
 </div>
 
 <script>
     const registerForm = document.getElementById('registerForm');
     const loadingOverlay = document.getElementById('loadingOverlay');
-    let isSubmitting = false; // Flag to prevent double submission
+    const passwordField = document.getElementById('password');
+    const confirmField = document.getElementById('password_confirm');
+    const passwordMatchHelp = document.getElementById('password-match-help');
+    let isSubmitting = false;
     
-    // Password confirmation validation
+    // Real-time password match validation
+    function validatePasswordMatch() {
+        const password = passwordField.value;
+        const passwordConfirm = confirmField.value;
+        
+        if (passwordConfirm) {
+            if (password !== passwordConfirm) {
+                confirmField.classList.add('is-invalid');
+                confirmField.classList.remove('is-valid');
+                if (passwordMatchHelp) {
+                    passwordMatchHelp.style.color = '#ef4444';
+                    passwordMatchHelp.innerHTML = '<i class="bi bi-x-circle"></i> Passwords do not match';
+                }
+            } else {
+                confirmField.classList.add('is-valid');
+                confirmField.classList.remove('is-invalid');
+                if (passwordMatchHelp) {
+                    passwordMatchHelp.style.color = '#10b981';
+                    passwordMatchHelp.innerHTML = '<i class="bi bi-check-circle"></i> Passwords match';
+                }
+            }
+        } else {
+            confirmField.classList.remove('is-valid', 'is-invalid');
+            if (passwordMatchHelp) {
+                passwordMatchHelp.style.color = '#64748b';
+                passwordMatchHelp.innerHTML = 'Must match password';
+            }
+        }
+    }
+    
+    // Attach event listeners
+    if (passwordField) {
+        passwordField.addEventListener('input', validatePasswordMatch);
+    }
+    
+    if (confirmField) {
+        confirmField.addEventListener('input', validatePasswordMatch);
+    }
+    
+    // Form submission handler
     registerForm.addEventListener('submit', function(e) {
         // Prevent double submission
         if (isSubmitting) {
@@ -248,28 +548,32 @@
             return false;
         }
         
-        const password = document.getElementById('password').value;
-        const passwordConfirm = document.getElementById('password_confirm').value;
+        const password = passwordField.value;
+        const passwordConfirm = confirmField.value;
         
+        // Validate password match
         if (password !== passwordConfirm) {
             e.preventDefault();
-            alert('Passwords do not match!');
+            confirmField.focus();
+            alert('⚠️ Passwords do not match! Please make sure both password fields are identical.');
             return false;
         }
         
+        // Validate password length
         if (password.length < 8) {
             e.preventDefault();
-            alert('Password must be at least 8 characters long!');
+            passwordField.focus();
+            alert('⚠️ Password must be at least 8 characters long!');
             return false;
         }
         
-        // Mark form as submitting
+        // Mark as submitting
         isSubmitting = true;
         
-        // Show loading overlay when form is valid and being submitted
+        // Show loading overlay
         loadingOverlay.classList.add('active');
         
-        // Update button to show loading state
+        // Update button state
         const submitButton = document.getElementById('submitButton');
         const submitText = document.getElementById('submitText');
         const submitLoading = document.getElementById('submitLoading');
@@ -277,13 +581,13 @@
         if (submitLoading) submitLoading.style.display = 'inline';
         if (submitButton) submitButton.disabled = true;
         
-        // Update loading message
+        // Update loading messages
         const loadingMessage = loadingOverlay.querySelector('.loading-message');
         const loadingSubmessage = loadingOverlay.querySelector('.loading-submessage');
         
-        // Simulate progress updates (optional - can be removed if not needed)
         setTimeout(() => {
             if (loadingMessage) loadingMessage.textContent = 'Validating Information...';
+            if (loadingSubmessage) loadingSubmessage.textContent = 'Checking your details';
         }, 500);
         
         setTimeout(() => {
@@ -291,35 +595,15 @@
             if (loadingSubmessage) loadingSubmessage.textContent = 'Setting up your profile';
         }, 1500);
         
-        // Form will submit normally - overlay stays until page reloads/redirects
+        // Form will submit normally
     });
     
-    // Real-time password match indicator
-    document.getElementById('password_confirm').addEventListener('input', function() {
-        const password = document.getElementById('password').value;
-        const passwordConfirm = this.value;
-        const confirmField = this;
-        
-        if (passwordConfirm && password !== passwordConfirm) {
-            confirmField.classList.add('is-invalid');
-            confirmField.classList.remove('is-valid');
-        } else if (passwordConfirm && password === passwordConfirm) {
-            confirmField.classList.add('is-valid');
-            confirmField.classList.remove('is-invalid');
-        } else {
-            confirmField.classList.remove('is-valid', 'is-invalid');
-        }
-    });
-    
-    // Hide loading overlay if form validation fails (page doesn't reload)
-    // This will be handled by the browser if JavaScript validation passes
+    // Handle page back/forward cache
     window.addEventListener('pageshow', function(event) {
-        // Hide overlay if page is loaded from cache (back button)
         if (event.persisted) {
-            isSubmitting = false; // Reset submission flag
+            isSubmitting = false;
             loadingOverlay.classList.remove('active');
             
-            // Reset button state
             const submitButton = document.getElementById('submitButton');
             const submitText = document.getElementById('submitText');
             const submitLoading = document.getElementById('submitLoading');

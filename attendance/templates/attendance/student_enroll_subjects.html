@@ -280,6 +280,99 @@
         box-shadow: 0 0 0 0.2rem rgba(16, 185, 129, 0.15);
     }
     
+    /* Tab Navigation Styling */
+    .subject-tabs {
+        border-bottom: 2px solid #e2e8f0;
+        margin-bottom: 2rem;
+        background: white;
+        border-radius: 12px 12px 0 0;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+    }
+    
+    .nav-tabs {
+        border-bottom: none;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem 0;
+    }
+    
+    .nav-tabs .nav-link {
+        border: 2px solid transparent;
+        border-radius: 8px 8px 0 0;
+        color: #64748b;
+        font-weight: 600;
+        padding: 1rem 1.5rem;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: transparent;
+    }
+    
+    .nav-tabs .nav-link:hover {
+        color: #059669;
+        background: rgba(5, 150, 105, 0.05);
+    }
+    
+    .nav-tabs .nav-link.active {
+        color: #059669;
+        border-color: #e2e8f0 #e2e8f0 white;
+        background: white;
+        position: relative;
+        border-bottom-color: white;
+    }
+    
+    .nav-tabs .nav-link.active::after {
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: white;
+    }
+    
+    .tab-badge {
+        background: #e2e8f0;
+        color: #1e293b;
+        padding: 0.25rem 0.625rem;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-left: 0.25rem;
+    }
+    
+    .nav-tabs .nav-link.active .tab-badge {
+        background: #059669;
+        color: white;
+    }
+    
+    .tab-content {
+        padding: 0;
+    }
+    
+    .section-header {
+        background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1.5rem;
+        border: 2px solid #e2e8f0;
+    }
+    
+    .section-header h4 {
+        color: #1e293b;
+        font-weight: 600;
+        margin: 0 0 0.5rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .section-header p {
+        color: #64748b;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+    
     /* Responsive Adjustments */
     @media (max-width: 768px) {
         .page-header {
@@ -293,6 +386,15 @@
         .stats-badge {
             display: block;
             margin-bottom: 0.5rem;
+        }
+        
+        .nav-tabs .nav-link {
+            padding: 0.75rem 1rem;
+            font-size: 0.9rem;
+        }
+        
+        .tab-badge {
+            font-size: 0.75rem;
         }
     }
 </style>
@@ -361,131 +463,375 @@
         <div class="mt-4 pt-3 border-top">
             <div class="d-flex flex-wrap gap-2 align-items-center">
                 <span class="stats-badge bg-success text-white">
-                    <i class="bi bi-check-circle-fill me-1"></i>Enrolled: <strong id="enrolledCountBadge">{{ enrolled_count }}</strong>
+                    <i class="bi bi-check-circle-fill me-1"></i>Enrolled Subjects: <strong id="enrolledCountBadge">{{ enrolled_count }}</strong>
                 </span>
-                <span class="stats-badge bg-secondary text-white">
-                    <i class="bi bi-grid me-1"></i>Available: <strong id="availableCountBadge">{{ total_count }}</strong>
+                <span class="stats-badge bg-warning text-dark">
+                    <i class="bi bi-clock-history me-1"></i>Pending: <strong id="pendingCountBadge">{{ pending_count }}</strong>
+                </span>
+                <span class="stats-badge bg-primary text-white">
+                    <i class="bi bi-grid me-1"></i>Available Subjects: <strong id="availableCountBadge">{{ available_count }}</strong>
                 </span>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Subjects Grid -->
-{% if subjects_data %}
-<div class="row g-4">
-    {% for item in subjects_data %}
-    <div class="col-12 col-md-6 col-lg-4">
-        <div class="card subject-card {% if item.is_enrolled %}enrolled{% elif item.is_pending %}pending{% endif %}"
-             data-code="{{ item.subject.code|default:''|lower }}"
-             data-name="{{ item.subject.name|default:''|lower }}"
-             data-instructor="{% if item.subject.instructor %}{{ item.subject.instructor.name|lower }}{% else %}{% endif %}"
-             data-semester="{{ item.subject.semester|default:'' }}"
-             data-status="{% if item.is_enrolled %}enrolled{% elif item.is_pending %}pending{% else %}available{% endif %}">
-            <div class="card-header">
-                <span class="subject-code">{{ item.subject.code }}</span>
-                <span class="status-badge {% if item.is_enrolled %}badge-enrolled{% elif item.is_pending %}badge-pending{% else %}badge-not-enrolled{% endif %}">
-                    {% if item.is_enrolled %}
-                        <i class="bi bi-check-circle-fill"></i>
-                        <span>Enrolled</span>
-                    {% elif item.is_pending %}
-                        <i class="bi bi-clock-fill"></i>
-                        <span>Pending</span>
-                    {% else %}
-                        <i class="bi bi-circle"></i>
-                        <span>Available</span>
-                    {% endif %}
-                </span>
-            </div>
-            <div class="card-body">
-                <h6 class="subject-title">{{ item.subject.name }}</h6>
-                
-                <div class="subject-info">
-                    <i class="bi bi-person-circle"></i>
-                    <div>
-                        <strong>Instructor:</strong>
-                        <span>{% if item.subject.instructor %}{{ item.subject.instructor.name }}{% else %}TBA{% endif %}</span>
+<!-- Tab Navigation -->
+<div class="subject-tabs">
+    <ul class="nav nav-tabs" id="subjectTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" 
+                    id="enrolled-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#enrolled-subjects" 
+                    type="button" 
+                    role="tab" 
+                    aria-controls="enrolled-subjects" 
+                    aria-selected="true">
+                <i class="bi bi-check-circle-fill"></i>
+                My Enrolled Subjects
+                <span class="tab-badge" id="enrolledTabCount">{{ enrolled_count }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" 
+                    id="pending-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#pending-subjects" 
+                    type="button" 
+                    role="tab" 
+                    aria-controls="pending-subjects" 
+                    aria-selected="false">
+                <i class="bi bi-clock-history"></i>
+                Pending Requests
+                <span class="tab-badge" id="pendingTabCount">{{ pending_count }}</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" 
+                    id="available-tab" 
+                    data-bs-toggle="tab" 
+                    data-bs-target="#available-subjects" 
+                    type="button" 
+                    role="tab" 
+                    aria-controls="available-subjects" 
+                    aria-selected="false">
+                <i class="bi bi-grid-3x3-gap-fill"></i>
+                Available Subjects
+                <span class="tab-badge" id="availableTabCount">{{ available_count }}</span>
+            </button>
+        </li>
+    </ul>
+</div>
+
+<!-- Tab Content -->
+<div class="tab-content" id="subjectTabsContent">
+    <!-- Enrolled Subjects Tab -->
+    <div class="tab-pane fade show active" id="enrolled-subjects" role="tabpanel" aria-labelledby="enrolled-tab">
+        <div class="section-header">
+            <h4>
+                <i class="bi bi-mortarboard-fill text-success"></i>
+                Your Enrolled Subjects
+            </h4>
+            <p>These are the subjects you are currently enrolled in for <strong>{{ academic_year }} - {{ semester }}</strong></p>
+        </div>
+        
+        {% if enrolled_subjects %}
+        <div class="row g-4">
+            {% for item in enrolled_subjects %}
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card subject-card enrolled"
+                     data-code="{{ item.subject.code|default:''|lower }}"
+                     data-name="{{ item.subject.name|default:''|lower }}"
+                     data-instructor="{% if item.subject.instructor %}{{ item.subject.instructor.name|lower }}{% else %}{% endif %}"
+                     data-semester="{{ item.subject.semester|default:'' }}"
+                     data-status="enrolled">
+                    <div class="card-header">
+                        <span class="subject-code">{{ item.subject.code }}</span>
+                        <span class="status-badge badge-enrolled">
+                            <i class="bi bi-check-circle-fill"></i>
+                            <span>Enrolled</span>
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="subject-title">{{ item.subject.name }}</h6>
+                        
+                        <div class="subject-info">
+                            <i class="bi bi-person-circle"></i>
+                            <div>
+                                <strong>Instructor:</strong>
+                                <span>{% if item.subject.instructor %}{{ item.subject.instructor.name }}{% else %}TBA{% endif %}</span>
+                            </div>
+                        </div>
+                        
+                        {% if item.subject.schedules.all %}
+                        <div class="subject-info">
+                            <i class="bi bi-calendar-week"></i>
+                            <div>
+                                <strong>Schedule:</strong>
+                                <div>
+                                    {% for schedule in item.subject.schedules.all %}
+                                        <div>
+                                            {{ schedule.get_day_name }} 
+                                            <span class="text-muted">
+                                                ({{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }})
+                                            </span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% elif item.subject.schedule_days %}
+                        <div class="subject-info">
+                            <i class="bi bi-calendar-week"></i>
+                            <div>
+                                <strong>Schedule:</strong>
+                                <span>
+                                    {{ item.subject.schedule_days }}
+                                    {% if item.subject.schedule_time_start and item.subject.schedule_time_end %}
+                                        <span class="text-muted">
+                                            ({{ item.subject.schedule_time_start|time:"g:i A" }} - {{ item.subject.schedule_time_end|time:"g:i A" }})
+                                        </span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer">
+                        <form method="POST" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="subject_id" value="{{ item.subject.id }}">
+                            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                            <input type="hidden" name="semester" value="{{ semester }}">
+                            <input type="hidden" name="action" value="unenroll">
+                            <button type="submit" 
+                                    class="btn btn-danger btn-sm w-100 btn-action unenroll-btn"
+                                    data-message="Are you sure you want to unenroll from {{ item.subject.code }}?">
+                                <i class="bi bi-x-circle"></i>
+                                <span>Unenroll</span>
+                            </button>
+                        </form>
                     </div>
                 </div>
-                
-                {% if item.subject.schedules.all %}
-                <div class="subject-info">
-                    <i class="bi bi-calendar-week"></i>
-                    <div>
-                        <strong>Schedule:</strong>
-                        <div>
-                            {% for schedule in item.subject.schedules.all %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h5>No Enrolled Subjects Yet</h5>
+            <p>You haven't enrolled in any subjects for {{ academic_year }} - {{ semester }}. Check the Available Subjects tab to enroll!</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Pending Subjects Tab -->
+    <div class="tab-pane fade" id="pending-subjects" role="tabpanel" aria-labelledby="pending-tab">
+        <div class="section-header">
+            <h4>
+                <i class="bi bi-hourglass-split text-warning"></i>
+                Pending Enrollment Requests
+            </h4>
+            <p>These enrollment requests are awaiting approval from your adviser</p>
+        </div>
+        
+        {% if pending_subjects %}
+        <div class="row g-4">
+            {% for item in pending_subjects %}
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card subject-card pending"
+                     data-code="{{ item.subject.code|default:''|lower }}"
+                     data-name="{{ item.subject.name|default:''|lower }}"
+                     data-instructor="{% if item.subject.instructor %}{{ item.subject.instructor.name|lower }}{% else %}{% endif %}"
+                     data-semester="{{ item.subject.semester|default:'' }}"
+                     data-status="pending">
+                    <div class="card-header">
+                        <span class="subject-code">{{ item.subject.code }}</span>
+                        <span class="status-badge badge-pending">
+                            <i class="bi bi-clock-fill"></i>
+                            <span>Pending</span>
+                        </span>
+                    </div>
+                    <div class="card-body">
+                        <h6 class="subject-title">{{ item.subject.name }}</h6>
+                        
+                        <div class="subject-info">
+                            <i class="bi bi-person-circle"></i>
+                            <div>
+                                <strong>Instructor:</strong>
+                                <span>{% if item.subject.instructor %}{{ item.subject.instructor.name }}{% else %}TBA{% endif %}</span>
+                            </div>
+                        </div>
+                        
+                        {% if item.subject.schedules.all %}
+                        <div class="subject-info">
+                            <i class="bi bi-calendar-week"></i>
+                            <div>
+                                <strong>Schedule:</strong>
                                 <div>
-                                    {{ schedule.get_day_name }} 
-                                    <span class="text-muted">
-                                        ({{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }})
-                                    </span>
+                                    {% for schedule in item.subject.schedules.all %}
+                                        <div>
+                                            {{ schedule.get_day_name }} 
+                                            <span class="text-muted">
+                                                ({{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }})
+                                            </span>
+                                        </div>
+                                    {% endfor %}
                                 </div>
-                            {% endfor %}
+                            </div>
+                        </div>
+                        {% elif item.subject.schedule_days %}
+                        <div class="subject-info">
+                            <i class="bi bi-calendar-week"></i>
+                            <div>
+                                <strong>Schedule:</strong>
+                                <span>
+                                    {{ item.subject.schedule_days }}
+                                    {% if item.subject.schedule_time_start and item.subject.schedule_time_end %}
+                                        <span class="text-muted">
+                                            ({{ item.subject.schedule_time_start|time:"g:i A" }} - {{ item.subject.schedule_time_end|time:"g:i A" }})
+                                        </span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer">
+                        <form method="POST" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="subject_id" value="{{ item.subject.id }}">
+                            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                            <input type="hidden" name="semester" value="{{ semester }}">
+                            <input type="hidden" name="action" value="cancel_request">
+                            <button type="submit" 
+                                    class="btn btn-outline-danger btn-sm w-100 btn-action cancel-request-btn"
+                                    data-message="Cancel your enrollment request for {{ item.subject.code }}?">
+                                <i class="bi bi-x-circle"></i>
+                                <span>Cancel Request</span>
+                            </button>
+                        </form>
+                        <div class="pending-message">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Your enrollment request is pending. You can cancel now and resubmit later if needed.
                         </div>
                     </div>
                 </div>
-                {% elif item.subject.schedule_days %}
-                <div class="subject-info">
-                    <i class="bi bi-calendar-week"></i>
-                    <div>
-                        <strong>Schedule:</strong>
-                        <span>
-                            {{ item.subject.schedule_days }}
-                            {% if item.subject.schedule_time_start and item.subject.schedule_time_end %}
-                                <span class="text-muted">
-                                    ({{ item.subject.schedule_time_start|time:"g:i A" }} - {{ item.subject.schedule_time_end|time:"g:i A" }})
-                                </span>
-                            {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h5>No Pending Requests</h5>
+            <p>You don't have any pending enrollment requests at the moment.</p>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Available Subjects Tab -->
+    <div class="tab-pane fade" id="available-subjects" role="tabpanel" aria-labelledby="available-tab">
+        <div class="section-header">
+            <h4>
+                <i class="bi bi-grid-3x3-gap text-primary"></i>
+                Available Subjects for Enrollment
+            </h4>
+            <p>Browse and request enrollment in these available subjects for {{ academic_year }} - {{ semester }}</p>
+        </div>
+        
+        {% if available_subjects %}
+        <div class="row g-4">
+            {% for item in available_subjects %}
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card subject-card"
+                     data-code="{{ item.subject.code|default:''|lower }}"
+                     data-name="{{ item.subject.name|default:''|lower }}"
+                     data-instructor="{% if item.subject.instructor %}{{ item.subject.instructor.name|lower }}{% else %}{% endif %}"
+                     data-semester="{{ item.subject.semester|default:'' }}"
+                     data-status="available">
+                    <div class="card-header">
+                        <span class="subject-code">{{ item.subject.code }}</span>
+                        <span class="status-badge badge-not-enrolled">
+                            <i class="bi bi-circle"></i>
+                            <span>Available</span>
                         </span>
                     </div>
+                    <div class="card-body">
+                        <h6 class="subject-title">{{ item.subject.name }}</h6>
+                        
+                        <div class="subject-info">
+                            <i class="bi bi-person-circle"></i>
+                            <div>
+                                <strong>Instructor:</strong>
+                                <span>{% if item.subject.instructor %}{{ item.subject.instructor.name }}{% else %}TBA{% endif %}</span>
+                            </div>
+                        </div>
+                        
+                        {% if item.subject.schedules.all %}
+                        <div class="subject-info">
+                            <i class="bi bi-calendar-week"></i>
+                            <div>
+                                <strong>Schedule:</strong>
+                                <div>
+                                    {% for schedule in item.subject.schedules.all %}
+                                        <div>
+                                            {{ schedule.get_day_name }} 
+                                            <span class="text-muted">
+                                                ({{ schedule.time_start|time:"g:i A" }} - {{ schedule.time_end|time:"g:i A" }})
+                                            </span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        {% elif item.subject.schedule_days %}
+                        <div class="subject-info">
+                            <i class="bi bi-calendar-week"></i>
+                            <div>
+                                <strong>Schedule:</strong>
+                                <span>
+                                    {{ item.subject.schedule_days }}
+                                    {% if item.subject.schedule_time_start and item.subject.schedule_time_end %}
+                                        <span class="text-muted">
+                                            ({{ item.subject.schedule_time_start|time:"g:i A" }} - {{ item.subject.schedule_time_end|time:"g:i A" }})
+                                        </span>
+                                    {% endif %}
+                                </span>
+                            </div>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-footer">
+                        <form method="POST" style="display: inline;">
+                            {% csrf_token %}
+                            <input type="hidden" name="subject_id" value="{{ item.subject.id }}">
+                            <input type="hidden" name="academic_year" value="{{ academic_year }}">
+                            <input type="hidden" name="semester" value="{{ semester }}">
+                            <input type="hidden" name="action" value="enroll">
+                            <button type="submit" class="btn btn-success btn-sm w-100 btn-action">
+                                <i class="bi bi-plus-circle"></i>
+                                <span>Request Enrollment</span>
+                            </button>
+                        </form>
+                    </div>
                 </div>
-                {% endif %}
             </div>
-            <div class="card-footer">
-                {% if item.is_enrolled %}
-                <form method="POST" style="display: inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="subject_id" value="{{ item.subject.id }}">
-                    <input type="hidden" name="academic_year" value="{{ academic_year }}">
-                    <input type="hidden" name="semester" value="{{ semester }}">
-                    <input type="hidden" name="action" value="unenroll">
-                    <button type="submit" 
-                            class="btn btn-danger btn-sm w-100 btn-action unenroll-btn"
-                            data-message="Are you sure you want to unenroll from {{ item.subject.code }}?">
-                        <i class="bi bi-x-circle"></i>
-                        <span>Unenroll</span>
-                    </button>
-                </form>
-                {% elif item.is_pending %}
-                <button type="button" class="btn btn-warning btn-sm w-100 btn-action" disabled>
-                    <i class="bi bi-clock-history"></i>
-                    <span>Awaiting Approval</span>
-                </button>
-                <div class="pending-message">
-                    <i class="bi bi-info-circle me-1"></i>
-                    Your enrollment request is pending. Please wait for your adviser's confirmation.
-                </div>
-                {% else %}
-                <form method="POST" style="display: inline;">
-                    {% csrf_token %}
-                    <input type="hidden" name="subject_id" value="{{ item.subject.id }}">
-                    <input type="hidden" name="academic_year" value="{{ academic_year }}">
-                    <input type="hidden" name="semester" value="{{ semester }}">
-                    <input type="hidden" name="action" value="enroll">
-                    <button type="submit" class="btn btn-success btn-sm w-100 btn-action">
-                        <i class="bi bi-plus-circle"></i>
-                        <span>Request Enrollment</span>
-                    </button>
-                </form>
-                {% endif %}
-            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h5>No Available Subjects</h5>
+            <p>There are no additional subjects available for enrollment at this time.</p>
+        </div>
+        {% endif %}
     </div>
-    {% endfor %}
 </div>
-{% else %}
-<div class="empty-state">
+
+<!-- Subjects Grid (fallback - will be hidden when using tabs) -->
+{% if not subjects_data %}
+<div class="empty-state legacy-view" style="display: none;">
     <i class="bi bi-inbox"></i>
     <h5>No Subjects Available</h5>
     <p>There are no active subjects available for the selected academic period. Please check back later or contact your adviser.</p>
@@ -521,47 +867,73 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Client-side quick search and availability filter
+    // Handle cancel request confirmations
+    document.querySelectorAll('.cancel-request-btn').forEach(function(button) {
+        const form = button.closest('form');
+        const message = button.getAttribute('data-message');
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (typeof customConfirm !== 'undefined') {
+                customConfirm(message, function(confirmed) {
+                    if (confirmed) {
+                        form.submit();
+                    }
+                });
+            } else {
+                if (confirm(message)) {
+                    form.submit();
+                }
+            }
+        });
+    });
+
+    // Client-side quick search within active tab
     const searchInput = document.getElementById('quick-search');
     const onlyAvailableCheckbox = document.getElementById('only-available');
     const clearBtn = document.getElementById('clear-search');
-    const enrolledBadge = document.getElementById('enrolledCountBadge');
-    const availableBadge = document.getElementById('availableCountBadge');
 
     function filterSubjects() {
         const term = (searchInput && searchInput.value ? searchInput.value.trim().toLowerCase() : '');
-        const onlyAvailable = onlyAvailableCheckbox && onlyAvailableCheckbox.checked;
+        
+        // Get the currently active tab
+        const activeTab = document.querySelector('.tab-pane.active');
+        if (!activeTab) return;
 
-        const cards = document.querySelectorAll('.subject-card');
-        let visibleEnrolled = 0;
-        let visibleAvailable = 0;
-        let visibleTotal = 0;
+        const cards = activeTab.querySelectorAll('.subject-card');
+        let visibleCount = 0;
 
         cards.forEach(card => {
             const code = (card.dataset.code || '').toLowerCase();
             const name = (card.dataset.name || '').toLowerCase();
             const instructor = (card.dataset.instructor || '').toLowerCase();
-            const status = (card.dataset.status || '').toLowerCase();
 
             // Match search term against code, name, or instructor
             const matches = !term || code.includes(term) || name.includes(term) || instructor.includes(term);
 
-            // If 'only available' is on, hide anything that's not available
-            const meetsAvailability = !onlyAvailable || status === 'available';
-
-            if (matches && meetsAvailability) {
-                card.style.display = '';
-                visibleTotal++;
-                if (status === 'available') visibleAvailable++;
-                if (status === 'enrolled') visibleEnrolled++;
+            if (matches) {
+                card.closest('.col-12').style.display = '';
+                visibleCount++;
             } else {
-                card.style.display = 'none';
+                card.closest('.col-12').style.display = 'none';
             }
         });
+        
+        // Update the tab badge count
+        const tabId = activeTab.getAttribute('id');
+        if (tabId === 'enrolled-subjects') {
+            updateTabCount('enrolledTabCount', visibleCount);
+        } else if (tabId === 'pending-subjects') {
+            updateTabCount('pendingTabCount', visibleCount);
+        } else if (tabId === 'available-subjects') {
+            updateTabCount('availableTabCount', visibleCount);
+        }
+    }
 
-        // Update badges with visible counts
-        if (enrolledBadge) enrolledBadge.textContent = visibleEnrolled;
-        if (availableBadge) availableBadge.textContent = visibleAvailable;
+    function updateTabCount(elementId, count) {
+        const element = document.getElementById(elementId);
+        if (element) {
+            element.textContent = count;
+        }
     }
 
     if (searchInput) {
@@ -574,20 +946,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    if (onlyAvailableCheckbox) {
-        onlyAvailableCheckbox.addEventListener('change', filterSubjects);
-    }
-
     if (clearBtn) {
         clearBtn.addEventListener('click', function() {
             if (searchInput) searchInput.value = '';
             if (onlyAvailableCheckbox) onlyAvailableCheckbox.checked = false;
+            resetTabCounts();
             filterSubjects();
             if (searchInput) searchInput.focus();
         });
     }
 
-    // Initialize filter on page load and focus input if helpful
+    // When switching tabs, reset search and filter
+    const tabButtons = document.querySelectorAll('[data-bs-toggle="tab"]');
+    tabButtons.forEach(button => {
+        button.addEventListener('shown.bs.tab', function() {
+            resetTabCounts();
+            filterSubjects();
+        });
+    });
+
+    function resetTabCounts() {
+        // Reset to original counts
+        updateTabCount('enrolledTabCount', {{ enrolled_count }});
+        updateTabCount('pendingTabCount', {{ pending_count }});
+        updateTabCount('availableTabCount', {{ available_count }});
+    }
+
+    // Initialize filter on page load
     filterSubjects();
     if (searchInput) searchInput.focus();
 });

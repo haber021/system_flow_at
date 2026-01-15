@@ -84,9 +84,12 @@ def send_attendance_email(
     """
     start_time = time.time()
     
-    # Respect student-level email preferences
+    # Respect student-level email preferences for alerts/warnings/confirmations
+    # BUT allow reports (SEMESTER type) to be sent regardless of opt-in preference
     if hasattr(student, 'email_opt_in') and student.email_opt_in is False:
-        return False, None, "Student has opted out of email notifications"
+        # Allow SEMESTER reports to bypass opt-in preference
+        if email_type != 'SEMESTER':
+            return False, None, "Student has opted out of email notifications"
     
     # Convert single email to list for consistency
     if isinstance(email_to, str):

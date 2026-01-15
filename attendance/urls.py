@@ -77,6 +77,7 @@ urlpatterns = [
     path('student/absences/', views.student_absences, name='student_absences'),
     path('student/enroll-subjects/', views.student_enroll_subjects, name='student_enroll_subjects'),
     path('student/features/', views.student_features_view, name='student_features'),
+    path('student/suggest/', views.student_suggest_feature, name='student_suggest_feature'),
     path('student/profile/', views.student_profile_view, name='student_profile'),
     path('student/history/', views.student_history, name='student_history'),
     path('student/logout/', views.student_logout, name='student_logout'),

@@ -1,126 +1,384 @@
 {% extends 'attendance/base.html' %}
+{% load static %}
 
 {% block title %}Calendar Events{% endblock %}
 
+{% block extra_css %}
+<style>
+    .calendar-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 16px;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    }
+    
+    .calendar-header {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    
+    .calendar-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    
+    .calendar-nav h2 {
+        margin: 0;
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #2d3748;
+        flex: 1;
+        text-align: center;
+    }
+    
+    .calendar-nav .btn {
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        font-weight: 600;
+    }
+    
+    .view-toggle {
+        display: flex;
+        gap: 0.5rem;
+        background: #f7fafc;
+        padding: 0.25rem;
+        border-radius: 8px;
+    }
+    
+    .view-toggle .btn {
+        border: none;
+        background: transparent;
+        padding: 0.5rem 1rem;
+        border-radius: 6px;
+        transition: all 0.2s;
+    }
+    
+    .view-toggle .btn.active {
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    .calendar-grid {
+        background: white;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+    }
+    
+    .calendar-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        background: #f7fafc;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    
+    .calendar-weekday {
+        padding: 1rem;
+        text-align: center;
+        font-weight: 700;
+        color: #4a5568;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .calendar-days {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 1px;
+        background: #e2e8f0;
+    }
+    
+    .calendar-day {
+        background: white;
+        min-height: 100px;
+        padding: 0.5rem;
+        position: relative;
+        transition: all 0.2s;
+        cursor: pointer;
+    }
+    
+    .calendar-day:hover {
+        background: #f7fafc;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    
+    .calendar-day.other-month {
+        background: #fafafa;
+        opacity: 0.5;
+    }
+    
+    .calendar-day.today {
+        background: #edf2f7;
+        border: 2px solid #667eea;
+    }
+    
+    .day-number {
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .calendar-day.today .day-number {
+        background: #667eea;
+        color: white;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.75rem;
+    }
+    
+    .event-indicator {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 4px;
+        margin-bottom: 0.25rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    
+    .event-indicator:hover {
+        transform: scale(1.05);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .event-indicator.holiday {
+        background: #fed7d7;
+        color: #c53030;
+        border-left: 3px solid #c53030;
+    }
+    
+    .event-indicator.event {
+        background: #bee3f8;
+        color: #2c5282;
+        border-left: 3px solid #2c5282;
+    }
+    
+    .event-indicator.other {
+        background: #e2e8f0;
+        color: #4a5568;
+        border-left: 3px solid #4a5568;
+    }
+    
+    .event-list-view {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+    }
+    
+    .event-item {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .event-item:hover {
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    
+    .event-item-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+    
+    .event-item-title {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #2d3748;
+        margin: 0;
+    }
+    
+    .legend {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        padding: 1rem;
+        background: white;
+        border-radius: 8px;
+        margin-top: 1rem;
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .legend-color {
+        width: 16px;
+        height: 16px;
+        border-radius: 3px;
+    }
+    
+    @media (max-width: 768px) {
+        .calendar-container {
+            padding: 1rem;
+        }
+        
+        .calendar-day {
+            min-height: 70px;
+            padding: 0.25rem;
+        }
+        
+        .calendar-weekday {
+            padding: 0.5rem 0.25rem;
+            font-size: 0.75rem;
+        }
+        
+        .day-number {
+            font-size: 0.75rem;
+        }
+        
+        .event-indicator {
+            font-size: 0.55rem;
+            padding: 0.1rem 0.3rem;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid mt-4" id="calendarPage" data-has-events="{{ events|length }}">
-    <div class="row mb-3">
-        <div class="col-md-8">
-            <h1 class="h3 d-flex align-items-center gap-2 mb-1">
-                <i class="bi bi-calendar-event"></i>
-                Calendar Events
-            </h1>
-            <p class="text-muted mb-0">
-                View all configured holidays and events and manage them easily.
-            </p>
-        </div>
-        <div class="col-md-4 text-md-end mt-3 mt-md-0">
-            <button
-                type="button"
-                class="btn btn-primary"
-                data-bs-toggle="modal"
-                data-bs-target="#calendarModal"
-                id="addCalendarBtn"
-            >
-                <i class="bi bi-plus-circle"></i>
-                Add Event / Holiday
-            </button>
+    <!-- Header with controls -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                    <h1 class="h3 d-flex align-items-center gap-2 mb-1">
+                        <i class="bi bi-calendar-event text-primary"></i>
+                        Calendar Events
+                    </h1>
+                    <p class="text-muted mb-0">
+                        View and manage holidays and events
+                    </p>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                    {% if advisers %}
+                    <form method="get" class="d-inline-block">
+                        <select name="adviser_id" class="form-select form-select-sm" style="min-width: 180px;" onchange="this.form.submit()">
+                            <option value="">All Events</option>
+                            {% for adv in advisers %}
+                                <option value="{{ adv.id }}" {% if selected_adviser_id == adv.id %}selected{% endif %}>{{ adv.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% endif %}
+                    
+                    <div class="view-toggle">
+                        <button class="btn btn-sm active" id="calendarViewBtn" title="Calendar View">
+                            <i class="bi bi-calendar3"></i>
+                        </button>
+                        <button class="btn btn-sm" id="listViewBtn" title="List View">
+                            <i class="bi bi-list-ul"></i>
+                        </button>
+                    </div>
+                    
+                    {% if not in_admin %}
+                    <button
+                        type="button"
+                        class="btn btn-primary"
+                        data-bs-toggle="modal"
+                        data-bs-target="#calendarModal"
+                        id="addCalendarBtn"
+                    >
+                        <i class="bi bi-plus-circle"></i>
+                        Add Event
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="card shadow-sm">
-        <div class="card-body">
-            <!-- Loading placeholder (shown briefly while the page 'loads') -->
-            <div id="calendarLoading" class="d-none text-center py-4">
-                <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
-                <div class="small text-muted mt-2">Loading events...</div>
+    <!-- Calendar View -->
+    <div class="calendar-container" id="calendarView">
+        <div class="calendar-header">
+            <div class="calendar-nav">
+                <button class="btn btn-outline-primary" id="prevMonth">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <h2 id="currentMonth"></h2>
+                <button class="btn btn-outline-primary" id="nextMonth">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
             </div>
+        </div>
+        
+        <div class="calendar-grid">
+            <div class="calendar-weekdays">
+                <div class="calendar-weekday">Sun</div>
+                <div class="calendar-weekday">Mon</div>
+                <div class="calendar-weekday">Tue</div>
+                <div class="calendar-weekday">Wed</div>
+                <div class="calendar-weekday">Thu</div>
+                <div class="calendar-weekday">Fri</div>
+                <div class="calendar-weekday">Sat</div>
+            </div>
+            <div class="calendar-days" id="calendarDays"></div>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #fed7d7; border-left: 3px solid #c53030;"></div>
+                <span>Holiday / No Class</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #bee3f8; border-left: 3px solid #2c5282;"></div>
+                <span>Event</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e2e8f0; border-left: 3px solid #4a5568;"></div>
+                <span>Other</span>
+            </div>
+        </div>
+    </div>
 
-            <!-- Gentle reminder shown when there are no events -->
-            <div id="calendarReminder" class="alert alert-info d-none d-flex align-items-center justify-content-between" role="alert">
-                <div class="me-3">
-                    <strong>No calendar events yet.</strong>
-                    <div class="small">Create your first event to manage holidays and reminders.</div>
+    <!-- List View -->
+    <div class="event-list-view d-none" id="listView">
+        <div id="eventsList"></div>
+        <div id="noEventsMessage" class="text-center py-5 text-muted d-none">
+            <i class="bi bi-calendar-x" style="font-size: 3rem;"></i>
+            <p class="mt-3 mb-0">No events to display</p>
+        </div>
+    </div>
+
+    <!-- Event Details Modal -->
+    <div class="modal fade" id="eventDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="eventDetailsTitle"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div>
-                    <button class="btn btn-sm btn-primary" id="reminderAddBtn">Add Event</button>
+                <div class="modal-body" id="eventDetailsBody"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-danger" id="deleteEventBtn">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
                 </div>
             </div>
-
-            {% if events %}
-                <div class="row g-3">
-                    {% for ev in events %}
-                    <div class="col-md-6 col-lg-4">
-                        <div class="card h-100 border-0 shadow-sm">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <h6 class="card-title mb-0 text-truncate" title="{{ ev.title }}">{{ ev.title }}</h6>
-                                    {% if ev.event_type == 'holiday' %}
-                                        <span class="badge bg-danger ms-2">Holiday</span>
-                                    {% elif ev.event_type == 'event' %}
-                                        <span class="badge bg-primary ms-2">Event</span>
-                                    {% else %}
-                                        <span class="badge bg-secondary ms-2">{{ ev.get_event_type_display }}</span>
-                                    {% endif %}
-                                </div>
-                                <div class="mb-2">
-                                    <small class="text-muted">
-                                        <i class="bi bi-calendar"></i> {{ ev.date|date:"M d, Y" }}
-                                        {% if ev.start_time or ev.end_time %}
-                                            <br><i class="bi bi-clock"></i>
-                                            {% if ev.start_time %}{{ ev.start_time|time:"H:i" }}{% endif %}
-                                            {% if ev.end_time %} - {{ ev.end_time|time:"H:i" }}{% endif %}
-                                        {% endif %}
-                                    </small>
-                                </div>
-                                {% if ev.subject %}
-                                <div class="mb-2">
-                                    <small class="text-muted">
-                                        <i class="bi bi-book"></i> {{ ev.subject.code }} - {{ ev.subject.name }}
-                                    </small>
-                                </div>
-                                {% else %}
-                                <div class="mb-2">
-                                    <small class="text-muted">
-                                        <i class="bi bi-globe"></i> Global
-                                    </small>
-                                </div>
-                                {% endif %}
-                                <p class="card-text flex-grow-1">
-                                    {% if ev.description %}
-                                        {{ ev.description|truncatechars:100 }}
-                                    {% else %}
-                                        <span class="text-muted">No description</span>
-                                    {% endif %}
-                                </p>
-                                <div class="d-flex justify-content-between align-items-center mt-auto">
-                                    <small class="text-muted">
-                                        {% if ev.created_by %}
-                                            By {{ ev.created_by.username }}
-                                        {% else %}
-                                            System
-                                        {% endif %}
-                                    </small>
-                                    <button
-                                        type="button"
-                                        class="btn btn-outline-danger btn-sm js-delete-event"
-                                        data-event-id="{{ ev.id }}"
-                                        title="Delete this event"
-                                    >
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                <div class="text-center py-5 text-muted">
-                    <i class="bi bi-calendar-x" style="font-size: 2rem;"></i>
-                    <p class="mt-3 mb-0">No calendar events found.</p>
-                </div>
-            {% endif %}
         </div>
     </div>
 </div>
@@ -129,6 +387,26 @@
 {% block extra_js %}
 <script>
     (function() {
+        // Event data from Django
+        const eventsData = [
+            {% for ev in events %}
+            {
+                id: {{ ev.id }},
+                title: "{{ ev.title|escapejs }}",
+                date: "{{ ev.date|date:'Y-m-d' }}",
+                type: "{{ ev.event_type }}",
+                description: "{{ ev.description|escapejs }}",
+                subject: {% if ev.subject %}"{{ ev.subject.code|escapejs }} - {{ ev.subject.name|escapejs }}"{% else %}null{% endif %},
+                createdBy: {% if ev.created_by %}"{{ ev.created_by.username|escapejs }}"{% else %}"System"{% endif %},
+                startTime: {% if ev.start_time %}"{{ ev.start_time|time:'H:i' }}"{% else %}null{% endif %},
+                endTime: {% if ev.end_time %}"{{ ev.end_time|time:'H:i' }}"{% else %}null{% endif %}
+            }{% if not forloop.last %},{% endif %}
+            {% endfor %}
+        ];
+
+        let currentDate = new Date();
+        let selectedEvent = null;
+
         function getCSRFToken() {
             const name = 'csrftoken=';
             const decoded = decodeURIComponent(document.cookie || '');
@@ -142,7 +420,7 @@
 
         async function deleteEvent(id) {
             if (!id) return;
-            if (!window.confirm('Delete this event?')) return;
+            if (!window.confirm('Delete this event? This action cannot be undone.')) return;
             try {
                 const resp = await fetch(`/events/${id}/delete/`, {
                     method: 'POST',
@@ -151,7 +429,7 @@
                 const data = await resp.json().catch(() => ({}));
                 if (resp.ok && data && data.success) {
                     if (window.showNotification) {
-                        window.showNotification('Event deleted', 'success');
+                        window.showNotification('Event deleted successfully', 'success');
                     }
                     window.location.reload();
                 } else {
@@ -171,65 +449,247 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.js-delete-event').forEach(function(btn) {
-                btn.addEventListener('click', function() {
-                    const id = this.getAttribute('data-event-id');
-                    deleteEvent(id);
-                });
-            });
-
-            // Show a short loading state, then show a reminder if there are no events
-            const pageEl = document.getElementById('calendarPage');
-            const loadingEl = document.getElementById('calendarLoading');
-            const reminderEl = document.getElementById('calendarReminder');
-            const addBtn = document.getElementById('addCalendarBtn');
-            const reminderAddBtn = document.getElementById('reminderAddBtn');
-
-            function showLoader() {
-                if (loadingEl) loadingEl.classList.remove('d-none');
-                if (reminderEl) reminderEl.classList.add('d-none');
+        function renderCalendar() {
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth();
+            
+            // Update month/year display
+            const monthNames = ['January', 'February', 'March', 'April', 'May', 'June',
+                'July', 'August', 'September', 'October', 'November', 'December'];
+            document.getElementById('currentMonth').textContent = `${monthNames[month]} ${year}`;
+            
+            // Get first day of month and number of days
+            const firstDay = new Date(year, month, 1).getDay();
+            const daysInMonth = new Date(year, month + 1, 0).getDate();
+            const daysInPrevMonth = new Date(year, month, 0).getDate();
+            
+            const calendarDays = document.getElementById('calendarDays');
+            calendarDays.innerHTML = '';
+            
+            // Get today's date for comparison
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            // Previous month days
+            for (let i = firstDay - 1; i >= 0; i--) {
+                const dayNum = daysInPrevMonth - i;
+                const dayEl = createDayElement(dayNum, true, year, month - 1);
+                calendarDays.appendChild(dayEl);
             }
-            function hideLoader() {
-                if (loadingEl) loadingEl.classList.add('d-none');
-            }
-
-            // Trigger a short loading animation so the user knows data is being checked
-            showLoader();
-            setTimeout(function() {
-                hideLoader();
-                const hasEvents = pageEl && parseInt(pageEl.getAttribute('data-has-events') || '0', 10) > 0;
-                if (!hasEvents) {
-                    // Show the gentle reminder and make the Add button pulse to draw attention
-                    if (reminderEl) reminderEl.classList.remove('d-none');
-                    if (addBtn) addBtn.classList.add('pulse-button');
-
-                    // Optionally show a toast-style notification as a reminder
-                    if (window.showNotification) {
-                        window.showNotification('No calendar events yet — create your first event', 'info');
-                    }
+            
+            // Current month days
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dayEl = createDayElement(day, false, year, month);
+                
+                // Check if today
+                const dayDate = new Date(year, month, day);
+                if (dayDate.getTime() === today.getTime()) {
+                    dayEl.classList.add('today');
                 }
-            }, 700);
-
-            if (reminderAddBtn) {
-                reminderAddBtn.addEventListener('click', function() {
-                    // Open the modal for creating events
-                    const modalEl = document.getElementById('calendarModal');
-                    if (modalEl && modalEl._bsModal) {
-                        modalEl._bsModal.show();
-                    } else if (modalEl && typeof bootstrap !== 'undefined') {
-                        const m = new bootstrap.Modal(modalEl); m.show();
-                    }
-                });
+                
+                calendarDays.appendChild(dayEl);
             }
+            
+            // Next month days
+            const totalCells = calendarDays.children.length;
+            const remainingCells = 42 - totalCells; // 6 rows * 7 days
+            for (let day = 1; day <= remainingCells; day++) {
+                const dayEl = createDayElement(day, true, year, month + 1);
+                calendarDays.appendChild(dayEl);
+            }
+        }
 
-            // Remove pulse after user opens modal
-            if (addBtn) {
-                addBtn.addEventListener('click', function() {
-                    addBtn.classList.remove('pulse-button');
+        function createDayElement(dayNum, isOtherMonth, year, month) {
+            const dayEl = document.createElement('div');
+            dayEl.className = 'calendar-day';
+            if (isOtherMonth) {
+                dayEl.classList.add('other-month');
+            }
+            
+            const dayNumber = document.createElement('div');
+            dayNumber.className = 'day-number';
+            dayNumber.textContent = dayNum;
+            dayEl.appendChild(dayNumber);
+            
+            // Find events for this day
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+            const dayEvents = eventsData.filter(e => e.date === dateStr);
+            
+            dayEvents.forEach(event => {
+                const indicator = document.createElement('div');
+                indicator.className = `event-indicator ${event.type}`;
+                indicator.textContent = event.title;
+                indicator.title = event.title;
+                indicator.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    showEventDetails(event);
                 });
+                dayEl.appendChild(indicator);
+            });
+            
+            return dayEl;
+        }
+
+        function showEventDetails(event) {
+            selectedEvent = event;
+            const modal = new bootstrap.Modal(document.getElementById('eventDetailsModal'));
+            
+            document.getElementById('eventDetailsTitle').innerHTML = 
+                `<i class="bi bi-calendar-event"></i> ${event.title}`;
+            
+            let typeLabel = event.type.charAt(0).toUpperCase() + event.type.slice(1);
+            let typeBadge = '';
+            if (event.type === 'holiday') {
+                typeBadge = '<span class="badge bg-danger">Holiday / No Class</span>';
+            } else if (event.type === 'event') {
+                typeBadge = '<span class="badge bg-primary">Event</span>';
+            } else {
+                typeBadge = '<span class="badge bg-secondary">Other</span>';
+            }
+            
+            let timeInfo = '';
+            if (event.startTime || event.endTime) {
+                timeInfo = `<p><strong><i class="bi bi-clock"></i> Time:</strong> `;
+                if (event.startTime) timeInfo += event.startTime;
+                if (event.endTime) timeInfo += ` - ${event.endTime}`;
+                timeInfo += '</p>';
+            }
+            
+            document.getElementById('eventDetailsBody').innerHTML = `
+                <div class="mb-3">
+                    ${typeBadge}
+                </div>
+                <p><strong><i class="bi bi-calendar"></i> Date:</strong> ${new Date(event.date).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                })}</p>
+                ${timeInfo}
+                ${event.subject ? `<p><strong><i class="bi bi-book"></i> Subject:</strong> ${event.subject}</p>` : '<p><i class="bi bi-globe"></i> <em>Global event</em></p>'}
+                ${event.description ? `<p><strong><i class="bi bi-file-text"></i> Description:</strong><br>${event.description}</p>` : ''}
+                <p class="text-muted small"><i class="bi bi-person"></i> Created by: ${event.createdBy}</p>
+            `;
+            
+            {% if not in_admin %}
+            document.getElementById('deleteEventBtn').onclick = () => {
+                deleteEvent(event.id);
+                modal.hide();
+            };
+            {% else %}
+            document.getElementById('deleteEventBtn').style.display = 'none';
+            {% endif %}
+            
+            modal.show();
+        }
+
+        function renderListView() {
+            const eventsList = document.getElementById('eventsList');
+            const noEventsMsg = document.getElementById('noEventsMessage');
+            
+            if (eventsData.length === 0) {
+                eventsList.innerHTML = '';
+                noEventsMsg.classList.remove('d-none');
+                return;
+            }
+            
+            noEventsMsg.classList.add('d-none');
+            
+            // Sort events by date
+            const sortedEvents = [...eventsData].sort((a, b) => new Date(b.date) - new Date(a.date));
+            
+            eventsList.innerHTML = sortedEvents.map(event => {
+                let typeBadge = '';
+                if (event.type === 'holiday') {
+                    typeBadge = '<span class="badge bg-danger">Holiday</span>';
+                } else if (event.type === 'event') {
+                    typeBadge = '<span class="badge bg-primary">Event</span>';
+                } else {
+                    typeBadge = '<span class="badge bg-secondary">Other</span>';
+                }
+                
+                let timeInfo = '';
+                if (event.startTime || event.endTime) {
+                    timeInfo = `<div class="text-muted small"><i class="bi bi-clock"></i> `;
+                    if (event.startTime) timeInfo += event.startTime;
+                    if (event.endTime) timeInfo += ` - ${event.endTime}`;
+                    timeInfo += '</div>';
+                }
+                
+                return `
+                    <div class="event-item">
+                        <div class="event-item-header">
+                            <h5 class="event-item-title">${event.title}</h5>
+                            ${typeBadge}
+                        </div>
+                        <div class="text-muted small mb-2">
+                            <i class="bi bi-calendar"></i> ${new Date(event.date).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric'
+                            })}
+                        </div>
+                        ${timeInfo}
+                        ${event.subject ? `<div class="text-muted small mb-2"><i class="bi bi-book"></i> ${event.subject}</div>` : '<div class="text-muted small mb-2"><i class="bi bi-globe"></i> Global</div>'}
+                        ${event.description ? `<p class="mb-2">${event.description}</p>` : ''}
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">By ${event.createdBy}</small>
+                            {% if not in_admin %}
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteEvent(${event.id})">
+                                <i class="bi bi-trash"></i> Delete
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize calendar
+            renderCalendar();
+            renderListView();
+            
+            // Month navigation
+            document.getElementById('prevMonth').addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() - 1);
+                renderCalendar();
+            });
+            
+            document.getElementById('nextMonth').addEventListener('click', () => {
+                currentDate.setMonth(currentDate.getMonth() + 1);
+                renderCalendar();
+            });
+            
+            // View toggle
+            const calendarView = document.getElementById('calendarView');
+            const listView = document.getElementById('listView');
+            const calendarViewBtn = document.getElementById('calendarViewBtn');
+            const listViewBtn = document.getElementById('listViewBtn');
+            
+            calendarViewBtn.addEventListener('click', () => {
+                calendarView.classList.remove('d-none');
+                listView.classList.add('d-none');
+                calendarViewBtn.classList.add('active');
+                listViewBtn.classList.remove('active');
+            });
+            
+            listViewBtn.addEventListener('click', () => {
+                calendarView.classList.add('d-none');
+                listView.classList.remove('d-none');
+                listViewBtn.classList.add('active');
+                calendarViewBtn.classList.remove('active');
+            });
+            
+            // Show notification if no events
+            if (eventsData.length === 0 && window.showNotification) {
+                setTimeout(() => {
+                    window.showNotification('No calendar events yet — create your first event', 'info');
+                }, 500);
             }
         });
+
+        // Make deleteEvent available globally for list view
+        window.deleteEvent = deleteEvent;
     })();
 </script>
 {% endblock %}

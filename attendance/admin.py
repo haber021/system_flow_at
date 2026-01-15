@@ -4,8 +4,11 @@ from django.contrib import messages
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Q
-from django.utils.html import format_html
-from .models import Student, Subject, Attendance, Absent, SystemSettings, StudentSubject, EmailLog, SubjectSchedule, Adviser, Course, Instructor, Section, CalendarEvent, AbsenceEvidence
+from django.utils.html import format_html, format_html_join
+from django.urls import reverse, path
+from django.template.response import TemplateResponse
+from django.http import HttpResponseForbidden
+from .models import Student, Subject, Attendance, Absent, SystemSettings, StudentSubject, EmailLog, SubjectSchedule, Adviser, Course, Instructor, Section, CalendarEvent, AbsenceEvidence, FeatureSuggestion
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
@@ -81,14 +84,19 @@ class AdviserAdminForm(forms.ModelForm):
 @admin.register(Adviser)
 class AdviserAdmin(admin.ModelAdmin):
     form = AdviserAdminForm
-    list_display = ['name', 'email', 'employee_id', 'department', 'course_count', 'has_user_account']
+    list_display = ['name', 'email', 'employee_id', 'department', 'course_count', 'calendar_event_count', 'has_user_account']
     search_fields = ['name', 'email', 'employee_id', 'department']
     list_filter = ['department', 'courses']
     filter_horizontal = ['courses']
     actions = ['create_user_accounts', 'set_password']
+    readonly_fields = ['calendar_events_preview']
     fieldsets = (
         ('Basic Information', {
             'fields': ('name', 'email', 'employee_id', 'department', 'courses')
+        }),
+        ('Calendar', {
+            'fields': ('calendar_events_preview',),
+            'description': 'Calendar events for this adviser (includes events for their subjects and global events).'
         }),
         ('Login Account', {
             'fields': ('password1', 'password2'),
@@ -101,6 +109,34 @@ class AdviserAdmin(admin.ModelAdmin):
         return obj.courses.count()
     course_count.short_description = 'Courses'
     
+    def calendar_event_count(self, obj):
+        """Count calendar events related to this adviser (their subjects + global events)"""
+        return CalendarEvent.objects.filter(
+            Q(subject__adviser=obj) | Q(subject__instructor__adviser=obj) | Q(subject__isnull=True)
+        ).distinct().count()
+    calendar_event_count.short_description = 'Calendar Events'
+
+    def calendar_events_preview(self, obj):
+        """Render a compact HTML list of recent calendar events relevant to this adviser"""
+        events = CalendarEvent.objects.filter(
+            Q(subject__adviser=obj) | Q(subject__instructor__adviser=obj) | Q(subject__isnull=True)
+        ).select_related('subject', 'created_by').order_by('-date')[:20]
+        if not events:
+            return "No calendar events"
+
+        rows = format_html_join('\n', '<li><a href="{}">{}</a> — {} {} ({})</li>', (
+            (
+                reverse('admin:attendance_calendarevent_change', args=(ev.pk,)),
+                ev.title,
+                ev.date,
+                f"[{ev.subject.code}]" if ev.subject else "[Global]",
+                ev.event_type,
+            ) for ev in events
+        ))
+
+        return format_html('<div style="max-height:300px; overflow:auto;"><ul style="margin:0; padding-left: 16px;">{}</ul></div>', rows)
+    calendar_events_preview.short_description = 'Calendar Events (recent)'
+
     def has_user_account(self, obj):
         return obj.user is not None
     has_user_account.boolean = True
@@ -317,6 +353,14 @@ class StudentAdmin(admin.ModelAdmin):
         messages.success(request, message)
     
     create_user_accounts.short_description = "Create login accounts for selected students"
+
+@admin.register(FeatureSuggestion)
+class FeatureSuggestionAdmin(admin.ModelAdmin):
+    list_display = ['title', 'student', 'status', 'created_at']
+    search_fields = ['title', 'description', 'student__name', 'student__email']
+    list_filter = ['status', 'created_at']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-created_at']
 
 class SubjectScheduleInline(admin.TabularInline):
     model = SubjectSchedule
@@ -644,3 +688,44 @@ class CalendarEventAdmin(admin.ModelAdmin):
         if not obj.created_by:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+    def get_urls(self):
+        """Add a custom admin URL to display the full calendar template inside admin."""
+        urls = super().get_urls()
+        custom_urls = [
+            path('calendar/', self.admin_site.admin_view(self.calendar_view), name='attendance_calendarevent_calendar'),
+        ]
+        return custom_urls + urls
+
+    def calendar_view(self, request):
+        """Render the existing calendar events template within the admin site for staff users."""
+        if not request.user.is_staff:
+            return HttpResponseForbidden('Forbidden')
+
+        adviser_id = request.GET.get('adviser_id')
+        qs = CalendarEvent.objects.select_related('subject', 'created_by')
+
+        if adviser_id:
+            try:
+                adviser_obj = Adviser.objects.get(pk=adviser_id)
+                if adviser_obj.user:
+                    events = qs.filter(created_by=adviser_obj.user)
+                else:
+                    events = qs.none()
+            except Adviser.DoesNotExist:
+                messages.warning(request, 'Adviser not found; showing all events.')
+                events = qs.all()
+        else:
+            events = qs.all()
+
+        advisers = Adviser.objects.order_by('name').all()
+        events = events.order_by('-date', 'start_time', 'id')
+
+        context = dict(
+            self.admin_site.each_context(request),
+            events=events,
+            advisers=advisers,
+            selected_adviser_id=int(adviser_id) if adviser_id and adviser_id.isdigit() else None,
+            in_admin=True,
+        )
+        return TemplateResponse(request, 'attendance/calendar_events.html', context)

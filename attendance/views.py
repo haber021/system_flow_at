@@ -44,9 +44,10 @@ except Exception:
 
 from .models import (
     Student, Subject, Attendance, SystemSettings,
-    StudentSubject, EmailLog, SubjectSchedule, EnrollmentRequest, Adviser, Course, Instructor, Section, PasswordResetToken, AbsenceEvidence
+    StudentSubject, EmailLog, SubjectSchedule, EnrollmentRequest, Adviser, Course, Instructor, Section, PasswordResetToken, AbsenceEvidence, FeatureSuggestion
 )
 from .models import CalendarEvent
+from .forms import FeatureSuggestionForm
 from .email_utils import send_attendance_email, resend_email, send_emails_bulk
 
 # Get Manila timezone
@@ -409,7 +410,7 @@ def login_view(request):
                     adviser_name = user.adviser_profile.name
                     if has_assigned_students:
                         messages.success(request, f"Welcome, {adviser_name}!")
-                        return redirect('adviser_features')
+                        return redirect('scan')
                     else:
                         messages.success(request, f"Welcome, {adviser_name}!")
                         return redirect('dashboard')
@@ -441,20 +442,34 @@ def forgot_password_view(request):
             return render(request, 'attendance/forgot_password.html')
         
         try:
-            # Find user by email
-            user = User.objects.get(email=email)
-            
-            # Generate password reset token
-            reset_token = PasswordResetToken.generate_token(user)
-            
-            # Create reset link
-            reset_url = request.build_absolute_uri(
-                reverse('reset_password', args=[reset_token.token])
-            )
-            
-            # Prepare email content
-            email_subject = "Password Reset Request - DMMMSU Attendance Monitor"
-            email_body = f"""
+            # Find users by email (allow multiple users with same email)
+            users = User.objects.filter(email__iexact=email)
+
+            if not users.exists():
+                # Don't reveal whether an account exists for security
+                messages.success(
+                    request,
+                    "If an account with that email exists, a password reset link has been sent."
+                )
+                return redirect('login')
+            else:
+                any_sent = False
+                send_failed = False
+                user_names = []
+                
+                for user in users:
+                    try:
+                        # Generate password reset token per user
+                        reset_token = PasswordResetToken.generate_token(user)
+
+                        # Create reset link
+                        reset_url = request.build_absolute_uri(
+                            reverse('reset_password', args=[reset_token.token])
+                        )
+
+                        # Prepare email content
+                        email_subject = "Password Reset Request - DMMMSU Attendance Monitor"
+                        email_body = f"""
 Hello {user.get_full_name() or user.username},
 
 You have requested to reset your password for your DMMMSU Attendance Monitor account.
@@ -469,27 +484,44 @@ If you have any concerns, please contact the system administrator.
 Best regards,
 DMMMSU Attendance Monitor System
 """
-            
-            # Send email
-            try:
-                email_message = EmailMessage(
-                    subject=email_subject,
-                    body=email_body,
-                    from_email=django_settings.DEFAULT_FROM_EMAIL,
-                    to=[email],
-                )
-                email_message.send(fail_silently=False)
-                
-                messages.success(
-                    request, 
-                    "Password reset link has been sent to your email address. Please check your inbox (and spam folder)."
-                )
-            except Exception as e:
-                logger.error(f"Failed to send password reset email to {email}: {str(e)}")
-                messages.error(
-                    request,
-                    "Failed to send password reset email. Please try again later or contact the administrator."
-                )
+
+                        # Send email for this user
+                        try:
+                            email_message = EmailMessage(
+                                subject=email_subject,
+                                body=email_body,
+                                from_email=django_settings.DEFAULT_FROM_EMAIL,
+                                to=[email],
+                            )
+                            email_message.send(fail_silently=False)
+                            any_sent = True
+                            user_names.append(user.get_full_name() or user.username)
+                        except Exception as e:
+                            logger.error(f"Failed to send password reset email to {email} for user {user.id}: {str(e)}")
+                            send_failed = True
+                    except Exception as e:
+                        logger.error(f"Failed to create password reset token for user {getattr(user, 'id', 'unknown')}: {e}")
+                        send_failed = True
+
+                # Inform the requester without revealing account existence
+                if any_sent:
+                    messages.success(
+                        request,
+                        "If an account with that email exists, a password reset link has been sent. Please check your inbox (and spam folder)."
+                    )
+                    # Store user names in session for display
+                    request.session['password_reset_email'] = email
+                    request.session['password_reset_users'] = user_names
+                    return render(request, 'attendance/forgot_password_confirmation.html', {
+                        'email': email,
+                        'user_names': user_names
+                    })
+                elif send_failed:
+                    messages.error(
+                        request,
+                        "Failed to send password reset email. Please try again later or contact the administrator."
+                    )
+                    return render(request, 'attendance/forgot_password.html')
             
         except User.DoesNotExist:
             # Don't reveal whether email exists or not (security best practice)
@@ -497,11 +529,11 @@ DMMMSU Attendance Monitor System
                 request,
                 "If an account with that email exists, a password reset link has been sent."
             )
+            return redirect('login')
         except Exception as e:
             logger.error(f"Error in forgot_password_view: {str(e)}")
             messages.error(request, "An error occurred. Please try again later.")
-        
-        return redirect('login')
+            return render(request, 'attendance/forgot_password.html')
     
     return render(request, 'attendance/forgot_password.html')
 
@@ -2311,14 +2343,15 @@ def validate_timeout_time(subject, attendance_date, scan_time, schedule=None, se
     scan_datetime = make_aware_datetime(attendance_date, scan_time)
     end_datetime = make_aware_datetime(attendance_date, class_end)
     
-    # Calculate 15 minutes before class ends
-    earliest_timeout = end_datetime - timedelta(minutes=15)
+    # Calculate earliest timeout using configured minutes
+    timeout_minutes = getattr(settings, 'timeout_before_minutes', 15)
+    earliest_timeout = end_datetime - timedelta(minutes=timeout_minutes)
     
-    # Check if scan time is at least 15 minutes before class ends
+    # Check if scan time is at least the configured minutes before class ends
     if scan_datetime < earliest_timeout:
         earliest_timeout_str = earliest_timeout.time().strftime('%I:%M %p')
         class_end_str = class_end.strftime('%I:%M %p')
-        return False, f"Time-out is only allowed 15 minutes before class ends. Earliest time-out: {earliest_timeout_str} (Class ends at {class_end_str})"
+        return False, f"Time-out is only allowed {timeout_minutes} minutes before class ends. Earliest time-out: {earliest_timeout_str} (Class ends at {class_end_str})"
     
     return True, None
 
@@ -2489,8 +2522,11 @@ Attendance System"""
 
 @login_required
 def scan_view(request):
-    # Filter subjects by adviser first
-    subjects_qs = filter_subjects_by_user(request.user).filter(is_active=True).prefetch_related('schedules')
+    # Filter subjects: If admin, show ALL subjects; otherwise filter by adviser
+    if request.user.is_superuser or request.user.is_staff:
+        subjects_qs = Subject.objects.filter(is_active=True).prefetch_related('schedules')
+    else:
+        subjects_qs = filter_subjects_by_user(request.user).filter(is_active=True).prefetch_related('schedules')
 
     # Cache settings and current Manila time for auto subject selection
     settings = get_cached_settings()
@@ -2537,12 +2573,17 @@ def scan_view(request):
             pass
     
     # Auto-switch to the subject whose schedule is currently active
+    # BUT: Admins can manually select any subject, so disable auto-switching for them
     auto_selected = False
+    is_admin = request.user.is_superuser or request.user.is_staff
+    
     if auto_subject and (not active_subject or active_subject.id != auto_subject.id):
-        active_subject = auto_subject
-        auto_selected = True
-        if request.method == 'GET':
-            messages.info(request, f"Active subject switched to {active_subject.code} based on the current schedule.")
+        # Only auto-switch if user is NOT an admin, or if no subject was manually selected
+        if not is_admin or not active_subject_id:
+            active_subject = auto_subject
+            auto_selected = True
+            if request.method == 'GET':
+                messages.info(request, f"Active subject switched to {active_subject.code} based on the current schedule.")
     
     # Fallback to first active subject if none selected
     if not active_subject:
@@ -3274,24 +3315,28 @@ def student_attendance_summary(request, student_id=None):
     academic_year = request.GET.get('academic_year', default_ay)
     semester = request.GET.get('semester', '1st Semester')
     
-    # Get accessible subjects based on user permissions (includes subjects where adviser's students are enrolled)
-    subjects = filter_subjects_by_user(request.user).filter(is_active=True)
-    
     # Prepare data for each subject with enrolled students
     subjects_data = []
     total_enrollments = 0
     
-    # Prefetch all enrollments for better performance (avoids N+1 queries)
+    # First, get all enrollments for the selected academic year and semester
     all_enrollments = StudentSubject.objects.filter(
-        subject__in=subjects,
         academic_year=academic_year,
         semester=semester
     ).select_related('student', 'student__course', 'student__adviser', 'subject')
+    
+    # Get accessible subjects based on user permissions (includes subjects where adviser's students are enrolled)
+    # Only include subjects that have enrollments in this academic year/semester
+    subject_ids_with_enrollments = all_enrollments.values_list('subject_id', flat=True).distinct()
+    subjects = filter_subjects_by_user(request.user).filter(
+        is_active=True,
+        id__in=subject_ids_with_enrollments
+    )
 
-    # If user is an adviser, filter enrollments to only their students
-    if hasattr(request.user, 'adviser_profile') and not (request.user.is_superuser or request.user.is_staff):
-        adviser = request.user.adviser_profile
-        all_enrollments = all_enrollments.filter(student__adviser=adviser)
+    # Note: We don't filter enrollments by adviser's students here because
+    # the subjects queryset already includes only subjects accessible to the adviser
+    # (their own subjects, subjects their students are enrolled in, and subjects taught by their instructors)
+    # So we want to show ALL students enrolled in those subjects, not just the adviser's students
     
     # Exclude the adviser's own student profile if they are also a student
     if hasattr(request.user, 'student_profile'):
@@ -3473,10 +3518,8 @@ def email_preview(request, student_id):
         messages.warning(request, "Email notifications are currently disabled in system settings.")
         return redirect('student_summary')
     
-    # Respect student opt-out preference
-    if hasattr(student, 'email_opt_in') and not student.email_opt_in:
-        messages.warning(request, "This student has opted out of email notifications.")
-        return redirect('student_summary')
+    # Note: Reports are sent to all students regardless of email_opt_in preference
+    # The email_opt_in setting applies to alerts, warnings, and confirmations only
     
     # Get report data (similar to semester_report)
     student_subjects = StudentSubject.objects.filter(
@@ -3622,10 +3665,8 @@ def bulk_send_emails(request):
     failed_students = []
     
     for student in students:
-        # Skip students who opted out
-        if hasattr(student, 'email_opt_in') and not student.email_opt_in:
-            failed_students.append(f"{student.name} (opted out)")
-            continue
+        # Note: Reports are sent to all students regardless of email_opt_in preference
+        # Other email types (alerts, warnings) still respect the opt-in setting
         try:
             # Get report data for this student
             student_subjects = StudentSubject.objects.filter(
@@ -3838,6 +3879,7 @@ def settings_view(request):
             data_retention = request.POST.get('data_retention_years', '5')
             early_attendance = request.POST.get('early_attendance_minutes', '30')
             late_attendance = request.POST.get('late_attendance_minutes', '60')
+            timeout_before = request.POST.get('timeout_before_minutes', '15')
             
             settings.grace_period_minutes = int(grace_period) if grace_period else 15
             settings.late_threshold_minutes = int(late_threshold) if late_threshold else 30
@@ -3846,6 +3888,7 @@ def settings_view(request):
             settings.data_retention_years = int(data_retention) if data_retention else 5
             settings.early_attendance_minutes = int(early_attendance) if early_attendance else 30
             settings.late_attendance_minutes = int(late_attendance) if late_attendance else 60
+            settings.timeout_before_minutes = int(timeout_before) if timeout_before else 15
             
             # Validate percentage range
             if settings.absent_threshold_percent < 0 or settings.absent_threshold_percent > 100:
@@ -3875,6 +3918,10 @@ def settings_view(request):
             
             if settings.late_attendance_minutes < 0:
                 messages.error(request, "Late attendance minutes cannot be negative.")
+                return render(request, 'attendance/settings.html', {'settings': settings})
+
+            if settings.timeout_before_minutes < 0:
+                messages.error(request, "Time-out minutes cannot be negative.")
                 return render(request, 'attendance/settings.html', {'settings': settings})
             
             # Parse boolean fields
@@ -4849,61 +4896,92 @@ def student_enroll_subjects(request):
         semester = request.POST.get('semester', semester)
         action = request.POST.get('action')
         subject_id = request.POST.get('subject_id')
-        
-        try:
-            subject = Subject.objects.get(id=subject_id, is_active=True)
-            
-            if action == 'enroll':
-                # Check if already enrolled
-                existing_enrollment = StudentSubject.objects.filter(
+
+        if action == 'cancel_request':
+            try:
+                subject_id_int = int(subject_id)
+            except (TypeError, ValueError):
+                messages.error(request, "Invalid subject selected.")
+            else:
+                enrollment_request = EnrollmentRequest.objects.filter(
                     student=student,
-                    subject=subject,
+                    subject_id=subject_id_int,
                     academic_year=academic_year,
                     semester=semester,
-                ).exists()
-                
-                if existing_enrollment:
-                    messages.info(request, f"You are already enrolled in {subject.code} - {subject.name}.")
+                    status='PENDING'
+                ).select_related('subject').first()
+
+                if enrollment_request:
+                    subject = enrollment_request.subject
+                    enrollment_request.delete()
+                    messages.success(
+                        request,
+                        f"Enrollment request for {subject.code} - {subject.name} has been cancelled."
+                    )
                 else:
-                    # Check if there's already a pending request
-                    pending_request = EnrollmentRequest.objects.filter(
+                    messages.warning(request, "No pending enrollment request found for the selected subject.")
+        else:
+            try:
+                subject = Subject.objects.get(id=subject_id, is_active=True)
+                
+                if action == 'enroll':
+                    # Check if already enrolled
+                    existing_enrollment = StudentSubject.objects.filter(
                         student=student,
                         subject=subject,
                         academic_year=academic_year,
                         semester=semester,
-                        status='PENDING'
                     ).exists()
                     
-                    if pending_request:
-                        messages.info(request, f"You already have a pending enrollment request for {subject.code} - {subject.name}. Please wait for your adviser's approval.")
+                    if existing_enrollment:
+                        messages.info(request, f"You are already enrolled in {subject.code} - {subject.name}.")
                     else:
-                        # Create enrollment request (pending adviser approval)
-                        EnrollmentRequest.objects.create(
+                        # Check if there's already a pending request
+                        pending_request = EnrollmentRequest.objects.filter(
                             student=student,
                             subject=subject,
                             academic_year=academic_year,
                             semester=semester,
                             status='PENDING'
-                        )
-                        messages.success(request, f"Enrollment request submitted for {subject.code} - {subject.name}! Your adviser will review and confirm your enrollment.")
+                        ).exists()
+                        
+                        if pending_request:
+                            messages.info(request, f"You already have a pending enrollment request for {subject.code} - {subject.name}. Please wait for your adviser's approval.")
+                        else:
+                            # Create enrollment request (pending adviser approval)
+                            EnrollmentRequest.objects.create(
+                                student=student,
+                                subject=subject,
+                                academic_year=academic_year,
+                                semester=semester,
+                                status='PENDING'
+                            )
+                            messages.success(request, f"Enrollment request submitted for {subject.code} - {subject.name}! Your adviser will review and confirm your enrollment.")
             
-            elif action == 'unenroll':
-                # Unenroll student from subject (no confirmation needed for unenrollment)
-                deleted = StudentSubject.objects.filter(
-                    student=student,
-                    subject=subject,
-                    academic_year=academic_year,
-                    semester=semester,
-                ).delete()
-                if deleted[0] > 0:
-                    messages.success(request, f"Successfully unenrolled from {subject.code} - {subject.name}!")
-                else:
-                    messages.warning(request, f"You are not enrolled in {subject.code} - {subject.name}.")
+                elif action == 'unenroll':
+                    # Unenroll student from subject (no confirmation needed for unenrollment)
+                    deleted = StudentSubject.objects.filter(
+                        student=student,
+                        subject=subject,
+                        academic_year=academic_year,
+                        semester=semester,
+                    ).delete()
+                    if deleted[0] > 0:
+                        messages.success(request, f"Successfully unenrolled from {subject.code} - {subject.name}!")
+                    else:
+                        messages.warning(request, f"You are not enrolled in {subject.code} - {subject.name}.")
+
+                # For any other action, fall through silently
+
+            except Subject.DoesNotExist:
+                messages.error(request, "Subject not found or is not active.")
+            except Exception as e:
+                messages.error(request, f"An error occurred: {str(e)}")
         
-        except Subject.DoesNotExist:
-            messages.error(request, "Subject not found or is not active.")
-        except Exception as e:
-            messages.error(request, f"An error occurred: {str(e)}")
+        # Redirect back to the same page with preserved parameters
+        from urllib.parse import urlencode
+        params = {'academic_year': academic_year, 'semester': semester}
+        return redirect(f"{reverse('student_enroll_subjects')}?{urlencode(params)}")
     
     # Get all active subjects for the selected semester with prefetched schedules
     all_subjects = Subject.objects.filter(is_active=True, semester=semester).prefetch_related('schedules').order_by('code')
@@ -4923,7 +5001,22 @@ def student_enroll_subjects(request):
         status='PENDING'
     ).values_list('subject_id', flat=True)
     
-    # Prepare subject data with enrollment status
+    # Prepare subject data separated by status
+    enrolled_subjects = []
+    pending_subjects = []
+    available_subjects = []
+    
+    for subject in all_subjects:
+        item = {'subject': subject}
+        
+        if subject.id in enrolled_subject_ids:
+            enrolled_subjects.append(item)
+        elif subject.id in pending_subject_ids:
+            pending_subjects.append(item)
+        else:
+            available_subjects.append(item)
+    
+    # Legacy support - keep subjects_data for backward compatibility
     subjects_data = []
     for subject in all_subjects:
         is_enrolled = subject.id in enrolled_subject_ids
@@ -4936,10 +5029,15 @@ def student_enroll_subjects(request):
     
     context = {
         'student': student,
-        'subjects_data': subjects_data,
+        'subjects_data': subjects_data,  # Legacy support
+        'enrolled_subjects': enrolled_subjects,
+        'pending_subjects': pending_subjects,
+        'available_subjects': available_subjects,
         'academic_year': academic_year,
         'semester': semester,
         'enrolled_count': len(enrolled_subject_ids),
+        'pending_count': len(pending_subject_ids),
+        'available_count': len(available_subjects),
         'total_count': all_subjects.count(),
     }
     return render(request, 'attendance/student_enroll_subjects.html', context)
@@ -4960,7 +5058,7 @@ def student_features_view(request):
         messages.error(request, "Student profile not found. Please contact administrator.")
         logout(request)
         return redirect('student_login')
-    
+
     # Get all attendances for this student
     attendances = Attendance.objects.filter(student=student).select_related('subject').order_by('-date', '-time')
     
@@ -5137,6 +5235,36 @@ def student_features_view(request):
         'semester': semester,
     }
     return render(request, 'attendance/student_features.html', context)
+
+@login_required
+def student_suggest_feature(request):
+    """Separate page for students to submit feature suggestions/feedback"""
+    try:
+        student = request.user.student_profile
+    except Student.DoesNotExist:
+        messages.error(request, "Student profile not found. Please contact administrator.")
+        logout(request)
+        return redirect('student_login')
+
+    if request.method == 'POST':
+        form = FeatureSuggestionForm(request.POST)
+        if form.is_valid():
+            suggestion = form.save(commit=False)
+            suggestion.student = student
+            suggestion.save()
+            messages.success(request, "Feature suggestion submitted — thank you for the feedback!")
+            return redirect('student_suggest_feature')
+    else:
+        form = FeatureSuggestionForm()
+
+    suggestions = FeatureSuggestion.objects.filter(student=student).order_by('-created_at')
+
+    context = {
+        'student': student,
+        'suggestion_form': form,
+        'suggestions': suggestions,
+    }
+    return render(request, 'attendance/suggestion_form.html', context)
 
 @login_required
 def student_profile_view(request):
@@ -5643,6 +5771,9 @@ def adviser_enrollment_requests(request):
             selected_ids = request.POST.getlist('selected_requests')
             bulk_notes = request.POST.get('bulk_notes', '').strip()
             
+            # Debug logging
+            print(f"\n[BULK APPROVE DEBUG] Received {len(selected_ids)} request IDs: {selected_ids}")
+            
             if not selected_ids:
                 messages.warning(request, "Please select at least one enrollment request to approve.")
                 return redirect('adviser_enrollment_requests')
@@ -5653,6 +5784,7 @@ def adviser_enrollment_requests(request):
                     id__in=selected_ids,
                     status='PENDING'
                 )
+                print(f"[BULK APPROVE DEBUG] Staff/Superuser - Found {accessible_requests.count()} pending requests")
             else:
                 if hasattr(request.user, 'adviser_profile'):
                     adviser = request.user.adviser_profile
@@ -5661,14 +5793,21 @@ def adviser_enrollment_requests(request):
                         status='PENDING',
                         subject__instructor__adviser=adviser
                     ).select_related('student', 'subject', 'subject__instructor', 'subject__instructor__adviser')
+                    print(f"[BULK APPROVE DEBUG] Adviser '{adviser.name}' - Found {accessible_requests.count()} pending requests")
                 else:
                     accessible_requests = EnrollmentRequest.objects.none()
+                    print(f"[BULK APPROVE DEBUG] No adviser profile found")
             
             approved_count = 0
             failed_count = 0
             email_sent_count = 0
             email_failed_count = 0
             total_requests = accessible_requests.count()
+            
+            # Check if no accessible requests were found
+            if total_requests == 0:
+                messages.warning(request, "No pending enrollment requests found to approve. The selected requests may have already been processed.")
+                return redirect('adviser_enrollment_requests')
             
             # Print bulk approval header
             print(f"\n{'='*70}")
@@ -6551,18 +6690,44 @@ def calendar_events_view(request):
 
     This is meant for users who prefer a full-page view of events
     instead of the JavaScript-powered modal calendar.
+
+    Staff/superusers can optionally filter events by adviser using ?adviser_id=<id>
+    (this will show events *created* by the specified adviser user account).
     """
+    adviser_id = request.GET.get('adviser_id')
+    qs = CalendarEvent.objects.select_related('subject', 'created_by')
+
     if request.user.is_superuser or request.user.is_staff:
-        events = CalendarEvent.objects.select_related('subject', 'created_by').all()
+        if adviser_id:
+            try:
+                adviser_obj = Adviser.objects.get(pk=adviser_id)
+                if adviser_obj.user:
+                    events = qs.filter(created_by=adviser_obj.user)
+                else:
+                    # Adviser has no linked user account — no events created by them
+                    events = qs.none()
+            except Adviser.DoesNotExist:
+                messages.warning(request, 'Adviser not found; showing all events.')
+                events = qs.all()
+        else:
+            events = qs.all()
+        advisers = Adviser.objects.order_by('name').all()
     else:
-        events = CalendarEvent.objects.filter(created_by=request.user).select_related('subject', 'created_by')
-    
+        events = qs.filter(created_by=request.user)
+        advisers = None
+
     events = events.order_by('-date', 'start_time', 'id')
+
+    selected_adviser_id = None
+    if adviser_id and adviser_id.isdigit():
+        selected_adviser_id = int(adviser_id)
 
     context = {
         'events': events,
+        'advisers': advisers,
+        'selected_adviser_id': selected_adviser_id,
     }
-    return render(request, 'attendance/calendar_events.html', context)
+    return render(request, 'attendance/calendar_events.html', context) 
 
 
 @login_required
@@ -6601,6 +6766,7 @@ def api_student_subjects(request, student_id):
 
         subjects = StudentSubject.objects.filter(student=student).select_related('subject')
         data = []
+        semesters = set()
         for ss in subjects:
             subject = ss.subject
             # Check if subject has a schedule for today (specific date or weekly)
@@ -6616,9 +6782,12 @@ def api_student_subjects(request, student_id):
                 'name': subject.name,
                 'display': f"{subject.code} - {subject.name}",
                 'has_schedule_today': has_schedule,
+                'semester': ss.semester,
+                'academic_year': ss.academic_year,
             })
+            semesters.add(ss.semester)
 
-        return JsonResponse({'success': True, 'subjects': data})
+        return JsonResponse({'success': True, 'subjects': data, 'semesters': sorted(list(semesters))})
     except Exception as e:
         logger.error(f"Error in api_student_subjects: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)

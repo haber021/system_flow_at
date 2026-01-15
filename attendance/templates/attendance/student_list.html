@@ -86,6 +86,14 @@
         font-weight: 700;
         letter-spacing: .02em;
     }
+    .student-name-link {
+        transition: color 0.2s ease;
+    }
+    .student-name-link:hover {
+        color: var(--primary-blue) !important;
+        text-decoration: underline !important;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -151,6 +159,7 @@
                         {% endfor %}
                     </select>
                 </div>
+                {% if not current_adviser_id %}
                 <div class="col-md-4">
                     <label for="adviser" class="form-label">Adviser</label>
                     <select class="form-select" name="adviser" id="adviser">
@@ -160,6 +169,7 @@
                         {% endfor %}
                     </select>
                 </div>
+                {% endif %}
                 <div class="col-12 text-end">
                     <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Search</button>
                     <a href="{% url 'student_list' %}" class="btn btn-outline-secondary"><i class="bi bi-x-circle"></i> Clear</a>
@@ -195,7 +205,16 @@
                             <div class="student-info">
                                 <img class="student-avatar rounded" src="{% if student.profile_picture %}{{ student.profile_picture.url }}{% else %}{% static 'attendance/img/default_profile_picture.jpeg' %}{% endif %}" alt="Profile of {{ student.name }}" loading="lazy" onerror="this.onerror=null;this.src='{% static 'attendance/img/default_profile_picture.jpeg' %}';">
                                 <div>
-                                    <div class="student-name">{{ student.name|upper }}</div>
+                                    <div class="student-name">
+                                        <a href="#" class="text-decoration-none student-name-link" 
+                                           data-student-id="{{ student.id }}" 
+                                           data-student-name="{{ student.name }}"
+                                           data-bs-toggle="modal" 
+                                           data-bs-target="#studentSubjectsModal"
+                                           style="color: inherit;">
+                                            {{ student.name|upper }}
+                                        </a>
+                                    </div>
                                     <div class="student-meta">{{ student.email }}</div>
                                 </div>
                             </div>
@@ -460,6 +479,64 @@
                     <button type="submit" class="btn btn-primary">Confirm</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- Student Subjects Modal -->
+<div class="modal fade" id="studentSubjectsModal" tabindex="-1" aria-labelledby="studentSubjectsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title" id="studentSubjectsModalLabel">
+                    <i class="bi bi-book"></i> Enrolled Subjects
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <h6 class="fw-bold" id="student-name-display">Loading...</h6>
+                </div>
+                <div class="mb-3 d-none" id="semester-filter-container">
+                    <label for="semester-filter" class="form-label">Filter by Semester:</label>
+                    <select class="form-select" id="semester-filter">
+                        <option value="">All Semesters</option>
+                    </select>
+                </div>
+                <div id="subjects-loading" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Loading subjects...</p>
+                </div>
+                <div id="subjects-list" class="d-none">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Subject Code</th>
+                                    <th>Subject Name</th>
+                                    <th>Semester</th>
+                                    <th>Academic Year</th>
+                                    <th>Schedule Today</th>
+                                </tr>
+                            </thead>
+                            <tbody id="subjects-tbody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div id="subjects-error" class="alert alert-danger d-none" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> <span id="error-message">Failed to load subjects.</span>
+                </div>
+                <div id="subjects-empty" class="text-center py-4 d-none">
+                    <i class="bi bi-inbox" style="font-size: 2.5rem; color: #6c757d;"></i>
+                    <p class="mt-2 text-muted">This student is not enrolled in any subjects.</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1033,6 +1110,120 @@ document.addEventListener('DOMContentLoaded', function() {
                     });
             }
         });
+    }
+
+    // Handle student subjects modal
+    const studentSubjectsModal = document.getElementById('studentSubjectsModal');
+    if (studentSubjectsModal) {
+        let allSubjects = []; // Store all subjects for filtering
+        
+        studentSubjectsModal.addEventListener('show.bs.modal', function(event) {
+            const button = event.relatedTarget;
+            const studentId = button.getAttribute('data-student-id');
+            const studentName = button.getAttribute('data-student-name');
+            
+            // Update modal title with student name
+            document.getElementById('student-name-display').textContent = studentName;
+            
+            // Show loading state
+            document.getElementById('subjects-loading').classList.remove('d-none');
+            document.getElementById('subjects-list').classList.add('d-none');
+            document.getElementById('subjects-error').classList.add('d-none');
+            document.getElementById('subjects-empty').classList.add('d-none');
+            document.getElementById('semester-filter-container').classList.add('d-none');
+            
+            // Fetch student subjects
+            fetch(`/api/student-subjects/${studentId}/`, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+                credentials: 'same-origin'
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(errorData => {
+                        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                    }).catch(() => {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Hide loading
+                document.getElementById('subjects-loading').classList.add('d-none');
+                
+                if (data.success && data.subjects && data.subjects.length > 0) {
+                    allSubjects = data.subjects;
+                    
+                    // Populate semester filter
+                    if (data.semesters && data.semesters.length > 1) {
+                        const semesterFilter = document.getElementById('semester-filter');
+                        semesterFilter.innerHTML = '<option value="">All Semesters</option>';
+                        data.semesters.forEach(sem => {
+                            const option = document.createElement('option');
+                            option.value = sem;
+                            option.textContent = sem;
+                            semesterFilter.appendChild(option);
+                        });
+                        document.getElementById('semester-filter-container').classList.remove('d-none');
+                    }
+                    
+                    // Display all subjects initially
+                    displaySubjects(allSubjects);
+                    document.getElementById('subjects-list').classList.remove('d-none');
+                } else {
+                    // No subjects found
+                    document.getElementById('subjects-empty').classList.remove('d-none');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading student subjects:', error);
+                document.getElementById('subjects-loading').classList.add('d-none');
+                document.getElementById('subjects-error').classList.remove('d-none');
+                document.getElementById('error-message').textContent = error.message || 'Failed to load subjects.';
+            });
+        });
+        
+        // Function to display subjects
+        function displaySubjects(subjects) {
+            const tbody = document.getElementById('subjects-tbody');
+            tbody.innerHTML = '';
+            
+            subjects.forEach(subject => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${subject.code}</strong></td>
+                    <td>${subject.name}</td>
+                    <td><span class="badge bg-info">${subject.semester || 'N/A'}</span></td>
+                    <td><small class="text-muted">${subject.academic_year || 'N/A'}</small></td>
+                    <td>
+                        ${subject.has_schedule_today 
+                            ? '<span class="badge bg-success"><i class="bi bi-check-circle"></i> Yes</span>' 
+                            : '<span class="badge bg-secondary"><i class="bi bi-x-circle"></i> No</span>'}
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Handle semester filter change
+        const semesterFilter = document.getElementById('semester-filter');
+        if (semesterFilter) {
+            semesterFilter.addEventListener('change', function() {
+                const selectedSemester = this.value;
+                
+                if (selectedSemester === '') {
+                    // Show all subjects
+                    displaySubjects(allSubjects);
+                } else {
+                    // Filter by selected semester
+                    const filtered = allSubjects.filter(s => s.semester === selectedSemester);
+                    displaySubjects(filtered);
+                }
+            });
+        }
     }
 });
 </script>

@@ -407,6 +407,7 @@
                 <input type="text" class="form-control" name="search" id="search" 
                        placeholder="e.g., CS101, Mathematics..." value="{{ search_query }}" autocomplete="off">
             </div>
+            {% if not request.user.adviser_profile or request.user.is_staff or request.user.is_superuser %}
             <div class="col-md-5">
                 <label for="instructor" class="form-label fw-semibold">Instructor</label>
                 <select class="form-select" name="instructor" id="instructor">
@@ -418,6 +419,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
             <div class="col-md-2 d-flex align-items-end">
                 <div class="d-grid gap-2 w-100">
                     <button type="submit" class="btn btn-primary">

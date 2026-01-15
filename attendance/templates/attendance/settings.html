@@ -84,6 +84,12 @@
                            value="{{ settings.late_attendance_minutes }}" min="0" required>
                     <small class="text-muted">Allow attendance this many minutes after class ends</small>
                 </div>
+                <div class="col-md-6 mb-3">
+                    <label for="timeout_before_minutes" class="form-label">Time-out Allowed (minutes before end):</label>
+                    <input type="number" class="form-control" id="timeout_before_minutes" name="timeout_before_minutes" 
+                           value="{{ settings.timeout_before_minutes }}" min="0" required>
+                    <small class="text-muted">Allow time-out starting this many minutes before class ends</small>
+                </div>
             </div>
             
             <hr>

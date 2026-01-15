@@ -308,6 +308,7 @@
                            placeholder="Search by code or name..." value="{{ search_query }}" autocomplete="off">
                 </div>
             </div>
+            {% if not request.user.adviser_profile or request.user.is_staff or request.user.is_superuser %}
             <div class="col-md-3">
                 <label for="instructor" class="form-label">Instructor</label>
                 <select class="form-select" name="instructor" id="instructor">
@@ -319,6 +320,7 @@
                     {% endfor %}
                 </select>
             </div>
+            {% endif %}
             <div class="col-md-3">
                 <label for="student_search" class="form-label">Find Student</label>
                 <div class="input-group">

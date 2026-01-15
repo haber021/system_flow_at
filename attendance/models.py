@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from datetime import timedelta
 from django.core.validators import MinValueValidator, MaxValueValidator
 import os
 import secrets
@@ -18,6 +19,7 @@ class SystemSettings(models.Model):
     enable_time_validation = models.BooleanField(default=True, help_text="Enable strict date/time validation for attendance")
     early_attendance_minutes = models.IntegerField(default=30, validators=[MinValueValidator(0)], help_text="Allow attendance this many minutes before class starts")
     late_attendance_minutes = models.IntegerField(default=60, validators=[MinValueValidator(0)], help_text="Allow attendance this many minutes after class ends")
+    timeout_before_minutes = models.IntegerField(default=15, validators=[MinValueValidator(0)], help_text="Allow time-out this many minutes before class ends")
     email_notifications_enabled = models.BooleanField(default=True)
     auto_send_reports = models.BooleanField(default=True)
     send_warnings_after = models.IntegerField(default=3, validators=[MinValueValidator(1)])
@@ -420,7 +422,7 @@ class PasswordResetToken(models.Model):
         token = secrets.token_urlsafe(48)
         
         # Set expiration to 24 hours from now
-        expires_at = timezone.now() + timezone.timedelta(hours=24)
+        expires_at = timezone.now() + timedelta(hours=24)
         
         # Create the token
         reset_token = cls.objects.create(
@@ -467,3 +469,28 @@ class CalendarEvent(models.Model):
 
     def __str__(self):
         return f"{self.title} - {self.date} ({self.event_type})"
+
+
+class FeatureSuggestion(models.Model):
+    """Student-submitted feature suggestions / feedback"""
+    STATUS_CHOICES = [
+        ('NEW', 'New'),
+        ('REVIEWED', 'Reviewed'),
+        ('IMPLEMENTED', 'Implemented'),
+        ('REJECTED', 'Rejected'),
+    ]
+
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='feature_suggestions')
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='NEW')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Feature Suggestion'
+        verbose_name_plural = 'Feature Suggestions'
+
+    def __str__(self):
+        return f"{self.title} ({self.student.name})"

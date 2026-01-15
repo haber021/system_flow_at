@@ -1,4 +1,5 @@
 import os
+import socket
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -7,7 +8,38 @@ SECRET_KEY = 'django-insecure-change-me-in-production'
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['*', "attendance-monitor.local", "10.251.88.18", "localhost"]
+# Enhanced multi-host configuration for easy network access
+# Automatically detects local IP and allows multiple access points
+def get_local_ip():
+    """Get the local IP address of the server"""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        local_ip = s.getsockname()[0]
+        s.close()
+        return local_ip
+    except Exception:
+        return None
+
+# Build comprehensive allowed hosts list
+ALLOWED_HOSTS = [
+    '*',  # Wildcard for development (remove in production)
+    'localhost',
+    '127.0.0.1',
+    '0.0.0.0',
+    'attendance-monitor.local',
+    '10.251.88.18',
+]
+
+# Add local IP to allowed hosts
+local_ip = get_local_ip()
+if local_ip and local_ip not in ALLOWED_HOSTS:
+    ALLOWED_HOSTS.append(local_ip)
+
+# Add environment-based hosts for production deployment
+env_hosts = os.environ.get('ADDITIONAL_HOSTS', '')
+if env_hosts:
+    ALLOWED_HOSTS.extend([h.strip() for h in env_hosts.split(',') if h.strip()])
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -53,14 +85,17 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'core.wsgi.application'
 
+# Enhanced database configuration for better data transfer
+# Using custom backend with WAL mode and performance optimizations
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'core.db_backend',  # Custom backend with WAL mode
         'NAME': BASE_DIR / 'db.sqlite3',
         'OPTIONS': {
-            'timeout': 20,
+            'timeout': 30,  # Increased timeout for network operations
             'check_same_thread': False,
-        }
+        },
+        'CONN_MAX_AGE': 600,  # Connection pooling - reuse connections for 10 minutes
     }
 }
 
@@ -114,9 +149,15 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
-# Performance optimizations
+# Performance optimizations for enhanced data transfer
 DATA_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 10485760  # 10MB
+
+# Connection and data transfer optimizations
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000  # Allow more fields in POST requests
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Support for reverse proxy
+USE_X_FORWARDED_HOST = True  # Support for proxy forwarding
+USE_X_FORWARDED_PORT = True  # Support for port forwarding
 
 # Authentication
 LOGIN_URL = '/'

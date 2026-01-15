@@ -475,78 +475,28 @@
         .modal-backdrop { z-index: 1050; }
         #confirmModal { z-index: 1060; }
 
-        /* Calendar Modal - refined, simple and professional */
-        #calendarModal .modal-dialog {
-            max-width: 820px;
-        }
-        #calendarModal .modal-content {
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 10px 30px rgba(16,24,40,0.12);
-            border: 1px solid rgba(16,24,40,0.04);
-        }
-        #calendarModal .modal-header {
-            background: linear-gradient(90deg, rgba(37,99,235,0.95), rgba(30,64,175,0.95));
-            color: #fff;
-            border-bottom: none;
-            padding: 1rem 1.5rem;
-        }
-        #calendarModal .modal-title {
-            font-weight: 700;
-            font-size: 1.05rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        #calendarModal .modal-title i {
-            font-size: 1.2rem;
-            opacity: 0.95;
-        }
-        #calendarModal .modal-body {
-            padding: 1.5rem 2rem;
-            background: #fff;
-        }
-        #calendarModal .form-label {
-            font-weight: 600;
-            color: #374151;
-        }
-        #calendarModal .form-control,
-        #calendarModal .form-select,
-        #calendarModal textarea {
-            border-radius: 8px;
-            padding: 10px 12px;
-            border: 1px solid #e6eef8;
-            box-shadow: none;
-        }
+        /* Calendar Modal - Modern Design */
         #calendarModal .form-control:focus,
         #calendarModal .form-select:focus,
         #calendarModal textarea:focus {
-            border-color: var(--primary-blue-light);
-            box-shadow: 0 6px 18px rgba(59,130,246,0.08);
-            outline: none;
+            border-color: #667eea !important;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25) !important;
         }
-        #calendarModal .alert {
-            border-left-width: 4px;
-            border-radius: 8px;
-            margin-top: 6px;
+        
+        #calendarModal .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5) !important;
+            transition: all 0.3s ease;
         }
-        #calendarModal .d-flex.gap-2 .btn {
-            min-width: 90px;
+        
+        #calendarModal .btn-outline-secondary:hover {
+            background: #f1f5f9;
+            border-color: #cbd5e1;
+            transition: all 0.3s ease;
         }
-        #calendarModal .btn-primary {
-            background: linear-gradient(90deg, var(--primary-blue), var(--primary-blue-dark));
-            border: none;
-            box-shadow: 0 6px 18px rgba(37,99,235,0.12);
-        }
-        #calendarModal .btn-secondary {
-            background: #f3f4f6;
-            color: #374151;
-            border: 1px solid #e5e7eb;
-        }
-        #calendarModal .modal-footer {
-            border-top: none;
-            padding: 0.9rem 1.5rem;
-            background: #fff;
+        
+        #calendarModal .form-label i {
+            opacity: 0.8;
         }
 
         /* Small attention helpers */
@@ -612,6 +562,11 @@
                             <i class="bi bi-book-plus"></i> Enroll Subjects
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'student_suggest_feature' %}">
+                            <i class="bi bi-lightbulb-fill"></i> Suggest Feature
+                        </a>
+                    </li>
                     <!-- Calendar hidden for student view -->
                 </ul>
                 <ul class="navbar-nav">
@@ -651,6 +606,9 @@
                             </a></li>
                             <li><a class="dropdown-item" href="{% url 'student_features' %}">
                                 <i class="bi bi-speedometer2"></i> Features Dashboard
+                            </a></li>
+                            <li><a class="dropdown-item" href="{% url 'student_suggest_feature' %}">
+                                <i class="bi bi-lightbulb-fill"></i> Suggest Feature
                             </a></li>
                             <li><a class="dropdown-item" href="{% url 'student_dashboard' %}">
                                 <i class="bi bi-house"></i> Dashboard
@@ -842,6 +800,9 @@
                             <li><a class="dropdown-item" href="{% url 'settings' %}">
                                 <i class="bi bi-gear"></i> Settings
                             </a></li>
+                            <li><a class="dropdown-item" href="{% url 'admin:attendance_calendarevent_calendar' %}">
+                                <i class="bi bi-calendar-event"></i> Calendar
+                            </a></li>
                         </ul>
                     </li>
                     <li class="nav-item">
@@ -852,6 +813,11 @@
                     <li class="nav-item">
                         <a class="nav-link" href="{% url 'subject_list' %}">
                             <i class="bi bi-book"></i> Subjects
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'admin:attendance_calendarevent_calendar' %}">
+                            <i class="bi bi-calendar-event"></i> Calendar
                         </a>
                     </li>
                     <li class="nav-item">
@@ -884,11 +850,7 @@
                             <i class="bi bi-gear"></i> Settings
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#calendarModal">
-                            <i class="bi bi-calendar-event"></i> Calendar
-                        </a>
-                    </li>
+
                 </ul>
                 <ul class="navbar-nav">
                     <li class="nav-item dropdown">
@@ -917,64 +879,139 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    {% if not in_admin %}
     <!-- Calendar Modal -->
     <div class="modal fade" id="calendarModal" tabindex="-1" aria-labelledby="calendarModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="calendarModalLabel"><i class="bi bi-calendar-event"></i> Calendar Events</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content" style="border-radius: 16px; border: none; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.15);">
+                <div class="modal-header" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; padding: 1.5rem 2rem;">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="calendarModalLabel">
+                        <i class="bi bi-calendar-plus" style="font-size: 1.5rem;"></i>
+                        <span style="font-weight: 700;">Create Calendar Event</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-12 col-lg-8 offset-lg-2">
-                            <form id="calendarEventForm" method="post" action="{% url 'events_create_api' %}">
-                                {% csrf_token %}
-                                <div class="mb-2">
-                                    <label class="form-label">Title</label>
-                                    <input type="text" name="title" class="form-control" required />
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">Date</label>
-                                    <input type="date" name="date" id="calendarDate" class="form-control" required />
-                                </div>
-                                <!-- Start/End times removed: system will auto-assign times for holiday events -->
-                                <div class="mb-2">
-                                    <label class="form-label">Type</label>
-                                    <select name="type" class="form-select">
-                                        <option value="holiday">Holiday / No Class</option>
-                                        <option value="event">Event (does not mark absent)</option>
-                                        <option value="other">Other</option>
-                                    </select>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">Subject (optional)</label>
-                                    <select name="subject_id" id="calendarSubject" class="form-select">
-                                        <option value="">All / None</option>
-                                    </select>
-                                </div>
-                                <div class="mb-2">
-                                    <label class="form-label">Description (optional)</label>
-                                    <textarea name="description" class="form-control" rows="3"></textarea>
-                                </div>
-                                <div id="holidayNote" class="alert alert-info d-none" role="alert">
-                                    Title will default to "No Classes" and this will not mark students absent.
-                                </div>
-                                <div class="d-flex gap-2 mt-2">
-                                    <button type="submit" class="btn btn-primary">Save</button>
-                                    <button type="button" id="clearCalendarForm" class="btn btn-secondary">Clear</button>
-                                </div>
-                            </form>
+                <div class="modal-body" style="padding: 2rem; background: #f8f9fa;">
+                    <form id="calendarEventForm" method="post" action="{% url 'events_create_api' %}">
+                        {% csrf_token %}
+                        
+                        <!-- Title Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-pencil-fill text-primary"></i>
+                                Title <span class="text-danger">*</span>
+                            </label>
+                            <input 
+                                type="text" 
+                                name="title" 
+                                class="form-control" 
+                                placeholder="e.g., No Classes, School Holiday, Event Name"
+                                required 
+                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                            />
                         </div>
-                    </div>
+
+                        <!-- Date Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-calendar-date text-primary"></i>
+                                Date <span class="text-danger">*</span>
+                            </label>
+                            <input 
+                                type="date" 
+                                name="date" 
+                                id="calendarDate" 
+                                class="form-control" 
+                                required 
+                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                            />
+                        </div>
+
+                        <!-- Type Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-tag-fill text-primary"></i>
+                                Type <span class="text-danger">*</span>
+                            </label>
+                            <select 
+                                name="type" 
+                                id="calendarEventType"
+                                class="form-select" 
+                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                            >
+                                <option value="holiday">🔴 Holiday / No Class</option>
+                                <option value="event">🔵 Event (does not mark absent)</option>
+                                <option value="other">⚪ Other</option>
+                            </select>
+                        </div>
+
+                        <!-- Subject Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-book text-primary"></i>
+                                Subject <span class="text-muted small">(optional)</span>
+                            </label>
+                            <select 
+                                name="subject_id" 
+                                id="calendarSubject" 
+                                class="form-select"
+                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                            >
+                                <option value="">🌐 All / None (Global Event)</option>
+                            </select>
+                            <small class="form-text text-muted d-flex align-items-center gap-1 mt-2">
+                                <i class="bi bi-info-circle"></i>
+                                Leave as "All / None" to apply to all subjects
+                            </small>
+                        </div>
+
+                        <!-- Description Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-text-paragraph text-primary"></i>
+                                Description <span class="text-muted small">(optional)</span>
+                            </label>
+                            <textarea 
+                                name="description" 
+                                class="form-control" 
+                                rows="4" 
+                                placeholder="Add any additional details about this event..."
+                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem; resize: vertical;"
+                            ></textarea>
+                        </div>
+
+                        <!-- Holiday Notice -->
+                        <div id="holidayNote" class="alert d-none" role="alert" style="border-radius: 10px; border-left: 4px solid #3b82f6; background: #eff6ff; color: #1e40af; padding: 1rem;">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-info-circle-fill" style="font-size: 1.2rem; margin-top: 2px;"></i>
+                                <div>
+                                    <strong>Holiday / No Class Event</strong>
+                                    <p class="mb-0 mt-1 small">Title will default to "No Classes" and this will not mark students absent.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="d-flex gap-3 mt-4">
+                            <button type="submit" class="btn btn-primary flex-fill" style="border-radius: 10px; padding: 0.75rem 1.5rem; font-weight: 600; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);">
+                                <i class="bi bi-check-circle me-2"></i>Save Event
+                            </button>
+                            <button type="button" id="clearCalendarForm" class="btn btn-outline-secondary" style="border-radius: 10px; padding: 0.75rem 1.5rem; font-weight: 600; border: 2px solid #e2e8f0;">
+                                <i class="bi bi-arrow-counterclockwise me-2"></i>Clear
+                            </button>
+                        </div>
+                    </form>
                 </div>
-                <div class="modal-footer">
-                    <small class="text-muted me-auto">Events marked as "Holiday / No Class" should not be used to count absences.</small>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div class="modal-footer" style="background: white; border-top: 2px solid #f1f5f9; padding: 1rem 2rem;">
+                    <small class="text-muted d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        Events marked as "Holiday / No Class" should not be used to count absences.
+                    </small>
                 </div>
             </div>
         </div>
     </div>
+    {% endif %}
 
     <!-- Custom Confirmation Modal -->
     <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true" style="z-index: 1060;">
@@ -1405,7 +1442,7 @@
                 const clearBtn = document.getElementById('clearCalendarForm');
                 if (form) {
                     const dateInput = document.getElementById('calendarDate');
-                    const typeSelect = form.querySelector('select[name="type"]');
+                    const typeSelect = document.getElementById('calendarEventType');
                     const titleInput = form.querySelector('input[name="title"]');
                     const holidayNoteEl = document.getElementById('holidayNote');
 

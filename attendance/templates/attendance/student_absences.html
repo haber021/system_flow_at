@@ -1,72 +1,426 @@
 {% extends "attendance/base.html" %}
 
 {% block content %}
-<div class="container my-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2 class="h4">My Absences</h2>
-        <a href="{% url 'student_enroll_subjects' %}" class="btn btn-outline-secondary btn-sm">Enroll Subjects</a>
+<style>
+    .absences-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 50%, #059669 100%);
+        color: white;
+        padding: 40px 20px;
+        margin: -20px -20px 30px -20px;
+        border-radius: 0 0 16px 16px;
+    }
+
+    .absences-header h1 {
+        font-size: 32px;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: -0.02em;
+    }
+
+    .absences-header p {
+        margin: 8px 0 0 0;
+        opacity: 0.9;
+        font-size: 15px;
+    }
+
+    .filter-section {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 24px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .filter-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 16px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .form-control, .form-select {
+        border: 2px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 14px;
+        transition: all 0.3s ease;
+        background-color: #f8fafc;
+    }
+
+    .form-control:focus, .form-select:focus {
+        outline: none;
+        border-color: #059669;
+        background-color: white;
+        box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.1);
+    }
+
+    .btn-filter {
+        background: linear-gradient(135deg, #059669 0%, #047857 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        padding: 10px 24px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .btn-filter:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+
+    .btn-enroll {
+        background: white;
+        color: #059669;
+        border: 2px solid #059669;
+        border-radius: 8px;
+        padding: 10px 20px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .btn-enroll:hover {
+        background: #f0fdf4;
+        color: #047857;
+        text-decoration: none;
+    }
+
+    .absences-card {
+        background: white;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+    }
+
+    .absences-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .absences-table thead {
+        background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+        border-bottom: 2px solid #e2e8f0;
+    }
+
+    .absences-table thead th {
+        padding: 16px 20px;
+        font-size: 13px;
+        font-weight: 700;
+        color: #1e293b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .absences-table tbody tr {
+        border-bottom: 1px solid #e2e8f0;
+        transition: background-color 0.3s ease;
+    }
+
+    .absences-table tbody tr:hover {
+        background-color: #f8fafc;
+    }
+
+    .absences-table tbody td {
+        padding: 16px 20px;
+        font-size: 14px;
+        color: #334155;
+    }
+
+    .absence-date {
+        font-weight: 600;
+        color: #1e293b;
+    }
+
+    .absence-subject {
+        color: #059669;
+        font-weight: 500;
+    }
+
+    .justification-badge {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .justified-badge {
+        background: #d1fae5;
+        color: #065f46;
+    }
+
+    .pending-badge {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .btn-justify {
+        background: #059669;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .btn-justify:hover {
+        background: #047857;
+        transform: translateY(-1px);
+        box-shadow: 0 2px 8px rgba(5, 150, 105, 0.2);
+        color: white;
+        text-decoration: none;
+    }
+
+    .btn-view-evidence {
+        color: #059669;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        padding: 0;
+        background: none;
+        border: none;
+        transition: color 0.3s ease;
+    }
+
+    .btn-view-evidence:hover {
+        color: #047857;
+        text-decoration: underline;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+    }
+
+    .empty-state-icon {
+        font-size: 48px;
+        color: #cbd5e1;
+        margin-bottom: 16px;
+    }
+
+    .empty-state-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 8px;
+    }
+
+    .empty-state-text {
+        color: #64748b;
+        font-size: 14px;
+    }
+
+    .pagination-container {
+        padding: 20px;
+        text-align: center;
+    }
+
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 8px;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .pagination li {
+        display: inline;
+    }
+
+    .page-link {
+        padding: 8px 12px;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        color: #059669;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+
+    .page-link:hover:not(.disabled) {
+        background: #f0fdf4;
+        border-color: #059669;
+    }
+
+    .page-link.disabled {
+        color: #cbd5e1;
+        cursor: not-allowed;
+    }
+
+    .modal-content {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .modal-header {
+        background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+        border-bottom: 2px solid #e2e8f0;
+        padding: 24px;
+    }
+
+    .modal-header .modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: #1e293b;
+    }
+
+    .modal-body {
+        padding: 24px;
+    }
+
+    .modal-footer {
+        border-top: 1px solid #e2e8f0;
+        padding: 16px 24px;
+        background: #f8fafc;
+    }
+
+    .btn-secondary {
+        background: #e2e8f0;
+        color: #1e293b;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 600;
+    }
+
+    .btn-secondary:hover {
+        background: #cbd5e1;
+        color: #1e293b;
+    }
+
+    .btn-primary {
+        background: #059669;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        padding: 8px 16px;
+        font-weight: 600;
+    }
+
+    .btn-primary:hover {
+        background: #047857;
+        color: white;
+    }
+
+    .form-label {
+        font-weight: 600;
+        color: #1e293b;
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+
+    textarea.form-control {
+        resize: vertical;
+        min-height: 100px;
+    }
+</style>
+
+<div class="container mt-4">
+    <div class="absences-header">
+        <h1>My Absences</h1>
+        <p>Review and justify your absences across enrolled subjects</p>
     </div>
 
-    <form method="get" class="row g-2 mb-3">
-        <div class="col-auto">
-            <select name="subject_id" class="form-select">
-                <option value="">All Subjects</option>
-                {% for subject in subjects %}
-                    <option value="{{ subject.id }}" {% if selected_subject_id and selected_subject_id|add:"" == subject.id|add:"" %}selected{% endif %}>{{ subject.code }} - {{ subject.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="col-auto">
-            <input type="date" name="date_from" value="{{ date_from }}" class="form-control" placeholder="From">
-        </div>
-        <div class="col-auto">
-            <input type="date" name="date_to" value="{{ date_to }}" class="form-control" placeholder="To">
-        </div>
-        <div class="col-auto">
-            <button class="btn btn-primary">Filter</button>
-        </div>
-    </form>
+    <div class="d-flex justify-content-end mb-3">
+        <a href="{% url 'student_enroll_subjects' %}" class="btn btn-enroll">
+            <i class="bi bi-plus-circle"></i> Enroll New Subject
+        </a>
+    </div>
 
-    <div class="card">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-striped mb-0">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Subject</th>
-                            <th>Justification</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
+    <div class="filter-section">
+        <div class="filter-title">
+            <i class="bi bi-funnel"></i> Filter Absences
+        </div>
+        <form method="get" class="row g-3">
+            <div class="col-12 col-md-4">
+                <select name="subject_id" class="form-select">
+                    <option value="">All Subjects</option>
+                    {% for subject in subjects %}
+                        <option value="{{ subject.id }}" {% if selected_subject_id and selected_subject_id|add:"" == subject.id|add:"" %}selected{% endif %}>
+                            {{ subject.code }} - {{ subject.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="date" name="date_from" value="{{ date_from }}" class="form-control" title="From date">
+            </div>
+            <div class="col-12 col-md-3">
+                <input type="date" name="date_to" value="{{ date_to }}" class="form-control" title="To date">
+            </div>
+            <div class="col-12 col-md-2">
+                <button type="submit" class="btn btn-filter w-100">
+                    <i class="bi bi-search"></i> Filter
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="absences-card">
+        <div class="table-responsive">
+            <table class="absences-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Subject</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
                     <tbody>
                         {% for attendance in absences %}
                         <tr>
-                            <td>{{ attendance.date }}</td>
-                            <td>{{ attendance.subject.code }} - {{ attendance.subject.name }}</td>
+                            <td class="absence-date">{{ attendance.date }}</td>
+                            <td class="absence-subject">
+                                <i class="bi bi-book"></i> {{ attendance.subject.code }}<br>
+                                <small style="color: #64748b;">{{ attendance.subject.name }}</small>
+                            </td>
                             <td>
                                 {% if attendance.reason or attendance.evidences.exists %}
-                                    <p class="mb-1"><strong>Reason:</strong> {{ attendance.reason|default:"-" }}</p>
+                                    <span class="justification-badge justified-badge">
+                                        <i class="bi bi-check-circle"></i> Justified
+                                    </span>
+                                    <div style="font-size: 12px; color: #64748b; margin-top: 6px;">
+                                        {{ attendance.reason|truncatewords:10 }}
+                                    </div>
                                     {% if attendance.evidences.exists %}
-                                        <button type="button" class="btn btn-link p-0" data-bs-toggle="modal" data-bs-target="#evidenceModal{{ attendance.id }}">
+                                        <button type="button" class="btn-view-evidence" data-bs-toggle="modal" data-bs-target="#evidenceModal{{ attendance.id }}">
                                             View Evidence
                                         </button>
                                     {% endif %}
                                 {% else %}
-                                -
+                                    <span class="justification-badge pending-badge">
+                                        <i class="bi bi-clock"></i> Pending
+                                    </span>
                                 {% endif %}
                             </td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#justifyModal{{ attendance.id }}">
-                                    Justify
+                                <button type="button" class="btn btn-justify" data-bs-toggle="modal" data-bs-target="#justifyModal{{ attendance.id }}">
+                                    <i class="bi bi-pencil-square"></i> Justify
                                 </button>
 
-                                <!-- Modal -->
+                                <!-- Justify Modal -->
                                 <div class="modal fade" id="justifyModal{{ attendance.id }}" tabindex="-1" aria-labelledby="justifyModalLabel{{ attendance.id }}" aria-hidden="true">
                                     <div class="modal-dialog">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title" id="justifyModalLabel{{ attendance.id }}">Justify Absence</h5>
+                                                <h5 class="modal-title" id="justifyModalLabel{{ attendance.id }}">
+                                                    <i class="bi bi-pencil"></i> Justify Absence
+                                                </h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
                                             <form method="post" enctype="multipart/form-data">
@@ -74,17 +428,27 @@
                                                 <div class="modal-body">
                                                     <input type="hidden" name="absence_id" value="{{ attendance.id }}">
                                                     <div class="mb-3">
-                                                        <label for="reason{{ attendance.id }}" class="form-label">Reason</label>
-                                                        <textarea class="form-control" id="reason{{ attendance.id }}" name="reason" rows="3">{{ attendance.reason }}</textarea>
+                                                        <label for="reason{{ attendance.id }}" class="form-label">
+                                                            <i class="bi bi-chat-left-text"></i> Reason for Absence
+                                                        </label>
+                                                        <textarea class="form-control" id="reason{{ attendance.id }}" name="reason" rows="4" placeholder="Explain your absence...">{{ attendance.reason }}</textarea>
+                                                        <small class="form-text text-muted">Be as detailed as possible</small>
                                                     </div>
                                                     <div class="mb-3">
-                                                        <label for="evidence{{ attendance.id }}" class="form-label">Evidence (e.g., medical certificate) - Multiple files allowed</label>
-                                                        <input class="form-control" type="file" id="evidence{{ attendance.id }}" name="evidence" multiple>
+                                                        <label for="evidence{{ attendance.id }}" class="form-label">
+                                                            <i class="bi bi-file-earmark-image"></i> Evidence (Optional)
+                                                        </label>
+                                                        <input class="form-control" type="file" id="evidence{{ attendance.id }}" name="evidence" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                                                        <small class="form-text text-muted">Upload medical certificates, documents, or images. Multiple files allowed.</small>
                                                     </div>
                                                 </div>
                                                 <div class="modal-footer">
-                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                                                    <button type="submit" class="btn btn-primary">Submit Justification</button>
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                                        <i class="bi bi-x-circle"></i> Cancel
+                                                    </button>
+                                                    <button type="submit" class="btn btn-primary">
+                                                        <i class="bi bi-check-circle"></i> Submit Justification
+                                                    </button>
                                                 </div>
                                             </form>
                                         </div>
@@ -97,15 +461,26 @@
                                     <div class="modal-dialog modal-lg">
                                         <div class="modal-content">
                                             <div class="modal-header">
-                                                <h5 class="modal-title" id="evidenceModalLabel{{ attendance.id }}">Evidence</h5>
+                                                <h5 class="modal-title" id="evidenceModalLabel{{ attendance.id }}">
+                                                    <i class="bi bi-file-earmark-image"></i> Evidence Documents
+                                                </h5>
                                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                                             </div>
-                                            <div class="modal-body text-center">
-                                                {% for evidence in attendance.evidences.all %}
-                                                    <img src="{{ evidence.file.url }}" alt="Evidence" class="img-fluid mb-3">
-                                                {% empty %}
-                                                    <p>No evidence uploaded yet.</p>
-                                                {% endfor %}
+                                            <div class="modal-body">
+                                                <div class="row g-3">
+                                                    {% for evidence in attendance.evidences.all %}
+                                                        <div class="col-12 col-md-6">
+                                                            <div style="text-align: center; padding: 16px; background: #f8fafc; border-radius: 8px;">
+                                                                <img src="{{ evidence.file.url }}" alt="Evidence" style="max-width: 100%; max-height: 300px; border-radius: 6px;">
+                                                                <p style="margin-top: 8px; font-size: 12px; color: #64748b;">{{ evidence.file.name }}</p>
+                                                            </div>
+                                                        </div>
+                                                    {% empty %}
+                                                        <div class="col-12">
+                                                            <p style="text-align: center; color: #94a3b8;">No evidence uploaded yet.</p>
+                                                        </div>
+                                                    {% endfor %}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -115,7 +490,15 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="4" class="text-center">No absences found.</td>
+                            <td colspan="4">
+                                <div class="empty-state">
+                                    <div class="empty-state-icon">
+                                        <i class="bi bi-inbox"></i>
+                                    </div>
+                                    <div class="empty-state-title">No Absences Found</div>
+                                    <div class="empty-state-text">You don't have any absences recorded. Keep up the good attendance!</div>
+                                </div>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -124,27 +507,37 @@
         </div>
     </div>
 
-    <nav class="mt-3" aria-label="Page navigation">
+    {% if absences %}
+    <div class="pagination-container">
         <ul class="pagination">
             {% if absences.has_previous %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ absences.previous_page_number }}&subject_id={{ selected_subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}">Previous</a>
+                <li>
+                    <a class="page-link" href="?page={{ absences.previous_page_number }}&subject_id={{ selected_subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}">
+                        <i class="bi bi-chevron-left"></i> Previous
+                    </a>
                 </li>
             {% else %}
-                <li class="page-item disabled"><span class="page-link">Previous</span></li>
+                <li><span class="page-link disabled">Previous</span></li>
             {% endif %}
 
-            <li class="page-item disabled"><span class="page-link">Page {{ absences.number }} of {{ absences.paginator.num_pages }}</span></li>
+            <li style="align-self: center; margin: 0 8px;">
+                <span style="font-size: 14px; color: #64748b; font-weight: 500;">
+                    Page {{ absences.number }} of {{ absences.paginator.num_pages }}
+                </span>
+            </li>
 
             {% if absences.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="?page={{ absences.next_page_number }}&subject_id={{ selected_subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}">Next</a>
+                <li>
+                    <a class="page-link" href="?page={{ absences.next_page_number }}&subject_id={{ selected_subject_id }}&date_from={{ date_from }}&date_to={{ date_to }}">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </a>
                 </li>
             {% else %}
-                <li class="page-item disabled"><span class="page-link">Next</span></li>
+                <li><span class="page-link disabled">Next</span></li>
             {% endif %}
         </ul>
-    </nav>
+    </div>
+    {% endif %}
 
 </div>
 {% endblock %}
