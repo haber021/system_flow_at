@@ -6,33 +6,54 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h2><i class="bi bi-envelope"></i> Email Logs</h2>
+    <div>
+        <a href="{% url 'email_logs_export_csv' %}?type={{ email_type }}&status={{ status }}&date_from={{ date_from }}&date_to={{ date_to }}" 
+           class="btn btn-success">
+            <i class="bi bi-download"></i> Export to CSV
+        </a>
+    </div>
 </div>
 
 <div class="card mb-3">
     <div class="card-body">
         <form method="GET" action="{% url 'email_logs' %}" class="row g-3">
             <div class="col-md-3">
-                <label for="type" class="form-label">Filter:</label>
+                <label for="type" class="form-label">Email Type:</label>
                 <select class="form-select" id="type" name="type">
-                    <option value="">All Reports</option>
-                    <option value="SEMESTER" {% if email_type == 'SEMESTER' %}selected{% endif %}>Semester</option>
+                    <option value="">All Types</option>
+                    <option value="SEMESTER" {% if email_type == 'SEMESTER' %}selected{% endif %}>Semester Report</option>
                     <option value="WARNING" {% if email_type == 'WARNING' %}selected{% endif %}>Warning</option>
-                    <option value="DAILY" {% if email_type == 'DAILY' %}selected{% endif %}>Daily</option>
+                    <option value="DAILY" {% if email_type == 'DAILY' %}selected{% endif %}>Daily Report</option>
+                    <option value="CUSTOM" {% if email_type == 'CUSTOM' %}selected{% endif %}>Custom</option>
                 </select>
             </div>
             <div class="col-md-3">
+                <label for="status" class="form-label">Status:</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="">All Statuses</option>
+                    <option value="SENT" {% if status == 'SENT' %}selected{% endif %}>Sent</option>
+                    <option value="FAILED" {% if status == 'FAILED' %}selected{% endif %}>Failed</option>
+                    <option value="PENDING" {% if status == 'PENDING' %}selected{% endif %}>Pending</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label for="date_from" class="form-label">Date From:</label>
                 <input type="date" class="form-control" id="date_from" name="date_from" value="{{ date_from }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="date_to" class="form-label">Date To:</label>
                 <input type="date" class="form-control" id="date_to" name="date_to" value="{{ date_to }}">
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label">&nbsp;</label>
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-funnel"></i> Filter
-                </button>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill">
+                        <i class="bi bi-funnel"></i> Filter
+                    </button>
+                    <a href="{% url 'email_logs' %}" class="btn btn-outline-secondary" title="Clear filters">
+                        <i class="bi bi-x-circle"></i>
+                    </a>
+                </div>
             </div>
         </form>
     </div>
@@ -46,6 +67,7 @@
                     <tr>
                         <th>Date Sent</th>
                         <th>Student Name</th>
+                        <th>Student ID</th>
                         <th>Type</th>
                         <th>Email To</th>
                         <th>Status</th>
@@ -55,33 +77,65 @@
                 <tbody>
                     {% for log in logs %}
                     <tr>
-                        <td>{{ log.sent_at|date:"m/d/y"|default:log.created_at|date:"m/d/y" }}</td>
+                        <td>
+                            {% if log.sent_at %}
+                                {{ log.sent_at|date:"M d, Y g:i A" }}
+                            {% else %}
+                                {{ log.created_at|date:"M d, Y g:i A" }}
+                            {% endif %}
+                        </td>
                         <td>{{ log.student.name }}</td>
-                        <td>{{ log.get_email_type_display }}</td>
+                        <td>{{ log.student.student_id|default:"N/A" }}</td>
+                        <td>
+                            {% if log.email_type == 'SEMESTER' %}
+                                <span class="badge bg-info">Semester Report</span>
+                            {% elif log.email_type == 'WARNING' %}
+                                <span class="badge bg-warning text-dark">Warning</span>
+                            {% elif log.email_type == 'DAILY' %}
+                                <span class="badge bg-primary">Daily Report</span>
+                            {% elif log.email_type == 'CUSTOM' %}
+                                <span class="badge bg-secondary">Custom</span>
+                            {% else %}
+                                {{ log.get_email_type_display }}
+                            {% endif %}
+                        </td>
                         <td>{{ log.email_to|mask_email }}</td>
                         <td>
                             {% if log.status == 'SENT' %}
-                                <span class="badge bg-success">Sent ✓</span>
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check-circle"></i> Sent
+                                </span>
                             {% elif log.status == 'FAILED' %}
-                                <span class="badge bg-danger">Failed ✗</span>
+                                <span class="badge bg-danger" title="{{ log.error_message }}">
+                                    <i class="bi bi-x-circle"></i> Failed
+                                </span>
                             {% else %}
-                                <span class="badge bg-warning">Pending</span>
+                                <span class="badge bg-warning">
+                                    <i class="bi bi-clock"></i> Pending
+                                </span>
                             {% endif %}
                         </td>
                         <td>
                             {% if log.status == 'FAILED' %}
                             <form method="POST" action="{% url 'email_resend' log.id %}" class="d-inline resend-email-form" data-email-to="{{ log.email_to|mask_email }}" data-student-name="{{ log.student.name }}">
                                 {% csrf_token %}
-                                <button type="submit" class="btn btn-sm btn-outline-primary resend-email-btn">
+                                <button type="submit" class="btn btn-sm btn-outline-primary resend-email-btn" title="Resend email">
                                     <i class="bi bi-arrow-repeat"></i> Resend
                                 </button>
                             </form>
+                            {% elif log.status == 'SENT' %}
+                                <span class="text-muted">
+                                    <i class="bi bi-check"></i>
+                                </span>
                             {% endif %}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" class="text-center">No email logs found.</td>
+                        <td colspan="7" class="text-center py-4">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <p class="text-muted mt-2">No email logs found.</p>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -89,9 +143,60 @@
         </div>
         
         <div class="mt-3 p-3 bg-light rounded">
-            <strong>Total Sent:</strong> {{ stats.total_sent }} | 
-            <strong>Failed:</strong> {{ stats.total_failed }}
+            <div class="row text-center">
+                <div class="col-md-4">
+                    <strong>Total Sent:</strong> 
+                    <span class="badge bg-success ms-1">{{ stats.total_sent }}</span>
+                </div>
+                <div class="col-md-4">
+                    <strong>Failed:</strong> 
+                    <span class="badge bg-danger ms-1">{{ stats.total_failed }}</span>
+                </div>
+                <div class="col-md-4">
+                    <strong>Pending:</strong> 
+                    <span class="badge bg-warning text-dark ms-1">{{ stats.total_pending }}</span>
+                </div>
+            </div>
         </div>
+        
+        <!-- Pagination -->
+        {% if logs.has_other_pages %}
+        <nav aria-label="Email logs pagination" class="mt-4">
+            <ul class="pagination justify-content-center">
+                {% if logs.has_previous %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page=1{% if email_type %}&type={{ email_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                            <i class="bi bi-chevron-double-left"></i> First
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.previous_page_number }}{% if email_type %}&type={{ email_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                            <i class="bi bi-chevron-left"></i> Previous
+                        </a>
+                    </li>
+                {% endif %}
+                
+                <li class="page-item active">
+                    <span class="page-link">
+                        Page {{ logs.number }} of {{ logs.paginator.num_pages }}
+                    </span>
+                </li>
+                
+                {% if logs.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.next_page_number }}{% if email_type %}&type={{ email_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                            Next <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    <li class="page-item">
+                        <a class="page-link" href="?page={{ logs.paginator.num_pages }}{% if email_type %}&type={{ email_type }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}">
+                            Last <i class="bi bi-chevron-double-right"></i>
+                        </a>
+                    </li>
+                {% endif %}
+            </ul>
+        </nav>
+        {% endif %}
     </div>
 </div>
 

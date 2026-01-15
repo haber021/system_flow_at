@@ -2522,11 +2522,19 @@ Attendance System"""
 
 @login_required
 def scan_view(request):
-    # Filter subjects: If admin, show ALL subjects; otherwise filter by adviser
+    # Filter subjects: If admin, show ALL subjects; otherwise filter by adviser's instructors only
     if request.user.is_superuser or request.user.is_staff:
         subjects_qs = Subject.objects.filter(is_active=True).prefetch_related('schedules')
     else:
-        subjects_qs = filter_subjects_by_user(request.user).filter(is_active=True).prefetch_related('schedules')
+        # For advisers: show ONLY subjects taught by their assigned instructors
+        if hasattr(request.user, 'adviser_profile'):
+            adviser = request.user.adviser_profile
+            subjects_qs = Subject.objects.filter(
+                is_active=True,
+                instructor__adviser=adviser
+            ).prefetch_related('schedules')
+        else:
+            subjects_qs = Subject.objects.none()
 
     # Cache settings and current Manila time for auto subject selection
     settings = get_cached_settings()
@@ -3757,10 +3765,11 @@ University Attendance Office"""
 @login_required
 def email_logs(request):
     email_type = request.GET.get('type', '')
+    status = request.GET.get('status', '')
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
     
-    logs = EmailLog.objects.select_related('student').all()
+    logs = EmailLog.objects.select_related('student', 'student__course').all()
     
     # Filter by adviser's students
     if request.user.is_superuser or request.user.is_staff:
@@ -3770,6 +3779,9 @@ def email_logs(request):
         adviser = request.user.adviser_profile
         adviser_student_ids = Student.objects.filter(adviser=adviser).values_list('id', flat=True)
         logs = logs.filter(student_id__in=adviser_student_ids)
+    elif hasattr(request.user, 'student_profile'):
+        # Students see only their own email logs
+        logs = logs.filter(student=request.user.student_profile)
     else:
         # Other users filter by accessible courses
         accessible_courses = get_user_accessible_courses(request.user)
@@ -3781,16 +3793,19 @@ def email_logs(request):
     if email_type:
         logs = logs.filter(email_type=email_type)
     
+    if status:
+        logs = logs.filter(status=status)
+    
     if date_from:
         try:
             logs = logs.filter(created_at__gte=datetime.strptime(date_from, '%Y-%m-%d'))
-        except:
+        except Exception:
             pass
     
     if date_to:
         try:
             logs = logs.filter(created_at__lte=datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1))
-        except:
+        except Exception:
             pass
     
     logs = logs.order_by('-created_at')
@@ -3798,16 +3813,91 @@ def email_logs(request):
     stats = {
         'total_sent': logs.filter(status='SENT').count(),
         'total_failed': logs.filter(status='FAILED').count(),
+        'total_pending': logs.filter(status='PENDING').count(),
     }
     
+    # Pagination
+    paginator = Paginator(logs, 50)  # Show 50 logs per page
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
     context = {
-        'logs': logs,
+        'logs': page_obj,
         'email_type': email_type,
+        'status': status,
         'date_from': date_from,
         'date_to': date_to,
         'stats': stats,
     }
     return render(request, 'attendance/email_logs.html', context)
+
+@login_required
+def email_logs_export_csv(request):
+    """Export email logs to CSV"""
+    email_type = request.GET.get('type', '')
+    status = request.GET.get('status', '')
+    date_from = request.GET.get('date_from', '')
+    date_to = request.GET.get('date_to', '')
+    
+    logs = EmailLog.objects.select_related('student', 'student__course').all()
+    
+    # Filter by adviser's students (same logic as email_logs view)
+    if request.user.is_superuser or request.user.is_staff:
+        pass  # Show all logs
+    elif hasattr(request.user, 'adviser_profile'):
+        adviser = request.user.adviser_profile
+        adviser_student_ids = Student.objects.filter(adviser=adviser).values_list('id', flat=True)
+        logs = logs.filter(student_id__in=adviser_student_ids)
+    elif hasattr(request.user, 'student_profile'):
+        logs = logs.filter(student=request.user.student_profile)
+    else:
+        accessible_courses = get_user_accessible_courses(request.user)
+        if accessible_courses.exists():
+            logs = logs.filter(student__course__in=accessible_courses)
+        else:
+            logs = logs.none()
+    
+    if email_type:
+        logs = logs.filter(email_type=email_type)
+    
+    if status:
+        logs = logs.filter(status=status)
+    
+    if date_from:
+        try:
+            logs = logs.filter(created_at__gte=datetime.strptime(date_from, '%Y-%m-%d'))
+        except Exception:
+            pass
+    
+    if date_to:
+        try:
+            logs = logs.filter(created_at__lte=datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1))
+        except Exception:
+            pass
+    
+    logs = logs.order_by('-created_at')
+    
+    # Create CSV response
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="email_logs_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Date Sent', 'Student Name', 'Student ID', 'Email Type', 'Email To', 'Status', 'Subject', 'Error Message'])
+    
+    for log in logs:
+        sent_date = log.sent_at.strftime('%Y-%m-%d %H:%M:%S') if log.sent_at else log.created_at.strftime('%Y-%m-%d %H:%M:%S')
+        writer.writerow([
+            sent_date,
+            log.student.name,
+            log.student.student_id or 'N/A',
+            log.get_email_type_display(),
+            log.email_to,
+            log.get_status_display(),
+            log.subject,
+            log.error_message or ''
+        ])
+    
+    return response
 
 @login_required
 def email_resend(request, log_id):
@@ -4522,7 +4612,7 @@ def student_login(request):
     if request.user.is_authenticated:
         # Check if user is a student
         if hasattr(request.user, 'student_profile'):
-            return redirect('student_dashboard')
+            return redirect('student_history')
         else:
             # If admin/staff, redirect to admin dashboard
             return redirect('dashboard')
@@ -4543,7 +4633,7 @@ def student_login(request):
                     user = student.user
                     login(request, user)
                     messages.success(request, f"Welcome, {student.name}!")
-                    return redirect('student_dashboard')
+                    return redirect('student_history')
                 else:
                     # Automatically create a user account for the student
                     try:
@@ -4580,7 +4670,7 @@ def student_login(request):
                         # Log in the student
                         login(request, user)
                         messages.success(request, f"Welcome, {student.name}!")
-                        return redirect('student_dashboard')
+                        return redirect('student_history')
                     except Exception as e:
                         messages.error(request, f"Error creating account: {str(e)}. Please contact your administrator.")
             except Student.DoesNotExist:
@@ -4747,6 +4837,62 @@ def student_dashboard(request):
         except (ValueError, TypeError):
             pass
     
+    # Get calendar events (holidays and no-class days) for the current month
+    from datetime import date
+    import calendar as cal
+    
+    # Get current month or month from request
+    month = request.GET.get('month')
+    year = request.GET.get('year')
+    
+    if month and year:
+        try:
+            current_month = int(month)
+            current_year = int(year)
+        except (ValueError, TypeError):
+            current_month = today.month
+            current_year = today.year
+    else:
+        current_month = today.month
+        current_year = today.year
+    
+    # Calculate previous and next month/year
+    if current_month == 1:
+        prev_month = 12
+        prev_year = current_year - 1
+    else:
+        prev_month = current_month - 1
+        prev_year = current_year
+    
+    if current_month == 12:
+        next_month = 1
+        next_year = current_year + 1
+    else:
+        next_month = current_month + 1
+        next_year = current_year
+    
+    # Get first and last day of the month
+    first_day = date(current_year, current_month, 1)
+    last_day = date(current_year, current_month, cal.monthrange(current_year, current_month)[1])
+    
+    # Get calendar events for this month
+    calendar_events = CalendarEvent.objects.filter(
+        date__gte=first_day,
+        date__lte=last_day
+    ).order_by('date')
+    
+    # Prepare calendar data for template
+    calendar_data = []
+    for event in calendar_events:
+        calendar_data.append({
+            'date': event.date.isoformat(),
+            'title': event.title,
+            'event_type': event.event_type,
+            'description': event.description,
+            'start_time': event.start_time.strftime('%I:%M %p') if event.start_time else None,
+            'end_time': event.end_time.strftime('%I:%M %p') if event.end_time else None,
+        })
+    
     context = {
         'student': student,
         'absences': page_obj,
@@ -4774,6 +4920,14 @@ def student_dashboard(request):
         'time_filter': time_filter,
         'academic_year': academic_year,
         'semester': semester,
+        'calendar_events': json.dumps(calendar_data),
+        'current_month': current_month,
+        'current_year': current_year,
+        'month_name': cal.month_name[current_month],
+        'prev_month': prev_month,
+        'prev_year': prev_year,
+        'next_month': next_month,
+        'next_year': next_year,
     }
     return render(request, 'attendance/student_dashboard.html', context)
 
@@ -5276,6 +5430,17 @@ def student_profile_view(request):
         logout(request)
         return redirect('student_login')
     
+    # Auto-populate first_name and last_name from student.name if user fields are empty
+    if not request.user.first_name and not request.user.last_name and student.name:
+        name_parts = student.name.strip().split(None, 1)  # Split on first space
+        if len(name_parts) == 2:
+            request.user.first_name = name_parts[0].title()
+            request.user.last_name = name_parts[1].title()
+        elif len(name_parts) == 1:
+            request.user.first_name = name_parts[0].title()
+            request.user.last_name = ''
+        request.user.save()
+    
     if request.method == 'POST':
         if 'upload_picture' in request.POST:
             cropped_image_data = request.POST.get('cropped_image')
@@ -5346,14 +5511,21 @@ def student_profile_view(request):
         
         elif 'update_profile' in request.POST:
             # Update user information
-            request.user.first_name = request.POST.get('first_name', '')
-            request.user.last_name = request.POST.get('last_name', '')
-            request.user.email = request.POST.get('email', '')
+            first_name = request.POST.get('first_name', '').strip().title()
+            last_name = request.POST.get('last_name', '').strip().title()
+            email = request.POST.get('email', '').strip()
+            
+            request.user.first_name = first_name
+            request.user.last_name = last_name
+            request.user.email = email
             request.user.save()
             
             # Update student information
-            student.name = request.POST.get('name', student.name)
-            student.email = request.POST.get('email', student.email)
+            # Automatically update student.name from first_name + last_name
+            full_name = f"{first_name} {last_name}".strip()
+            if full_name:
+                student.name = full_name
+            student.email = email
             student.email_opt_in = bool(request.POST.get('email_opt_in'))
             student.save()
             

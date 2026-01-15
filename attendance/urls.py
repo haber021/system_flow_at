@@ -52,6 +52,7 @@ urlpatterns = [
     # Email
     path('email-preview/<int:student_id>/', views.email_preview, name='email_preview'),
     path('email-logs/', views.email_logs, name='email_logs'),
+    path('email-logs/export/', views.email_logs_export_csv, name='email_logs_export_csv'),
     path('email-logs/<int:log_id>/resend/', views.email_resend, name='email_resend'),
     
     # Settings

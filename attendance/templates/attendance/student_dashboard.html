@@ -560,6 +560,306 @@
     </div>
 </div>
 
+<!-- Calendar Section -->
+<div class="card content-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+        <h5 class="mb-0">
+            <i class="bi bi-calendar3 me-2"></i>Academic Calendar - {{ month_name }} {{ current_year }}
+        </h5>
+        <div class="d-flex gap-2 mt-2 mt-md-0">
+            <a href="?month={{ prev_month }}&year={{ prev_year }}{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if academic_year %}&academic_year={{ academic_year }}{% endif %}{% if semester %}&semester={{ semester }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                <i class="bi bi-chevron-left"></i> Previous
+            </a>
+            <a href="?month={{ next_month }}&year={{ next_year }}{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if academic_year %}&academic_year={{ academic_year }}{% endif %}{% if semester %}&semester={{ semester }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                Next <i class="bi bi-chevron-right"></i>
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <div id="calendar-container" class="mb-3">
+            <!-- Calendar will be rendered here by JavaScript -->
+        </div>
+        
+        <!-- Legend -->
+        <div class="d-flex flex-wrap gap-3 mt-3 pt-3 border-top">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge" style="background-color: #dc3545;">
+                    <i class="bi bi-calendar-x me-1"></i>Holiday
+                </span>
+                <small class="text-muted">No Classes - Holiday</small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge" style="background-color: #0d6efd;">
+                    <i class="bi bi-calendar-event me-1"></i>Event
+                </span>
+                <small class="text-muted">School Event</small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge" style="background-color: #6c757d;">
+                    <i class="bi bi-info-circle me-1"></i>Other
+                </span>
+                <small class="text-muted">Other Event</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-top: 1rem;
+}
+
+.calendar-day-header {
+    text-align: center;
+    padding: 0.75rem;
+    font-weight: 600;
+    background-color: #059669;
+    color: white;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.calendar-day {
+    min-height: 80px;
+    padding: 0.5rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background-color: white;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.calendar-day:hover {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-color: #059669;
+}
+
+.calendar-day.other-month {
+    background-color: #f8fafc;
+    opacity: 0.5;
+}
+
+.calendar-day.today {
+    background-color: #dbeafe;
+    border-color: #3b82f6;
+    border-width: 2px;
+}
+
+.calendar-day-number {
+    font-weight: 600;
+    color: #1e293b;
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+}
+
+.calendar-day.other-month .calendar-day-number {
+    color: #94a3b8;
+}
+
+.calendar-event-badge {
+    display: block;
+    font-size: 0.65rem;
+    padding: 0.2rem 0.4rem;
+    margin-top: 0.25rem;
+    border-radius: 4px;
+    color: white;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.calendar-event-badge.holiday {
+    background-color: #dc3545;
+}
+
+.calendar-event-badge.event {
+    background-color: #0d6efd;
+}
+
+.calendar-event-badge.other {
+    background-color: #6c757d;
+}
+
+@media (max-width: 768px) {
+    .calendar-day {
+        min-height: 60px;
+        padding: 0.25rem;
+    }
+    
+    .calendar-day-header {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.75rem;
+    }
+    
+    .calendar-event-badge {
+        font-size: 0.6rem;
+        padding: 0.15rem 0.3rem;
+    }
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Calendar events data from Django context
+    const calendarEvents = {{ calendar_events|safe }};
+    const currentMonth = {{ current_month }};
+    const currentYear = {{ current_year }};
+    
+    // Render calendar
+    renderCalendar(currentYear, currentMonth, calendarEvents);
+});
+
+function renderCalendar(year, month, events) {
+    const container = document.getElementById('calendar-container');
+    
+    // Create calendar grid
+    const calendarGrid = document.createElement('div');
+    calendarGrid.className = 'calendar-grid';
+    
+    // Day headers
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    dayNames.forEach(day => {
+        const header = document.createElement('div');
+        header.className = 'calendar-day-header';
+        header.textContent = day;
+        calendarGrid.appendChild(header);
+    });
+    
+    // Get first day of month and number of days
+    const firstDay = new Date(year, month - 1, 1);
+    const lastDay = new Date(year, month, 0);
+    const daysInMonth = lastDay.getDate();
+    const startingDayOfWeek = firstDay.getDay();
+    
+    // Get previous month's last days
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonthLastDay = new Date(prevYear, prevMonth, 0).getDate();
+    
+    // Add previous month's trailing days
+    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+        const dayNum = prevMonthLastDay - i;
+        const day = createCalendarDay(dayNum, true, null, []);
+        calendarGrid.appendChild(day);
+    }
+    
+    // Add current month's days
+    const today = new Date();
+    const isCurrentMonth = today.getMonth() === month - 1 && today.getFullYear() === year;
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayEvents = events.filter(e => e.date === dateStr);
+        const isToday = isCurrentMonth && today.getDate() === day;
+        
+        const dayElement = createCalendarDay(day, false, isToday, dayEvents);
+        calendarGrid.appendChild(dayElement);
+    }
+    
+    // Add next month's leading days
+    const totalCells = calendarGrid.children.length - 7; // Subtract day headers
+    const remainingCells = 35 - totalCells; // 5 weeks * 7 days - headers
+    
+    for (let day = 1; day <= remainingCells; day++) {
+        const dayElement = createCalendarDay(day, true, false, []);
+        calendarGrid.appendChild(dayElement);
+    }
+    
+    container.innerHTML = '';
+    container.appendChild(calendarGrid);
+}
+
+function createCalendarDay(dayNumber, isOtherMonth, isToday, events) {
+    const dayDiv = document.createElement('div');
+    dayDiv.className = 'calendar-day';
+    
+    if (isOtherMonth) {
+        dayDiv.classList.add('other-month');
+    }
+    
+    if (isToday) {
+        dayDiv.classList.add('today');
+    }
+    
+    // Day number
+    const dayNumDiv = document.createElement('div');
+    dayNumDiv.className = 'calendar-day-number';
+    dayNumDiv.textContent = dayNumber;
+    dayDiv.appendChild(dayNumDiv);
+    
+    // Add events
+    events.forEach(event => {
+        const eventBadge = document.createElement('div');
+        eventBadge.className = `calendar-event-badge ${event.event_type}`;
+        eventBadge.textContent = event.title;
+        eventBadge.title = `${event.title}${event.description ? ': ' + event.description : ''}${event.start_time ? ' (' + event.start_time + (event.end_time ? ' - ' + event.end_time : '') + ')' : ''}`;
+        
+        // Add click event to show details
+        eventBadge.addEventListener('click', function() {
+            showEventDetails(event);
+        });
+        
+        dayDiv.appendChild(eventBadge);
+    });
+    
+    return dayDiv;
+}
+
+function showEventDetails(event) {
+    let timeInfo = '';
+    if (event.start_time) {
+        timeInfo = `<p class="mb-1"><strong>Time:</strong> ${event.start_time}${event.end_time ? ' - ' + event.end_time : ''}</p>`;
+    }
+    
+    const modal = `
+        <div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="eventModalLabel">
+                            <i class="bi bi-calendar-event me-2"></i>${event.title}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-1"><strong>Date:</strong> ${new Date(event.date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        ${timeInfo}
+                        <p class="mb-1"><strong>Type:</strong> <span class="badge bg-${event.event_type === 'holiday' ? 'danger' : event.event_type === 'event' ? 'primary' : 'secondary'}">${event.event_type.charAt(0).toUpperCase() + event.event_type.slice(1)}</span></p>
+                        ${event.description ? `<p class="mb-0 mt-3"><strong>Description:</strong><br>${event.description}</p>` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('eventModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modal);
+    
+    // Show modal
+    const modalElement = document.getElementById('eventModal');
+    const bsModal = new bootstrap.Modal(modalElement);
+    bsModal.show();
+    
+    // Remove modal from DOM after it's hidden
+    modalElement.addEventListener('hidden.bs.modal', function() {
+        modalElement.remove();
+    });
+}
+</script>
+
 <!-- Filters -->
 <div class="card filter-card">
     <div class="card-header">

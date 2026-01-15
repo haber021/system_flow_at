@@ -59,106 +59,124 @@
                     
                     <!-- Profile Information Section -->
                     <div class="col-md-8">
-                        <h5 class="mb-3"><i class="bi bi-info-circle"></i> Profile Information</h5>
-                        <form method="POST" action="{% url 'student_profile' %}">
-                            {% csrf_token %}
+                        <!-- Personal Information Card -->
+                        <div class="info-card mb-4">
+                            <h5 class="section-title mb-3">
+                                <i class="bi bi-person-badge me-2"></i>Personal Information
+                            </h5>
+                            <form method="POST" action="{% url 'student_profile' %}">
+                                {% csrf_token %}
+                                
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="first_name" class="form-label fw-semibold">First Name</label>
+                                        <input type="text" class="form-control custom-input" id="first_name" name="first_name" 
+                                               value="{{ user.first_name }}" placeholder="Enter first name" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="last_name" class="form-label fw-semibold">Last Name</label>
+                                        <input type="text" class="form-control custom-input" id="last_name" name="last_name" 
+                                               value="{{ user.last_name }}" placeholder="Enter last name" required>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="email" class="form-label fw-semibold">Email Address</label>
+                                    <input type="email" class="form-control custom-input" id="email" name="email" 
+                                           value="{{ student.email }}" placeholder="your.email@example.com" required>
+                                </div>
+                                
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold d-block mb-2">Email Notifications</label>
+                                    <div class="custom-switch-wrapper">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" role="switch" id="email_opt_in" name="email_opt_in"
+                                                   {% if student.email_opt_in %}checked{% endif %}>
+                                            <label class="form-check-label" for="email_opt_in">
+                                                Receive attendance alerts and warnings
+                                            </label>
+                                        </div>
+                                        <small class="text-muted d-block mt-1 ms-4">
+                                            <i class="bi bi-info-circle me-1"></i>Attendance reports are always sent
+                                        </small>
+                                    </div>
+                                </div>
+                                
+                                <button type="submit" name="update_profile" class="btn btn-success px-4">
+                                    <i class="bi bi-check-circle me-1"></i> Save Changes
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Account Information Card -->
+                        <div class="info-card mb-4">
+                            <h5 class="section-title mb-3">
+                                <i class="bi bi-info-circle me-2"></i>Account Information
+                            </h5>
                             
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    <label for="name" class="form-label">Full Name:</label>
-                                    <input type="text" class="form-control" id="name" name="name" 
-                                           value="{{ student.name }}" required>
+                                    <label class="form-label fw-semibold text-muted">Student ID</label>
+                                    <div class="info-field">{{ student.student_id|default:'N/A' }}</div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label for="email" class="form-label">Email:</label>
-                                    <input type="email" class="form-control" id="email" name="email" 
-                                           value="{{ student.email }}" required>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label d-block">Email Notifications:</label>
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" role="switch" id="email_opt_in" name="email_opt_in"
-                                           {% if student.email_opt_in %}checked{% endif %}>
-                                    <label class="form-check-label" for="email_opt_in">
-                                        Receive attendance emails (alerts, warnings, confirmations)
-                                    </label>
-                                </div>
-                                <small class="text-muted">Note: Attendance reports are always sent regardless of this setting. This setting only controls alerts and warnings.</small>
-                            </div>
-                            
-                            <div class="row mb-3">
-                                <div class="col-md-6">
-                                    <label for="first_name" class="form-label">First Name:</label>
-                                    <input type="text" class="form-control" id="first_name" name="first_name" 
-                                           value="{{ user.first_name }}">
-                                </div>
-                                <div class="col-md-6">
-                                    <label for="last_name" class="form-label">Last Name:</label>
-                                    <input type="text" class="form-control" id="last_name" name="last_name" 
-                                           value="{{ user.last_name }}">
+                                    <label class="form-label fw-semibold text-muted">RFID ID</label>
+                                    <div class="info-field">{{ student.rfid_id }}</div>
                                 </div>
                             </div>
                             
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    <label class="form-label">Student ID:</label>
-                                    <input type="text" class="form-control" value="{{ student.student_id|default:'N/A' }}" disabled>
+                                    <label class="form-label fw-semibold text-muted">Course</label>
+                                    <div class="info-field">{{ student.course.code }} - {{ student.course.name }}</div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">RFID ID:</label>
-                                    <input type="text" class="form-control" value="{{ student.rfid_id }}" disabled>
+                                    <label class="form-label fw-semibold text-muted">Section</label>
+                                    <div class="info-field">{{ student.section.name|default:'N/A' }}</div>
                                 </div>
                             </div>
                             
-                            <div class="row mb-3">
+                            <div class="row">
                                 <div class="col-md-6">
-                                    <label class="form-label">Course:</label>
-                                    <input type="text" class="form-control" value="{{ student.course.code }} - {{ student.course.name }}" disabled>
+                                    <label class="form-label fw-semibold text-muted">Username</label>
+                                    <div class="info-field">{{ user.username }}</div>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label">Section:</label>
-                                    <input type="text" class="form-control" value="{{ student.section.name|default:'N/A' }}" disabled>
+                                    <label class="form-label fw-semibold text-muted">Last Login</label>
+                                    <div class="info-field">{{ user.last_login|date:'M d, Y g:i A'|default:'Never' }}</div>
                                 </div>
                             </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Username:</label>
-                                <input type="text" class="form-control" value="{{ user.username }}" disabled>
-                            </div>
-                            
-                            <div class="mb-3">
-                                <label class="form-label">Last Login:</label>
-                                <input type="text" class="form-control" value="{{ user.last_login|date:'m/d/Y g:i A'|default:'Never' }}" disabled>
-                            </div>
-                            
-                            <button type="submit" name="update_profile" class="btn btn-primary">
-                                <i class="bi bi-check-circle"></i> Update Profile
-                            </button>
-                        </form>
-                        
-                        <hr class="my-4">
-                        
-                        <h5 class="mb-3"><i class="bi bi-key"></i> Change Password</h5>
-                        <form method="POST" action="{% url 'student_profile' %}">
-                            {% csrf_token %}
-                            <div class="mb-3">
-                                <label for="old_password" class="form-label">Old Password:</label>
-                                <input type="password" class="form-control" id="old_password" name="old_password" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="new_password" class="form-label">New Password:</label>
-                                <input type="password" class="form-control" id="new_password" name="new_password" required>
-                            </div>
-                            <div class="mb-3">
-                                <label for="confirm_password" class="form-label">Confirm New Password:</label>
-                                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
-                            </div>
-                            <button type="submit" name="change_password" class="btn btn-warning">
-                                <i class="bi bi-key"></i> Change Password
-                            </button>
-                        </form>
+                        </div>
+
+                        <!-- Security Settings Card -->
+                        <div class="info-card">
+                            <h5 class="section-title mb-3">
+                                <i class="bi bi-shield-lock me-2"></i>Security Settings
+                            </h5>
+                            <form method="POST" action="{% url 'student_profile' %}">
+                                {% csrf_token %}
+                                <div class="mb-3">
+                                    <label for="old_password" class="form-label fw-semibold">Current Password</label>
+                                    <input type="password" class="form-control custom-input" id="old_password" name="old_password" 
+                                           placeholder="Enter current password" required>
+                                </div>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="new_password" class="form-label fw-semibold">New Password</label>
+                                        <input type="password" class="form-control custom-input" id="new_password" name="new_password" 
+                                               placeholder="Enter new password" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="confirm_password" class="form-label fw-semibold">Confirm Password</label>
+                                        <input type="password" class="form-control custom-input" id="confirm_password" name="confirm_password" 
+                                               placeholder="Confirm new password" required>
+                                    </div>
+                                </div>
+                                <button type="submit" name="change_password" class="btn btn-warning px-4">
+                                    <i class="bi bi-key me-1"></i> Change Password
+                                </button>
+                            </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -199,33 +217,38 @@ document.addEventListener('DOMContentLoaded', () => {
     const hiddenCroppedInput = document.getElementById('cropped_image');
     const cropperImage = document.getElementById('cropper-image');
     const cropperModalEl = document.getElementById('cropperModal');
-    const cropperModal = new bootstrap.Modal(cropperModalEl);
+    const cropperModal = new bootstrap.Modal(cropperModalEl, {
+        backdrop: 'static',
+        keyboard: false
+    });
     const cropperSaveBtn = document.getElementById('cropperSave');
     const cropperResetBtn = document.getElementById('cropperReset');
     const previewImage = document.getElementById('profile-picture-preview');
+    const uploadForm = fileInput.closest('form');
+    
     let cropperInstance = null;
     let currentImageURL = '';
-    let isProgrammaticZoom = false;
-    let resizeTimeout = null;
+    let originalFile = null;
 
-    const centerCropBox = () => {
-        if (!cropperInstance) return;
-        const canvasData = cropperInstance.getCanvasData();
-        const cropBoxData = cropperInstance.getCropBoxData();
-        const left = canvasData.left + (canvasData.width - cropBoxData.width) / 2;
-        const top = canvasData.top + (canvasData.height - cropBoxData.height) / 2;
-        cropperInstance.setCropBoxData({ left, top });
-    };
+    // File validation
+    const validateFile = (file) => {
+        const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+        const maxSize = 5 * 1024 * 1024; // 5MB
 
-    const scheduleResponsiveCenter = () => {
-        if (resizeTimeout) {
-            clearTimeout(resizeTimeout);
+        if (!validTypes.includes(file.type)) {
+            alert('Invalid file type. Please upload JPEG, PNG, or GIF images only.');
+            return false;
         }
-        resizeTimeout = setTimeout(() => {
-            centerCropBox();
-        }, 120);
+
+        if (file.size > maxSize) {
+            alert('File size exceeds 5MB. Please choose a smaller image.');
+            return false;
+        }
+
+        return true;
     };
 
+    // Destroy cropper instance
     const destroyCropper = () => {
         if (cropperInstance) {
             cropperInstance.destroy();
@@ -233,137 +256,346 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Initialize cropper once the modal is shown and the image is loaded
-    cropperImage.addEventListener('load', () => {
-        if (!currentImageURL) return;
+    // Initialize cropper
+    const initializeCropper = () => {
+        if (!cropperImage.src || cropperImage.src === window.location.href) return;
+        
         destroyCropper();
+        
         cropperInstance = new Cropper(cropperImage, {
             aspectRatio: 1,
-            viewMode: 1,
-            autoCropArea: 1,
+            viewMode: 2,
+            autoCropArea: 0.8,
             movable: true,
             zoomable: true,
+            scalable: true,
+            rotatable: false,
             responsive: true,
             dragMode: 'move',
+            center: true,
+            highlight: true,
+            cropBoxMovable: true,
+            cropBoxResizable: true,
+            toggleDragModeOnDblclick: false,
+            minCropBoxWidth: 100,
+            minCropBoxHeight: 100,
             ready() {
-                centerCropBox();
-            },
-            zoom(event) {
-                if (isProgrammaticZoom) return;
-                event.preventDefault();
-                isProgrammaticZoom = true;
-                const canvasData = cropperInstance.getCanvasData();
-                const centerPoint = {
-                    x: canvasData.left + canvasData.width / 2,
-                    y: canvasData.top + canvasData.height / 2,
-                };
-                cropperInstance.zoomTo(event.detail.ratio, centerPoint);
-                centerCropBox();
-                isProgrammaticZoom = false;
-            },
+                // Center the crop box when ready
+                this.cropper.crop();
+            }
         });
-    });
+    };
 
-    cropperModalEl.addEventListener('hidden.bs.modal', () => {
-        destroyCropper();
-    });
-
+    // Handle file input change
     fileInput.addEventListener('change', (event) => {
-        const [file] = event.target.files;
+        const file = event.target.files[0];
+        
+        // Clear previous values
         hiddenCroppedInput.value = '';
-        if (!file) return;
+        
+        if (!file) {
+            currentImageURL = '';
+            return;
+        }
 
+        // Validate file
+        if (!validateFile(file)) {
+            fileInput.value = '';
+            return;
+        }
+
+        originalFile = file;
+
+        // Read and display the image
         const reader = new FileReader();
-        reader.onload = e => {
+        reader.onload = (e) => {
             currentImageURL = e.target.result;
             cropperImage.src = currentImageURL;
-            cropperModal.show();
+        };
+        reader.onerror = () => {
+            alert('Error reading file. Please try again.');
+            fileInput.value = '';
         };
         reader.readAsDataURL(file);
     });
 
-    cropperModalEl.addEventListener('shown.bs.modal', () => {
-        centerCropBox();
-    });
-
-    cropperResetBtn.addEventListener('click', () => {
-        if (cropperInstance) {
-            cropperInstance.reset();
-            centerCropBox();
+    // Initialize cropper when image loads
+    cropperImage.addEventListener('load', () => {
+        if (currentImageURL && cropperModalEl.classList.contains('show')) {
+            initializeCropper();
         }
     });
 
-    cropperSaveBtn.addEventListener('click', () => {
-        if (!cropperInstance) return;
-        const canvas = cropperInstance.getCroppedCanvas({ width: 600, height: 600 });
-        canvas.toBlob(blob => {
-            if (!blob) return;
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const dataUrl = reader.result;
-                hiddenCroppedInput.value = dataUrl;
-                if (previewImage) {
-                    previewImage.src = dataUrl;
-                }
-                cropperModal.hide();
-            };
-            reader.readAsDataURL(blob);
-        }, 'image/jpeg');
+    // Show modal when image is loaded
+    cropperImage.addEventListener('load', () => {
+        if (currentImageURL && !cropperModalEl.classList.contains('show')) {
+            cropperModal.show();
+        }
+    }, { once: false });
+
+    // Initialize cropper when modal is fully shown
+    cropperModalEl.addEventListener('shown.bs.modal', () => {
+        if (currentImageURL && cropperImage.complete) {
+            initializeCropper();
+        }
     });
 
+    // Cleanup when modal is hidden
+    cropperModalEl.addEventListener('hidden.bs.modal', () => {
+        destroyCropper();
+        if (!hiddenCroppedInput.value) {
+            // User closed without saving, reset file input
+            fileInput.value = '';
+            currentImageURL = '';
+            originalFile = null;
+        }
+    });
+
+    // Reset cropper
+    cropperResetBtn.addEventListener('click', () => {
+        if (cropperInstance) {
+            cropperInstance.reset();
+        }
+    });
+
+    // Save cropped image
+    cropperSaveBtn.addEventListener('click', () => {
+        if (!cropperInstance) {
+            alert('Please wait for the image to load.');
+            return;
+        }
+
+        // Show loading state
+        cropperSaveBtn.disabled = true;
+        cropperSaveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Processing...';
+
+        try {
+            const canvas = cropperInstance.getCroppedCanvas({
+                width: 600,
+                height: 600,
+                imageSmoothingEnabled: true,
+                imageSmoothingQuality: 'high'
+            });
+
+            canvas.toBlob((blob) => {
+                if (!blob) {
+                    alert('Error processing image. Please try again.');
+                    cropperSaveBtn.disabled = false;
+                    cropperSaveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Crop';
+                    return;
+                }
+
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const dataUrl = reader.result;
+                    hiddenCroppedInput.value = dataUrl;
+                    
+                    // Update preview
+                    if (previewImage) {
+                        previewImage.src = dataUrl;
+                    }
+
+                    // Reset button state
+                    cropperSaveBtn.disabled = false;
+                    cropperSaveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Crop';
+                    
+                    // Hide modal
+                    cropperModal.hide();
+                };
+                reader.onerror = () => {
+                    alert('Error saving cropped image. Please try again.');
+                    cropperSaveBtn.disabled = false;
+                    cropperSaveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Crop';
+                };
+                reader.readAsDataURL(blob);
+            }, 'image/jpeg', 0.92);
+        } catch (error) {
+            console.error('Cropping error:', error);
+            alert('Error cropping image. Please try again.');
+            cropperSaveBtn.disabled = false;
+            cropperSaveBtn.innerHTML = '<i class="bi bi-check-circle"></i> Save Crop';
+        }
+    });
+
+    // Prevent form submission without cropped image
+    uploadForm.addEventListener('submit', (e) => {
+        if (fileInput.files.length > 0 && !hiddenCroppedInput.value) {
+            e.preventDefault();
+            alert('Please crop the image before uploading.');
+            if (currentImageURL) {
+                cropperModal.show();
+            }
+            return false;
+        }
+    });
+
+    // Handle window resize
+    let resizeTimeout;
     window.addEventListener('resize', () => {
         if (!cropperInstance) return;
-        scheduleResponsiveCenter();
+        
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (cropperInstance) {
+                cropperInstance.reset();
+            }
+        }, 250);
     });
 });
 </script>
 
 <style>
+/* Profile Picture Styles */
 .profile-picture-container {
     position: relative;
 }
 
 .profile-picture {
-    transition: transform 0.3s ease;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .profile-picture:hover {
     transform: scale(1.05);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
 }
 
-.profile-picture-placeholder {
-    transition: transform 0.3s ease;
-}
-
-.profile-picture-placeholder:hover {
-    transform: scale(1.05);
-}
-
+/* Card Styles */
 .card {
     border: none;
-    border-radius: 12px;
+    border-radius: 16px;
+    overflow: hidden;
 }
 
 .card-header {
-    border-radius: 12px 12px 0 0 !important;
+    border-radius: 16px 16px 0 0 !important;
+    padding: 1.5rem;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
 }
 
-.form-control:focus {
+.card-body {
+    padding: 2rem;
+    background: #f8f9fa;
+}
+
+/* Info Card Sections */
+.info-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.75rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e5e7eb;
+}
+
+.section-title {
+    color: #1f2937;
+    font-weight: 600;
+    font-size: 1.1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 2px solid #10b981;
+    margin-bottom: 1.25rem;
+}
+
+/* Custom Input Styles */
+.custom-input {
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.625rem 0.875rem;
+    transition: all 0.2s ease;
+    font-size: 0.95rem;
+}
+
+.custom-input:focus {
     border-color: #10b981;
-    box-shadow: 0 0 0 0.2rem rgba(16, 185, 129, 0.25);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+    outline: none;
 }
 
-.btn-success {
+.custom-input::placeholder {
+    color: #9ca3af;
+}
+
+/* Info Field (Read-only) */
+.info-field {
+    padding: 0.625rem 0.875rem;
+    background: #f3f4f6;
+    border-radius: 8px;
+    border: 1.5px solid #e5e7eb;
+    color: #374151;
+    font-size: 0.95rem;
+}
+
+/* Form Labels */
+.form-label {
+    color: #374151;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.fw-semibold {
+    font-weight: 600;
+}
+
+/* Switch Styles */
+.custom-switch-wrapper {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 0.875rem;
+    border: 1px solid #e5e7eb;
+}
+
+.form-check-input:checked {
     background-color: #10b981;
     border-color: #10b981;
 }
 
-.btn-success:hover {
-    background-color: #059669;
-    border-color: #059669;
+.form-check-input:focus {
+    box-shadow: 0 0 0 0.2rem rgba(16, 185, 129, 0.25);
+    border-color: #10b981;
 }
 
-/* Cropper modal sizing */
+/* Button Styles */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    padding: 0.625rem 1.25rem;
+    transition: all 0.2s ease;
+}
+
+.btn-success {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
+}
+
+.btn-warning {
+    background-color: #f59e0b;
+    border-color: #f59e0b;
+    color: white;
+}
+
+.btn-warning:hover {
+    background-color: #d97706;
+    border-color: #d97706;
+    color: white;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(245, 158, 11, 0.3);
+}
+
+.btn-outline-danger {
+    border-radius: 8px;
+}
+
+.btn-outline-danger:hover {
+    transform: translateY(-1px);
+}
+
+/* Cropper Modal */
 .cropper-wrapper {
     min-height: 360px;
     display: flex;
@@ -371,6 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
     justify-content: center;
     background: #f8f9fa;
     overflow: hidden;
+    border-radius: 8px;
 }
 
 #cropper-image {
@@ -380,8 +613,37 @@ document.addEventListener('DOMContentLoaded', () => {
     object-fit: contain;
 }
 
-/* Responsive adjustments for smaller devices */
+.modal-header {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+}
+
+.modal-header .btn-close {
+    filter: brightness(0) invert(1);
+}
+
+/* Upload Section */
+.form-control[type="file"] {
+    border: 1.5px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 0.5rem;
+}
+
+.form-control[type="file"]:focus {
+    border-color: #10b981;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+}
+
+/* Responsive Adjustments */
 @media (max-width: 768px) {
+    .card-body {
+        padding: 1.5rem 1rem;
+    }
+    
+    .info-card {
+        padding: 1.25rem;
+    }
+    
     .cropper-wrapper {
         min-height: 260px;
     }
@@ -402,6 +664,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     #cropper-image {
         max-height: 50vh;
+    }
+    
+    .section-title {
+        font-size: 1rem;
     }
 }
 </style>
