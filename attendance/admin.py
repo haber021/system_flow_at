@@ -288,9 +288,9 @@ class InstructorAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ['rfid_id', 'student_id', 'name', 'course', 'section', 'email', 'adviser', 'has_user_account']
+    list_display = ['rfid_id', 'student_id', 'name', 'course', 'section', 'is_regular', 'email', 'adviser', 'has_user_account']
     search_fields = ['rfid_id', 'student_id', 'name', 'course__code', 'course__name', 'section__code', 'section__name', 'email', 'adviser__name', 'adviser__email']
-    list_filter = ['course', 'section', 'adviser']
+    list_filter = ['course', 'section', 'is_regular', 'adviser']
     autocomplete_fields = ['adviser', 'course', 'section']
     exclude = ['user']
     actions = ['create_user_accounts']

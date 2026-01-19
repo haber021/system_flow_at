@@ -135,6 +135,7 @@ class Student(models.Model):
     section = models.ForeignKey('Section', on_delete=models.PROTECT, related_name='students', null=True, blank=True, help_text="Student's section (A, B, C, etc.)")
     email = models.EmailField()
     email_opt_in = models.BooleanField(default=True, help_text="Allow this student to receive email notifications")
+    is_regular = models.BooleanField(default=True, help_text="Regular students follow section-based subject filtering. Irregular students can enroll in all available subjects for the semester.")
     adviser = models.ForeignKey(Adviser, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='student_profile')
     profile_picture = models.ImageField(upload_to=student_profile_picture_path, null=True, blank=True, help_text="Student profile picture")

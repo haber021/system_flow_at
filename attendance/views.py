@@ -5200,15 +5200,20 @@ def student_enroll_subjects(request):
     # Filter by student's section - ONLY show subjects assigned to their specific section
     all_subjects = Subject.objects.filter(is_active=True, semester=semester).prefetch_related('schedules')
     
-    # Filter subjects by student's section - strict matching
-    if student.section:
-        # ONLY show subjects that have the student's section assigned
-        all_subjects = all_subjects.filter(sections=student.section).distinct()
+    # Check if student is regular or irregular
+    if not student.is_regular:
+        # Irregular students can see ALL subjects for the semester, regardless of section
+        all_subjects = all_subjects.distinct().order_by('code')
     else:
-        # If student has no section assigned, they cannot see any subjects
-        all_subjects = Subject.objects.none()
-    
-    all_subjects = all_subjects.order_by('code')
+        # Regular students: Filter subjects by student's section - strict matching
+        if student.section:
+            # ONLY show subjects that have the student's section assigned
+            all_subjects = all_subjects.filter(sections=student.section).distinct()
+        else:
+            # If student has no section assigned, they cannot see any subjects
+            all_subjects = Subject.objects.none()
+        
+        all_subjects = all_subjects.order_by('code')
     
     # Get enrolled subject IDs for current academic year and semester
     enrolled_subject_ids = StudentSubject.objects.filter(
@@ -5619,6 +5624,18 @@ def student_profile_view(request):
                 messages.success(request, "Password changed successfully! Please login again.")
                 logout(request)
                 return redirect('student_login')
+        
+        elif 'set_regular_status' in request.POST:
+            # Set student status to Regular or Irregular
+            new_status = request.POST.get('set_regular_status')
+            if new_status == 'regular':
+                student.is_regular = True
+                messages.success(request, "Student status set to Regular! You can now enroll in subjects assigned to your section.")
+            elif new_status == 'irregular':
+                student.is_regular = False
+                messages.success(request, "Student status set to Irregular! You can now enroll in all available subjects for the semester.")
+            student.save()
+            return redirect('student_profile')
     
     context = {
         'student': student,

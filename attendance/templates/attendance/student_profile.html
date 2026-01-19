@@ -136,6 +136,48 @@
                                 </div>
                             </div>
                             
+                            <!-- Student Status Section -->
+                            <div class="row mb-3">
+                                <div class="col-md-12">
+                                    <label class="form-label fw-semibold text-muted">Student Status</label>
+                                    <div class="info-field mb-2">
+                                        {% if student.is_regular %}
+                                            <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>Regular</span>
+                                        {% else %}
+                                            <span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Irregular</span>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <div class="custom-switch-wrapper">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input student-status-toggle" type="checkbox" role="switch" 
+                                                   id="student_status_toggle" 
+                                                   {% if student.is_regular %}checked{% endif %}
+                                                   data-student-id="{{ student.id }}">
+                                            <label class="form-check-label" for="student_status_toggle">
+                                                <span id="status-label-text">
+                                                    {% if student.is_regular %}
+                                                        Enable Regular Student (section-based enrollment)
+                                                    {% else %}
+                                                        Enable Irregular Student (all subjects available)
+                                                    {% endif %}
+                                                </span>
+                                            </label>
+                                        </div>
+                                        <small class="text-muted d-block mt-1 ms-4">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            <span id="status-description">
+                                                {% if student.is_regular %}
+                                                    Regular students can only enroll in subjects assigned to their section
+                                                {% else %}
+                                                    Irregular students can enroll in all available subjects for the semester
+                                                {% endif %}
+                                            </span>
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                            
                             <div class="row">
                                 <div class="col-md-6">
                                     <label class="form-label fw-semibold text-muted">Username</label>
@@ -441,10 +483,65 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }, 250);
     });
+
+    // Student Status Toggle Handler
+    const statusToggle = document.getElementById('student_status_toggle');
+    if (statusToggle) {
+        statusToggle.addEventListener('change', function() {
+            const isChecked = this.checked;
+            const newStatus = isChecked ? 'regular' : 'irregular';
+            const confirmMessage = isChecked 
+                ? 'Switch to Regular status?\n\nYou will only see subjects assigned to your section.'
+                : 'Switch to Irregular status?\n\nYou will see all available subjects for the semester.';
+            
+            if (confirm(confirmMessage)) {
+                // Create and submit form
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '{% url "student_profile" %}';
+                
+                // Add CSRF token
+                const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+                const csrfInput = document.createElement('input');
+                csrfInput.type = 'hidden';
+                csrfInput.name = 'csrfmiddlewaretoken';
+                csrfInput.value = csrfToken;
+                form.appendChild(csrfInput);
+                
+                // Add status input
+                const statusInput = document.createElement('input');
+                statusInput.type = 'hidden';
+                statusInput.name = 'set_regular_status';
+                statusInput.value = newStatus;
+                form.appendChild(statusInput);
+                
+                // Submit form
+                document.body.appendChild(form);
+                form.submit();
+            } else {
+                // Revert toggle if user cancels
+                this.checked = !isChecked;
+            }
+        });
+    }
 });
 </script>
 
 <style>
+/* Student Status Toggle Buttons */
+.student-status-buttons-wrapper {
+    display: flex !important;
+    gap: 0.5rem !important;
+    margin-top: 0.75rem !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.student-status-buttons-wrapper form {
+    flex: 1 !important;
+    display: block !important;
+}
+
 /* Profile Picture Styles */
 .profile-picture-container {
     position: relative;
