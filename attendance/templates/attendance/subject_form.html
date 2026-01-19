@@ -86,6 +86,17 @@
                         <small class="text-muted">Select a course this subject belongs to. Leave blank for general subjects.</small>
                     </div>
                     <div class="mb-3">
+                        <label for="sections" class="form-label">Sections *</label>
+                        <select class="form-select" id="sections" name="sections" multiple size="5" required>
+                            {% for section in sections %}
+                            <option value="{{ section.id }}" {% if subject and section in subject.sections.all %}selected{% endif %}>
+                                {{ section.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Hold Ctrl (Windows) or Cmd (Mac) to select multiple sections. At least one section is required.</small>
+                    </div>
+                    <div class="mb-3">
                         <label for="semester" class="form-label">Semester</label>
                         <select class="form-select" id="semester" name="semester" required>
                             <option value="1st Semester" {% if subject.semester|default:'1st Semester' == '1st Semester' %}selected{% endif %}>1st Semester</option>

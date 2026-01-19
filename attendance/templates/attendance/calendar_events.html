@@ -285,6 +285,26 @@
                     </form>
                     {% endif %}
                     
+                    {% if sections and not user_section %}
+                    <form method="get" class="d-inline-block">
+                        {% if selected_adviser_id %}
+                        <input type="hidden" name="adviser_id" value="{{ selected_adviser_id }}">
+                        {% endif %}
+                        <select name="section_id" class="form-select form-select-sm" style="min-width: 180px;" onchange="this.form.submit()">
+                            <option value="">All Sections</option>
+                            {% for sec in sections %}
+                                <option value="{{ sec.id }}" {% if selected_section_id == sec.id %}selected{% endif %}>{{ sec.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% endif %}
+                    
+                    {% if user_section %}
+                    <div class="badge bg-info text-dark px-3 py-2">
+                        <i class="bi bi-funnel"></i> Viewing: {{ user_section.name }}
+                    </div>
+                    {% endif %}
+                    
                     <div class="view-toggle">
                         <button class="btn btn-sm active" id="calendarViewBtn" title="Calendar View">
                             <i class="bi bi-calendar3"></i>
@@ -373,10 +393,93 @@
                 </div>
                 <div class="modal-body" id="eventDetailsBody"></div>
                 <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" id="editEventBtn">
+                        <i class="bi bi-pencil"></i> Edit
+                    </button>
                     <button type="button" class="btn btn-outline-danger" id="deleteEventBtn">
                         <i class="bi bi-trash"></i> Delete
                     </button>
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Event Edit Modal -->
+    <div class="modal fade" id="eventEditModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> Edit Event</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editEventForm">
+                        <input type="hidden" id="editEventId">
+                        
+                        <div class="mb-3">
+                            <label for="editEventTitle" class="form-label">Title <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="editEventTitle" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editEventDate" class="form-label">Date <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="editEventDate" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editEventType" class="form-label">Type <span class="text-danger">*</span></label>
+                            <select class="form-select" id="editEventType">
+                                <option value="holiday">Holiday / No Class</option>
+                                <option value="event">Event</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="editEventStartTime" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="editEventStartTime">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editEventEndTime" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="editEventEndTime">
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editEventSubject" class="form-label">Subject</label>
+                            <select class="form-select" id="editEventSubject">
+                                <option value="">All Subjects</option>
+                                {% for subject in subjects %}
+                                <option value="{{ subject.id }}">{{ subject.code }} - {{ subject.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Leave blank for global event</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editEventSection" class="form-label">Section</label>
+                            <select class="form-select" id="editEventSection">
+                                <option value="">All Sections</option>
+                                {% for section in sections %}
+                                <option value="{{ section.id }}">{{ section.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="form-text text-muted">Leave blank for all sections (auto-filled based on subject)</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="editEventDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="editEventDescription" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveEditEventBtn">
+                        <i class="bi bi-save"></i> Save Changes
+                    </button>
                 </div>
             </div>
         </div>
@@ -397,6 +500,9 @@
                 type: "{{ ev.event_type }}",
                 description: "{{ ev.description|escapejs }}",
                 subject: {% if ev.subject %}"{{ ev.subject.code|escapejs }} - {{ ev.subject.name|escapejs }}"{% else %}null{% endif %},
+                subjectId: {% if ev.subject %}{{ ev.subject.id }}{% else %}null{% endif %},
+                section: {% if ev.section %}"{{ ev.section.name|escapejs }}"{% else %}null{% endif %},
+                sectionId: {% if ev.section %}{{ ev.section.id }}{% else %}null{% endif %},
                 createdBy: {% if ev.created_by %}"{{ ev.created_by.username|escapejs }}"{% else %}"System"{% endif %},
                 startTime: {% if ev.start_time %}"{{ ev.start_time|time:'H:i' }}"{% else %}null{% endif %},
                 endTime: {% if ev.end_time %}"{{ ev.end_time|time:'H:i' }}"{% else %}null{% endif %}
@@ -416,6 +522,111 @@
                 if (p.indexOf(name) === 0) return p.substring(name.length);
             }
             return '';
+        }
+
+        async function deleteEvent(id) {
+            if (!id) return;
+            if (!window.confirm('Delete this event? This action cannot be undone.')) return;
+            try {
+                const resp = await fetch(`/events/${id}/delete/`, {
+                    method: 'POST',
+                    headers: { 'X-CSRFToken': getCSRFToken() }
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data && data.success) {
+                    if (window.showNotification) {
+                        window.showNotification('Event deleted successfully', 'success');
+                    }
+                    window.location.reload();
+                } else {
+                    const msg = (data && data.error) ? data.error : 'Failed to delete event';
+                    if (window.showNotification) {
+                        window.showNotification(msg, 'error');
+                    } else {
+                        alert(msg);
+                    }
+                }
+            } catch (e) {
+                if (window.showNotification) {
+                    window.showNotification('Failed to delete event', 'error');
+                } else {
+                    alert('Failed to delete event');
+                }
+            }
+        }
+
+        async function updateEvent(id, eventData) {
+            if (!id) return;
+            try {
+                const resp = await fetch(`/events/${id}/update/`, {
+                    method: 'POST',
+                    headers: { 
+                        'X-CSRFToken': getCSRFToken(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(eventData)
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data && data.success) {
+                    if (window.showNotification) {
+                        window.showNotification(data.message || 'Event updated successfully', 'success');
+                    }
+                    window.location.reload();
+                } else {
+                    const msg = (data && data.error) ? data.error : 'Failed to update event';
+                    if (window.showNotification) {
+                        window.showNotification(msg, 'error');
+                    } else {
+                        alert(msg);
+                    }
+                }
+            } catch (e) {
+                if (window.showNotification) {
+                    window.showNotification('Failed to update event', 'error');
+                } else {
+                    alert('Failed to update event');
+                }
+            }
+        }
+
+        function openEditModal(event) {
+            selectedEvent = event;
+            
+            // Populate form fields
+            document.getElementById('editEventId').value = event.id;
+            document.getElementById('editEventTitle').value = event.title;
+            document.getElementById('editEventDate').value = event.date;
+            document.getElementById('editEventType').value = event.type;
+            document.getElementById('editEventDescription').value = event.description || '';
+            
+            // Set times if available
+            if (event.startTime) {
+                document.getElementById('editEventStartTime').value = event.startTime;
+            } else {
+                document.getElementById('editEventStartTime').value = '';
+            }
+            
+            if (event.endTime) {
+                document.getElementById('editEventEndTime').value = event.endTime;
+            } else {
+                document.getElementById('editEventEndTime').value = '';
+            }
+            
+            // Set subject and section from IDs
+            const subjectSelect = document.getElementById('editEventSubject');
+            const sectionSelect = document.getElementById('editEventSection');
+            
+            subjectSelect.value = event.subjectId || '';
+            sectionSelect.value = event.sectionId || '';
+            
+            // Close details modal and open edit modal
+            const detailsModal = bootstrap.Modal.getInstance(document.getElementById('eventDetailsModal'));
+            if (detailsModal) {
+                detailsModal.hide();
+            }
+            
+            const editModal = new bootstrap.Modal(document.getElementById('eventEditModal'));
+            editModal.show();
         }
 
         async function deleteEvent(id) {
@@ -565,17 +776,23 @@
                     day: 'numeric'
                 })}</p>
                 ${timeInfo}
-                ${event.subject ? `<p><strong><i class="bi bi-book"></i> Subject:</strong> ${event.subject}</p>` : '<p><i class="bi bi-globe"></i> <em>Global event</em></p>'}
+                ${event.subject ? `<p><strong><i class="bi bi-book"></i> Subject:</strong> ${event.subject}</p>` : ''}
+                ${event.section ? `<p><strong><i class="bi bi-grid"></i> Section:</strong> ${event.section}</p>` : '<p><i class="bi bi-globe"></i> <em>All Sections</em></p>'}
                 ${event.description ? `<p><strong><i class="bi bi-file-text"></i> Description:</strong><br>${event.description}</p>` : ''}
                 <p class="text-muted small"><i class="bi bi-person"></i> Created by: ${event.createdBy}</p>
             `;
             
             {% if not in_admin %}
+            document.getElementById('editEventBtn').onclick = () => {
+                modal.hide();
+                openEditModal(event);
+            };
             document.getElementById('deleteEventBtn').onclick = () => {
                 deleteEvent(event.id);
                 modal.hide();
             };
             {% else %}
+            document.getElementById('editEventBtn').style.display = 'none';
             document.getElementById('deleteEventBtn').style.display = 'none';
             {% endif %}
             
@@ -629,7 +846,8 @@
                             })}
                         </div>
                         ${timeInfo}
-                        ${event.subject ? `<div class="text-muted small mb-2"><i class="bi bi-book"></i> ${event.subject}</div>` : '<div class="text-muted small mb-2"><i class="bi bi-globe"></i> Global</div>'}
+                        ${event.subject ? `<div class="text-muted small mb-2"><i class="bi bi-book"></i> ${event.subject}</div>` : ''}
+                        ${event.section ? `<div class="text-muted small mb-2"><i class="bi bi-grid"></i> Section: ${event.section}</div>` : '<div class="text-muted small mb-2"><i class="bi bi-globe"></i> All Sections</div>'}
                         ${event.description ? `<p class="mb-2">${event.description}</p>` : ''}
                         <div class="d-flex justify-content-between align-items-center">
                             <small class="text-muted">By ${event.createdBy}</small>
@@ -648,6 +866,85 @@
             // Initialize calendar
             renderCalendar();
             renderListView();
+            
+            // Auto-fill section when subject is selected in edit modal
+            const editSubjectSelect = document.getElementById('editEventSubject');
+            if (editSubjectSelect) {
+                editSubjectSelect.addEventListener('change', async function() {
+                    const subjectId = this.value;
+                    const sectionSelect = document.getElementById('editEventSection');
+                    
+                    if (!sectionSelect) return;
+                    
+                    if (!subjectId) {
+                        // Reset to all sections
+                        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                        {% for section in sections %}
+                        sectionSelect.innerHTML += '<option value="{{ section.id }}">{{ section.name }}</option>';
+                        {% endfor %}
+                        return;
+                    }
+                    
+                    try {
+                        const resp = await fetch(`/subject/${subjectId}/sections/`, { cache: 'no-cache' });
+                        if (!resp.ok) return;
+                        const data = await resp.json();
+                        if (!data || !data.success || !Array.isArray(data.sections)) return;
+                        
+                        // Clear and rebuild section options
+                        sectionSelect.innerHTML = '<option value="">All Sections</option>';
+                        data.sections.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.id;
+                            opt.textContent = s.name || s.code || s.id;
+                            sectionSelect.appendChild(opt);
+                        });
+                        
+                        // Auto-select the first section if only one is available
+                        if (data.sections.length === 1) {
+                            sectionSelect.value = data.sections[0].id;
+                        }
+                    } catch (e) {
+                        console.error('Failed to load sections for subject:', e);
+                    }
+                });
+            }
+            
+            // Save edit event button handler
+            document.getElementById('saveEditEventBtn').addEventListener('click', async function() {
+                const eventId = document.getElementById('editEventId').value;
+                const title = document.getElementById('editEventTitle').value.trim();
+                const date = document.getElementById('editEventDate').value;
+                const eventType = document.getElementById('editEventType').value;
+                const description = document.getElementById('editEventDescription').value.trim();
+                const startTime = document.getElementById('editEventStartTime').value;
+                const endTime = document.getElementById('editEventEndTime').value;
+                const subjectId = document.getElementById('editEventSubject').value;
+                const sectionId = document.getElementById('editEventSection').value;
+                
+                if (!title) {
+                    alert('Please enter a title');
+                    return;
+                }
+                
+                if (!date) {
+                    alert('Please select a date');
+                    return;
+                }
+                
+                const eventData = {
+                    title: title,
+                    date: date,
+                    event_type: eventType,
+                    description: description,
+                    start_time: startTime,
+                    end_time: endTime,
+                    subject_id: subjectId || null,
+                    section_id: sectionId || null
+                };
+                
+                await updateEvent(eventId, eventData);
+            });
             
             // Month navigation
             document.getElementById('prevMonth').addEventListener('click', () => {

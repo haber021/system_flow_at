@@ -206,6 +206,7 @@ class Subject(models.Model):
     instructor = models.ForeignKey('Instructor', on_delete=models.PROTECT, related_name='subjects', null=True, blank=True, help_text="Instructor assigned to this subject")
     adviser = models.ForeignKey(Adviser, on_delete=models.CASCADE, related_name='subjects', null=True, blank=True, help_text="Adviser who created/owns this subject")
     course = models.ForeignKey('Course', on_delete=models.PROTECT, related_name='subjects', null=True, blank=True, help_text="Course this subject belongs to (optional for general subjects)")
+    sections = models.ManyToManyField('Section', related_name='subjects', help_text="Sections this subject is available to - at least one section is required")
     course_code = models.CharField(max_length=50, blank=True, default='', help_text="Course code (e.g., BSIT, BSCS)")
     course_number = models.CharField(max_length=50, blank=True, default='', help_text="Course number (e.g., 101, 201)")
     schedule_days = models.CharField(max_length=50, blank=True, default='', help_text="e.g., Mon,Wed,Fri")
@@ -502,6 +503,8 @@ class CalendarEvent(models.Model):
     description = models.TextField(blank=True, default='')
     # Optional: associate an event to a specific subject; if null, event is global
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, null=True, blank=True, related_name='calendar_events')
+    # Optional: associate an event to a specific section; if null, event is for all sections
+    section = models.ForeignKey('Section', on_delete=models.CASCADE, null=True, blank=True, related_name='calendar_events', help_text="Section this event applies to (if null, applies to all sections)")
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_calendar_events')
     created_at = models.DateTimeField(auto_now_add=True)
 

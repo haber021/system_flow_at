@@ -965,6 +965,26 @@
                             </small>
                         </div>
 
+                        <!-- Section Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-grid text-primary"></i>
+                                Section <span class="text-muted small">(optional)</span>
+                            </label>
+                            <select 
+                                name="section_id" 
+                                id="calendarSection" 
+                                class="form-select"
+                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                            >
+                                <option value="">🌐 All Sections (Global Event)</option>
+                            </select>
+                            <small class="form-text text-muted d-flex align-items-center gap-1 mt-2">
+                                <i class="bi bi-info-circle"></i>
+                                Leave as "All Sections" to apply to all sections
+                            </small>
+                        </div>
+
                         <!-- Description Field -->
                         <div class="mb-4">
                             <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
@@ -1285,6 +1305,63 @@
                 }
             }
 
+            async function loadSections() {
+                try {
+                    const selectEl = document.getElementById('calendarSection');
+                    if (!selectEl) return;
+                    const resp = await fetch('/api/sections/', { cache: 'no-cache' });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (!data || !data.success || !Array.isArray(data.sections)) return;
+                    // Clear existing options except first
+                    selectEl.querySelectorAll('option:not([value=""])').forEach(o => o.remove());
+                    data.sections.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.display || s.name || s.code || s.id;
+                        selectEl.appendChild(opt);
+                    });
+                } catch (e) {
+                    // ignore
+                }
+            }
+
+            async function loadSectionsForSubject(subjectId, targetSelectId) {
+                try {
+                    const selectEl = document.getElementById(targetSelectId);
+                    if (!selectEl) return;
+                    
+                    if (!subjectId) {
+                        // If no subject selected, reload all sections
+                        await loadSections();
+                        return;
+                    }
+                    
+                    const resp = await fetch(`/subject/${subjectId}/sections/`, { cache: 'no-cache' });
+                    if (!resp.ok) return;
+                    const data = await resp.json();
+                    if (!data || !data.success || !Array.isArray(data.sections)) return;
+                    
+                    // Clear existing options except first
+                    selectEl.querySelectorAll('option:not([value=""])').forEach(o => o.remove());
+                    
+                    // Add sections from the subject
+                    data.sections.forEach(s => {
+                        const opt = document.createElement('option');
+                        opt.value = s.id;
+                        opt.textContent = s.name || s.code || s.id;
+                        selectEl.appendChild(opt);
+                    });
+                    
+                    // Auto-select the first section if only one is available
+                    if (data.sections.length === 1) {
+                        selectEl.value = data.sections[0].id;
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
+
             function getCSRFToken() {
                 const name = 'csrftoken=';
                 const decoded = decodeURIComponent(document.cookie || '');
@@ -1459,8 +1536,18 @@
                             } else {
                                 holidayNoteEl.classList.add('d-none');
                             }
-                            // load subjects for selector
+                            // load subjects and sections for selectors
                             loadSubjects();
+                            loadSections();
+                        });
+                    }
+
+                    // Auto-fill section when subject is selected
+                    const subjectSelect = document.getElementById('calendarSubject');
+                    if (subjectSelect) {
+                        subjectSelect.addEventListener('change', function() {
+                            const subjectId = this.value;
+                            loadSectionsForSubject(subjectId, 'calendarSection');
                         });
                     }
 

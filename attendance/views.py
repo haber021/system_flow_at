@@ -1889,6 +1889,25 @@ def subject_add(request):
                 is_active=is_active,
             )
             
+            # Handle section assignments - REQUIRED
+            section_ids = request.POST.getlist('sections')
+            if not section_ids:
+                messages.error(request, "At least one section is required. Please select one or more sections.")
+                subject.delete()  # Delete the subject we just created
+                return redirect('subject_add')
+            
+            try:
+                sections = Section.objects.filter(id__in=section_ids, is_active=True)
+                if not sections.exists():
+                    messages.error(request, "No valid sections selected. Please select at least one active section.")
+                    subject.delete()
+                    return redirect('subject_add')
+                subject.sections.set(sections)
+            except Exception as e:
+                messages.error(request, f"Error assigning sections: {str(e)}")
+                subject.delete()
+                return redirect('subject_add')
+            
             # Handle weekly schedule entries (day of week and time)
             schedule_days_list = request.POST.getlist('schedule_day[]')
             schedule_time_starts = request.POST.getlist('schedule_time_start[]')
@@ -2000,6 +2019,9 @@ def subject_add(request):
     if request.user.is_superuser or request.user.is_staff:
         advisers = Adviser.objects.all().order_by('name')
     
+    # Get all active sections for selection
+    sections = Section.objects.filter(is_active=True).order_by('code')
+    
     return render(request, 'attendance/subject_form.html', {
         'action': 'Add',
         'instructors': instructors,
@@ -2007,6 +2029,7 @@ def subject_add(request):
         'names': names,
         'courses': all_courses,
         'advisers': advisers,
+        'sections': sections,
         'code_to_name_json': code_to_name_json,
         'is_superuser_or_staff': request.user.is_superuser or request.user.is_staff,
     })
@@ -2101,6 +2124,22 @@ def subject_edit(request, subject_id):
             subject.semester = semester
             subject.schedule_days = schedule_days
             subject.is_active = is_active
+            
+            # Handle section assignments - REQUIRED
+            section_ids = request.POST.getlist('sections')
+            if not section_ids:
+                messages.error(request, "At least one section is required. Please select one or more sections.")
+                return redirect('subject_edit', subject_id=subject_id)
+            
+            try:
+                sections = Section.objects.filter(id__in=section_ids, is_active=True)
+                if not sections.exists():
+                    messages.error(request, "No valid sections selected. Please select at least one active section.")
+                    return redirect('subject_edit', subject_id=subject_id)
+                subject.sections.set(sections)
+            except Exception as e:
+                messages.error(request, f"Error assigning sections: {str(e)}")
+                return redirect('subject_edit', subject_id=subject_id)
             
             # Delete existing schedule entries and create new ones
             SubjectSchedule.objects.filter(subject=subject).delete()
@@ -2216,6 +2255,9 @@ def subject_edit(request, subject_id):
     else:
         all_courses = accessible_courses.order_by('code')
     
+    # Get all active sections for selection
+    sections = Section.objects.filter(is_active=True).order_by('code')
+    
     return render(request, 'attendance/subject_form.html', {
         'subject': subject,
         'action': 'Edit',
@@ -2223,6 +2265,7 @@ def subject_edit(request, subject_id):
         'codes': codes,
         'names': names,
         'courses': all_courses,
+        'sections': sections,
         'code_to_name_json': code_to_name_json,
     })
 
@@ -2305,6 +2348,15 @@ def assign_students_to_subject(request, subject_id):
     
     # Filter students by accessible courses
     all_students = filter_by_user_courses(all_students, request.user)
+    
+    # Filter students by subject's assigned sections - strict matching required
+    subject_sections = subject.sections.all()
+    if subject_sections.exists():
+        # Only show students from the assigned sections
+        all_students = all_students.filter(section__in=subject_sections)
+    else:
+        # If subject has no sections assigned, show no students (sections are required)
+        all_students = Student.objects.none()
     
     context = {
         'subject': subject,
@@ -4876,11 +4928,17 @@ def student_dashboard(request):
     first_day = date(current_year, current_month, 1)
     last_day = date(current_year, current_month, cal.monthrange(current_year, current_month)[1])
     
-    # Get calendar events for this month
+    # Get calendar events for this month, filtered by student's section
     calendar_events = CalendarEvent.objects.filter(
         date__gte=first_day,
         date__lte=last_day
-    ).order_by('date')
+    )
+    # Filter by student's section (show events for their section OR global events)
+    if student.section:
+        calendar_events = calendar_events.filter(
+            Q(section=student.section) | Q(section__isnull=True)
+        )
+    calendar_events = calendar_events.order_by('date')
     
     # Prepare calendar data for template
     calendar_data = []
@@ -5139,7 +5197,18 @@ def student_enroll_subjects(request):
         return redirect(f"{reverse('student_enroll_subjects')}?{urlencode(params)}")
     
     # Get all active subjects for the selected semester with prefetched schedules
-    all_subjects = Subject.objects.filter(is_active=True, semester=semester).prefetch_related('schedules').order_by('code')
+    # Filter by student's section - ONLY show subjects assigned to their specific section
+    all_subjects = Subject.objects.filter(is_active=True, semester=semester).prefetch_related('schedules')
+    
+    # Filter subjects by student's section - strict matching
+    if student.section:
+        # ONLY show subjects that have the student's section assigned
+        all_subjects = all_subjects.filter(sections=student.section).distinct()
+    else:
+        # If student has no section assigned, they cannot see any subjects
+        all_subjects = Subject.objects.none()
+    
+    all_subjects = all_subjects.order_by('code')
     
     # Get enrolled subject IDs for current academic year and semester
     enrolled_subject_ids = StudentSubject.objects.filter(
@@ -6659,6 +6728,7 @@ def events_create_api(request):
     event_type = data.get('type', 'event')
     description = data.get('description', '')
     subject_id = data.get('subject_id')
+    section_id = data.get('section_id')
 
     if not title or not date_str:
         return JsonResponse({'success': False, 'error': 'Title and date are required'}, status=400)
@@ -6688,18 +6758,26 @@ def events_create_api(request):
         except Exception:
             subject = None
 
+    section = None
+    if section_id:
+        try:
+            section = Section.objects.filter(id=section_id).first()
+        except Exception:
+            section = None
+
     try:
         # Normalize title (collapse multiple spaces and trim)
         normalized_title = ' '.join(title.strip().split())
 
         # Primary matching: avoid creating more than one event for the same
-        # date/event_type/subject combination. This prevents duplicate entries
+        # date/event_type/subject/section combination. This prevents duplicate entries
         # when the user accidentally submits twice or when titles differ only
         # in casing/spacing.
         match_kwargs = {
             'date': date_obj,
             'event_type': event_type,
             'subject': subject,
+            'section': section,
         }
 
         defaults = {
@@ -6716,7 +6794,7 @@ def events_create_api(request):
             with transaction.atomic():
                 ev, created = CalendarEvent.objects.get_or_create(defaults=defaults, **match_kwargs)
                 # If the existing event had a different title but the same
-                # date/type/subject, update the title to the normalized one
+                # date/type/subject/section, update the title to the normalized one
                 if not created and ev.title != normalized_title:
                     ev.title = normalized_title
                     ev.description = description or ev.description
@@ -6755,6 +6833,10 @@ def events_create_api(request):
 
                     student_ids = StudentSubject.objects.filter(subject=subj).values_list('student_id', flat=True)
                     students = Student.objects.filter(id__in=student_ids)
+                    
+                    # If event is for a specific section, filter students by that section
+                    if section:
+                        students = students.filter(section=section)
 
                     for stud in students:
                         try:
@@ -6866,11 +6948,20 @@ def calendar_events_view(request):
 
     Staff/superusers can optionally filter events by adviser using ?adviser_id=<id>
     (this will show events *created* by the specified adviser user account).
+    
+    Users can also filter by section using ?section_id=<id>
     """
     adviser_id = request.GET.get('adviser_id')
-    qs = CalendarEvent.objects.select_related('subject', 'created_by')
+    section_id = request.GET.get('section_id')
+    qs = CalendarEvent.objects.select_related('subject', 'created_by', 'section')
+
+    # Determine user's section if they are a student
+    user_section = None
+    if hasattr(request.user, 'student_profile'):
+        user_section = request.user.student_profile.section
 
     if request.user.is_superuser or request.user.is_staff:
+        # Staff/superusers can view all events or filter by adviser
         if adviser_id:
             try:
                 adviser_obj = Adviser.objects.get(pk=adviser_id)
@@ -6886,8 +6977,21 @@ def calendar_events_view(request):
             events = qs.all()
         advisers = Adviser.objects.order_by('name').all()
     else:
+        # Regular users see events they created
         events = qs.filter(created_by=request.user)
         advisers = None
+
+    # Apply section filter
+    if section_id:
+        try:
+            section_obj = Section.objects.get(pk=section_id)
+            # Show events for the specific section AND global events (section=null)
+            events = events.filter(Q(section=section_obj) | Q(section__isnull=True))
+        except Section.DoesNotExist:
+            messages.warning(request, 'Section not found; showing all events.')
+    elif user_section:
+        # For students, automatically filter by their section
+        events = events.filter(Q(section=user_section) | Q(section__isnull=True))
 
     events = events.order_by('-date', 'start_time', 'id')
 
@@ -6895,12 +6999,193 @@ def calendar_events_view(request):
     if adviser_id and adviser_id.isdigit():
         selected_adviser_id = int(adviser_id)
 
+    selected_section_id = None
+    if section_id and section_id.isdigit():
+        selected_section_id = int(section_id)
+
+    # Get all sections for filter dropdown
+    sections = Section.objects.filter(is_active=True).order_by('code')
+    
+    # Get all subjects for the edit modal
+    subjects = Subject.objects.filter(is_active=True).order_by('code', 'name')
+
     context = {
         'events': events,
         'advisers': advisers,
         'selected_adviser_id': selected_adviser_id,
+        'sections': sections,
+        'subjects': subjects,
+        'selected_section_id': selected_section_id,
+        'user_section': user_section,
     }
     return render(request, 'attendance/calendar_events.html', context) 
+
+
+@login_required
+@require_http_methods(["GET"])
+def get_subject_sections_api(request, subject_id):
+    """Get sections associated with a subject for auto-filling in event forms."""
+    try:
+        subject = Subject.objects.filter(id=subject_id).first()
+        if not subject:
+            return JsonResponse({'success': False, 'error': 'Subject not found'}, status=404)
+        
+        sections = subject.sections.filter(is_active=True).order_by('code').values('id', 'code', 'name')
+        return JsonResponse({'success': True, 'sections': list(sections)})
+    except Exception as e:
+        logger.error(f"Failed to get sections for subject {subject_id}: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def events_update_api(request, event_id):
+    """Update an existing calendar event."""
+    try:
+        ev = CalendarEvent.objects.filter(id=event_id).first()
+        if not ev:
+            return JsonResponse({'success': False, 'error': 'Event not found'}, status=404)
+        
+        # Parse request data
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+        except Exception:
+            data = {}
+        
+        title = data.get('title', '').strip()
+        if not title:
+            return JsonResponse({'success': False, 'error': 'Title is required'}, status=400)
+        
+        date_str = data.get('date', '').strip()
+        if not date_str:
+            return JsonResponse({'success': False, 'error': 'Date is required'}, status=400)
+        
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except Exception:
+            return JsonResponse({'success': False, 'error': 'Invalid date format'}, status=400)
+        
+        event_type = data.get('event_type', 'event').strip().lower()
+        if event_type not in ['holiday', 'event', 'other']:
+            event_type = 'event'
+        
+        description = data.get('description', '').strip()
+        
+        subject_id = data.get('subject_id')
+        section_id = data.get('section_id')
+        start_time_str = data.get('start_time', '').strip()
+        end_time_str = data.get('end_time', '').strip()
+        
+        # Parse times
+        start_time = None
+        if start_time_str:
+            try:
+                start_time = datetime.strptime(start_time_str, '%H:%M').time()
+            except Exception:
+                start_time = None
+        
+        end_time = None
+        if end_time_str:
+            try:
+                end_time = datetime.strptime(end_time_str, '%H:%M').time()
+            except Exception:
+                end_time = None
+        
+        subject = None
+        if subject_id:
+            try:
+                subject = Subject.objects.filter(id=subject_id).first()
+            except Exception:
+                subject = None
+        
+        section = None
+        if section_id:
+            try:
+                section = Section.objects.filter(id=section_id).first()
+            except Exception:
+                section = None
+        
+        # Track what changed for attendance updates
+        event_type_changed = ev.event_type != event_type
+        date_changed = ev.date != date_obj
+        section_changed = ev.section != section
+        subject_changed = ev.subject != subject
+        
+        # Update the event
+        ev.title = ' '.join(title.split())  # Normalize whitespace
+        ev.date = date_obj
+        ev.event_type = event_type
+        ev.description = description
+        ev.subject = subject
+        ev.section = section
+        ev.start_time = start_time
+        ev.end_time = end_time
+        ev.save()
+        
+        # If this is a holiday event and critical fields changed, update related attendances
+        if ev.event_type == 'holiday' and (event_type_changed or date_changed or section_changed or subject_changed):
+            try:
+                # Remove old attendances linked to this event
+                Attendance.objects.filter(calendar_event=ev).delete()
+                
+                # Create new attendances if still a holiday
+                subjects_to_apply = [subject] if subject else Subject.objects.filter(is_active=True)
+                settings = get_cached_settings()
+                
+                for subj in subjects_to_apply:
+                    schedule = SubjectSchedule.objects.filter(subject=subj).filter(
+                        Q(date=date_obj) | Q(day_of_week=date_obj.weekday())
+                    ).first()
+                    
+                    class_start = None
+                    class_end = None
+                    if schedule:
+                        class_start = getattr(schedule, 'time_start', None)
+                        class_end = getattr(schedule, 'time_end', None)
+                    if not class_start:
+                        class_start = subj.schedule_time_start
+                    if not class_end:
+                        class_end = subj.schedule_time_end
+                    if not class_start:
+                        class_start = getattr(settings, 'class_start_time', None)
+                    if not class_end:
+                        class_end = getattr(settings, 'class_end_time', None)
+                    
+                    student_ids = StudentSubject.objects.filter(subject=subj).values_list('student_id', flat=True)
+                    students = Student.objects.filter(id__in=student_ids)
+                    
+                    if section:
+                        students = students.filter(section=section)
+                    
+                    for stud in students:
+                        try:
+                            with transaction.atomic():
+                                Attendance.objects.update_or_create(
+                                    student=stud,
+                                    subject=subj,
+                                    date=date_obj,
+                                    defaults={
+                                        'status': 'PRESENT',
+                                        'time_in': class_start,
+                                        'time_out': class_end,
+                                        'calendar_event': ev
+                                    }
+                                )
+                        except Exception:
+                            logger.exception('Failed to update attendance for student %s on %s', stud.id, date_obj)
+            except Exception:
+                logger.exception('Failed to update holiday attendances for CalendarEvent %s', event_id)
+        elif event_type_changed and ev.event_type != 'holiday':
+            # If changed from holiday to non-holiday, remove all linked attendances
+            try:
+                Attendance.objects.filter(calendar_event=ev).delete()
+            except Exception:
+                logger.exception('Failed to remove attendances when changing event type')
+        
+        return JsonResponse({'success': True, 'id': ev.id, 'message': f"Event '{ev.title}' updated successfully"})
+    except Exception as e:
+        logger.error(f"Failed to update CalendarEvent {event_id}: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
 @login_required
