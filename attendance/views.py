@@ -2664,7 +2664,8 @@ def scan_view(request):
             else:
                 try:
                     # Optimized query: use only() to fetch only needed fields for faster lookup
-                    student = Student.objects.only('id', 'name', 'rfid_id', 'email', 'profile_picture').get(rfid_id=rfid_id)
+                    # Also select_related for profile_picture to avoid additional queries
+                    student = Student.objects.only('id', 'name', 'rfid_id', 'email', 'profile_picture').select_related(None).get(rfid_id=rfid_id)
                     subject = final_subject
                     
                     # Check if student is enrolled in this subject (any semester/year)
@@ -2819,8 +2820,8 @@ def scan_view(request):
                                 time_out_str = existing_attendance.time_out.strftime('%I:%M %p')
                                 messages.success(request, f"✓ Time Out recorded! {student.name} - Time In: {time_in_str}, Time Out: {time_out_str}")
 
-                                # Get profile picture URL efficiently
-                                profile_picture_url = student.get_profile_picture_url()
+                                # Get profile picture URL efficiently (cached inline to avoid method call overhead)
+                                profile_picture_url = student.profile_picture.url if student.profile_picture else None
 
                                 # Store student info in session for display modal
                                 request.session['last_scanned_student'] = {
@@ -2885,8 +2886,8 @@ def scan_view(request):
                                 time_in_str = stored_time.strftime('%I:%M %p')
                                 messages.success(request, f"✓ Time In recorded! {student.name} - {status} at {time_in_str}")
 
-                                # Get profile picture URL efficiently
-                                profile_picture_url = student.get_profile_picture_url()
+                                # Get profile picture URL efficiently (cached inline to avoid method call overhead)
+                                profile_picture_url = student.profile_picture.url if student.profile_picture else None
 
                                 # Store student info in session for display modal
                                 request.session['last_scanned_student'] = {

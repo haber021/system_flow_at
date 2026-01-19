@@ -126,6 +126,10 @@ WHITENOISE_MAX_AGE = 31536000  # 1 year cache for static files
 # Compression Settings
 GZIP_MIDDLEWARE_COMPRESS_LEVEL = 6  # Balance between speed and compression
 
+# File serving optimizations for faster image loading
+FILE_UPLOAD_PERMISSIONS = 0o644
+FILE_UPLOAD_DIRECTORY_PERMISSIONS = 0o755
+
 # Cache Configuration for better performance
 CACHES = {
     'default': {
@@ -134,6 +138,15 @@ CACHES = {
         'TIMEOUT': 300,  # 5 minutes
         'OPTIONS': {
             'MAX_ENTRIES': 1000
+        }
+    },
+    # Dedicated cache for media files (profile pictures)
+    'media': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'media-cache',
+        'TIMEOUT': 86400,  # 24 hours cache for media files
+        'OPTIONS': {
+            'MAX_ENTRIES': 500
         }
     }
 }

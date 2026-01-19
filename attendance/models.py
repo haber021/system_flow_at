@@ -144,6 +144,50 @@ class Student(models.Model):
     def __str__(self):
         return f"{self.name} ({self.rfid_id})"
     
+    def save(self, *args, **kwargs):
+        """Optimize profile picture on save for faster loading"""
+        super().save(*args, **kwargs)
+        
+        # Optimize profile picture if it exists
+        if self.profile_picture:
+            try:
+                from PIL import Image
+                import io
+                from django.core.files.base import ContentFile
+                
+                # Open the image
+                img = Image.open(self.profile_picture.path)
+                
+                # Convert RGBA to RGB if necessary
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    background.paste(img, mask=img.split()[-1] if img.mode == 'RGBA' else None)
+                    img = background
+                
+                # Resize if larger than 400x400 (more than enough for display)
+                max_size = (400, 400)
+                if img.height > max_size[1] or img.width > max_size[0]:
+                    img.thumbnail(max_size, Image.Resampling.LANCZOS)
+                
+                # Save optimized image
+                output = io.BytesIO()
+                img.save(output, format='JPEG', quality=85, optimize=True)
+                output.seek(0)
+                
+                # Update the file
+                self.profile_picture.save(
+                    self.profile_picture.name,
+                    ContentFile(output.read()),
+                    save=False
+                )
+                # Save again to update the file
+                super().save(update_fields=['profile_picture'])
+            except Exception:
+                # If optimization fails, just keep the original
+                pass
+    
     def get_profile_picture_url(self):
         """Optimized method to get profile picture URL"""
         if self.profile_picture:

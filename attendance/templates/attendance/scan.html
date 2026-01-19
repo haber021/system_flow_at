@@ -5,7 +5,8 @@
 
 {% block extra_css %}
 {% if last_scanned_student and last_scanned_student.profile_picture_url %}
-<link rel="preload" as="image" href="{{ last_scanned_student.profile_picture_url }}" fetchpriority="high">
+<link rel="preload" as="image" href="{{ last_scanned_student.profile_picture_url }}" fetchpriority="high" crossorigin="anonymous">
+<link rel="prefetch" as="image" href="{{ last_scanned_student.profile_picture_url }}">
 {% endif %}
 <style>
     .scan-container {
@@ -542,14 +543,20 @@
                                      class="rounded-circle border border-5 border-white shadow-xl" 
                                      loading="eager"
                                      fetchpriority="high"
+                                     decoding="sync"
+                                     width="200"
+                                     height="200"
                                      onload="this.style.opacity='1'"
-                                     style="width: 200px; height: 200px; object-fit: cover; opacity: 0; transition: opacity 0.3s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+                                     style="width: 200px; height: 200px; object-fit: cover; opacity: 0; transition: opacity 0.15s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); will-change: opacity;">
                             {% else %}
                                 <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" 
                                      alt="{{ last_scanned_student.name }}" 
                                      class="rounded-circle border border-5 border-white shadow-xl" 
                                      loading="eager"
                                      fetchpriority="high"
+                                     decoding="sync"
+                                     width="200"
+                                     height="200"
                                      style="width: 200px; height: 200px; object-fit: cover; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
                             {% endif %}
                             <div class="position-absolute top-0 start-50 translate-middle" style="margin-top: -12px;">
@@ -662,11 +669,11 @@
 
 @keyframes scaleIn {
     from {
-        transform: scale(0.7) rotate(-5deg);
+        transform: scale(0.9);
         opacity: 0;
     }
     to {
-        transform: scale(1) rotate(0deg);
+        transform: scale(1);
         opacity: 1;
     }
 }
@@ -800,19 +807,22 @@ document.addEventListener('DOMContentLoaded', function() {
     {% if last_scanned_student %}
     const scanModal = document.getElementById('studentScanModal');
     if (scanModal) {
-        // Preload image if not already loaded
+        // Fast image loading - make sure it displays immediately
         {% if last_scanned_student.profile_picture_url %}
         const img = scanModal.querySelector('img');
-        if (img && !img.complete) {
-            const preloadImg = new Image();
-            preloadImg.src = img.src;
-            preloadImg.onload = function() {
+        if (img) {
+            // If image is already cached/loaded, show it immediately
+            if (img.complete) {
                 img.style.opacity = '1';
-            };
+            }
+            // Set very short timeout for image display if not already loaded
+            else {
+                img.style.opacity = '1'; // Show anyway to prevent delay
+            }
         }
         {% endif %}
         
-        // Show modal immediately
+        // Show modal immediately without delay
         scanModal.classList.add('show');
         scanModal.style.display = 'block';
         
