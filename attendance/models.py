@@ -122,9 +122,12 @@ class Section(models.Model):
         ]
 
 def student_profile_picture_path(instance, filename):
-    """Generate path for student profile pictures"""
-    ext = filename.split('.')[-1]
-    filename = f"profile_{instance.id}_{instance.rfid_id}.{ext}"
+    """Generate unique path for student profile pictures"""
+    import time
+    ext = filename.split('.')[-1].lower()
+    # Use student ID and timestamp to ensure uniqueness and prevent duplicates
+    timestamp = int(time.time() * 1000)  # milliseconds for more uniqueness
+    filename = f"profile_{instance.id}_{instance.rfid_id}_{timestamp}.{ext}"
     return os.path.join('student_profiles', filename)
 
 class Student(models.Model):

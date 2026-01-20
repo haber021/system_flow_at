@@ -251,6 +251,14 @@ def validate_attendance_time(subject, attendance_date, attendance_time, settings
     if not settings.enable_time_validation:
         return True, None, None
     
+    # VALIDATION 1: Check if the date is within the active semester period
+    if settings.semester_start_date and settings.semester_end_date:
+        if attendance_date < settings.semester_start_date:
+            return False, f"Attendance not allowed. The semester has not started yet. Semester starts on {settings.semester_start_date.strftime('%B %d, %Y')}.", None
+        
+        if attendance_date > settings.semester_end_date:
+            return False, f"Attendance not allowed. The semester has ended. Semester ended on {settings.semester_end_date.strftime('%B %d, %Y')}.", None
+    
     # Use the actual attendance_time as-is for validation
     # Don't normalize here - use precise time for accurate boundary checking
     # Normalization should only happen when storing to database
@@ -2622,31 +2630,34 @@ def scan_view(request):
             auto_subject = subj
             auto_subject_window_start = window_start_dt
     
-    # Get subject_id from GET parameter (for dropdown changes)
-    active_subject_id = request.GET.get('subject_id')
+    # Auto-switch to the subject whose schedule is currently active
+    # BUT: Allow admins to manually select subjects
+    auto_selected = False
     active_subject = None
+    is_admin = request.user.is_superuser or request.user.is_staff
     
+    # Check if admin has manually selected a subject via URL parameter
+    active_subject_id = request.GET.get('subject_id')
+    manual_subject = None
     if active_subject_id:
         try:
-            active_subject = subjects_qs.filter(id=active_subject_id).first()
+            manual_subject = subjects_qs.filter(id=active_subject_id).first()
         except (ValueError, TypeError):
             pass
     
-    # Auto-switch to the subject whose schedule is currently active
-    # BUT: Admins can manually select any subject, so disable auto-switching for them
-    auto_selected = False
-    is_admin = request.user.is_superuser or request.user.is_staff
-    
-    if auto_subject and (not active_subject or active_subject.id != auto_subject.id):
-        # Only auto-switch if user is NOT an admin, or if no subject was manually selected
-        if not is_admin or not active_subject_id:
-            active_subject = auto_subject
-            auto_selected = True
-            if request.method == 'GET':
-                messages.info(request, f"Active subject switched to {active_subject.code} based on the current schedule.")
-    
-    # Fallback to first active subject if none selected
-    if not active_subject:
+    if is_admin and manual_subject:
+        # Admin has manually selected a subject - use it
+        active_subject = manual_subject
+        auto_selected = False
+    elif auto_subject:
+        # Use the subject with active schedule (for non-admins or when admin hasn't selected)
+        active_subject = auto_subject
+        auto_selected = True
+    elif manual_subject:
+        # Fallback to manually selected subject
+        active_subject = manual_subject
+    else:
+        # Use first active subject as last resort
         active_subject = subjects_qs.first()
     
     # Always display all active subjects for the adviser in the dropdown
@@ -2669,15 +2680,27 @@ def scan_view(request):
     # Get last scanned student from session for modal display
     last_scanned_student = request.session.pop('last_scanned_student', None)
     
+    # Get photo display preference from session (default to True)
+    show_photo = request.session.get('show_student_photo', True)
+    
     context = {
         'subject': active_subject,
         'subjects': subjects_to_display,
         'last_scan': last_scan,
         'last_scanned_student': last_scanned_student,
-        'auto_selected_subject_id': active_subject.id if auto_selected else None,
+        'auto_selected_subject_id': active_subject.id if (auto_selected and active_subject) else None,
+        'show_photo': show_photo,
+        'is_admin': is_admin,
+        'auto_selected': auto_selected,
     }
     
     if request.method == 'POST':
+            # Handle toggle photo action
+            if request.POST.get('toggle_photo'):
+                current = request.session.get('show_student_photo', True)
+                request.session['show_student_photo'] = not current
+                return redirect(request.get_full_path())
+            
             rfid_id = request.POST.get('rfid_id', '').strip()
             subject_id = request.POST.get('subject_id', '')
             manual_time = request.POST.get('manual_time', '')
@@ -2741,7 +2764,7 @@ def scan_view(request):
                         )
                         
                         messages.error(request, error_msg)
-                        return redirect(f"{reverse('scan')}?subject_id={subject.id}")
+                        return redirect(reverse('scan'))
                     
                     # Get current time in Manila timezone
                     now_manila = get_manila_now()
@@ -2782,7 +2805,7 @@ def scan_view(request):
                         time_in_str = existing_attendance_check.time_in.strftime('%I:%M %p')
                         time_out_str = existing_attendance_check.time_out.strftime('%I:%M %p')
                         messages.info(request, f"ℹ You already have time in and time out recorded for today. Time In: {time_in_str}, Time Out: {time_out_str}")
-                        return redirect(f"{reverse('scan')}?subject_id={subject.id}")
+                        return redirect(reverse('scan'))
                     
                     # Validate attendance time and date using actual time
                     is_valid, error_message, schedule = validate_attendance_time(
@@ -2791,11 +2814,12 @@ def scan_view(request):
                     
                     if not is_valid:
                         # Check if the error is about time window being closed
-                        if "not allowed at this time" in error_message.lower() or "valid time window" in error_message.lower():
-                            messages.error(request, f"✗ The time is no longer available. {error_message}")
+                        error_msg = error_message or "Attendance not allowed at this time."
+                        if "not allowed at this time" in error_msg.lower() or "valid time window" in error_msg.lower():
+                            messages.error(request, f"✗ The time is no longer available. {error_msg}")
                         else:
-                            messages.error(request, f"✗ {error_message}")
-                        return redirect(f"{reverse('scan')}?subject_id={subject.id}")
+                            messages.error(request, f"✗ {error_msg}")
+                        return redirect(reverse('scan'))
                     
                     # Normalize time only when storing to database (remove seconds/microseconds)
                     stored_time = scan_time.replace(second=0, microsecond=0)
@@ -2985,7 +3009,7 @@ def scan_view(request):
                                 if status == 'ABSENT':
                                     check_and_send_warning_email(student, subject)
                             
-                        return redirect(f"{reverse('scan')}?subject_id={subject.id}")
+                        return redirect(reverse('scan'))
 
                         
                 except Student.DoesNotExist:
@@ -5559,15 +5583,26 @@ def student_profile_view(request):
                     if profile_picture.content_type not in allowed_types:
                         messages.error(request, "Please upload a valid image file (JPEG, PNG, or GIF).")
                     else:
-                        # Delete old profile picture if exists
+                        # Store old profile picture path BEFORE assigning new one
+                        old_picture_path = None
                         if student.profile_picture:
                             try:
-                                os.remove(student.profile_picture.path)
-                            except:
+                                old_picture_path = student.profile_picture.path
+                            except Exception:
                                 pass
                         
+                        # Assign and save the new profile picture
                         student.profile_picture = profile_picture
                         student.save()
+                        
+                        # Delete old profile picture AFTER saving new one to prevent duplicates
+                        if old_picture_path and os.path.isfile(old_picture_path):
+                            try:
+                                os.remove(old_picture_path)
+                                logger.info(f"Deleted old profile picture: {old_picture_path}")
+                            except Exception as e:
+                                logger.warning(f"Failed to delete old profile picture: {e}")
+                        
                         messages.success(request, "Profile picture uploaded successfully!")
                         return redirect('student_profile')
             else:
@@ -5576,9 +5611,13 @@ def student_profile_view(request):
         elif 'remove_picture' in request.POST:
             if student.profile_picture:
                 try:
-                    os.remove(student.profile_picture.path)
-                except:
-                    pass
+                    # Delete the physical file
+                    if os.path.isfile(student.profile_picture.path):
+                        os.remove(student.profile_picture.path)
+                        logger.info(f"Deleted profile picture: {student.profile_picture.path}")
+                except Exception as e:
+                    logger.warning(f"Failed to delete profile picture: {e}")
+                
                 student.profile_picture = None
                 student.save()
                 messages.success(request, "Profile picture removed successfully!")

@@ -4,7 +4,7 @@
 {% block title %}RFID Attendance Scan{% endblock %}
 
 {% block extra_css %}
-{% if last_scanned_student and last_scanned_student.profile_picture_url %}
+{% if last_scanned_student and last_scanned_student.profile_picture_url and show_photo %}
 <link rel="preload" as="image" href="{{ last_scanned_student.profile_picture_url }}" fetchpriority="high" crossorigin="anonymous">
 <link rel="prefetch" as="image" href="{{ last_scanned_student.profile_picture_url }}">
 {% endif %}
@@ -344,9 +344,14 @@
                         {% csrf_token %}
                         <div class="subject-select-wrapper">
                             <label for="subject_id">
-                                <i class="bi bi-book"></i> Select Subject
+                                <i class="bi bi-book"></i> Current Subject 
+                                {% if auto_selected and not is_admin %}
+                                    <span class="badge bg-success ms-2"><i class="bi bi-clock-fill"></i> Auto-Selected</span>
+                                {% elif is_admin %}
+                                    <span class="badge bg-primary ms-2"><i class="bi bi-shield-fill-check"></i> Admin Mode</span>
+                                {% endif %}
                             </label>
-                            <select class="form-select subject-select" id="subject_id" name="subject_id" onchange="changeSubject(this.value)" required>
+                            <select class="form-select subject-select" id="subject_id" {% if not is_admin %}{% if not auto_selected %}name="subject_id"{% endif %}{% else %}name="subject_id"{% endif %} onchange="changeSubject(this.value)" {% if auto_selected and not is_admin %}disabled{% endif %} required>
                                 {% if not subject %}
                                 <option value="">-- Choose a subject --</option>
                                 {% endif %}
@@ -356,6 +361,21 @@
                                 </option>
                                 {% endfor %}
                             </select>
+                            {% if auto_selected and not is_admin %}
+                            <!-- Hidden input to send subject_id when dropdown is disabled for non-admins -->
+                            <input type="hidden" name="subject_id" value="{{ auto_selected_subject_id }}">
+                            <small class="text-muted mt-1 d-block">
+                                <i class="bi bi-info-circle"></i> Subject automatically selected based on current schedule. It will update when the schedule changes.
+                            </small>
+                            {% elif is_admin %}
+                            <small class="text-success mt-1 d-block">
+                                <i class="bi bi-unlock-fill"></i> As admin, you can manually select any subject regardless of schedule.
+                            </small>
+                            {% else %}
+                            <small class="text-muted mt-1 d-block">
+                                <i class="bi bi-exclamation-triangle"></i> No active schedule found. Please select a subject manually.
+                            </small>
+                            {% endif %}
                         </div>
                         
                         <div class="scan-input-wrapper">
@@ -384,6 +404,16 @@
                                 Manual Entry
                             </a>
                         </div>
+                    </form>
+                    
+                    <!-- Toggle Photo Button -->
+                    <form method="POST" action="{% url 'scan' %}" class="mt-3" id="togglePhotoForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="toggle_photo" value="1">
+                        <button type="submit" class="btn btn-scan btn-scan-secondary w-100">
+                            <i class="bi bi-{% if show_photo %}eye-slash{% else %}eye{% endif %}-fill"></i>
+                            {% if show_photo %}Hide{% else %}Show{% endif %} Student Photo
+                        </button>
                     </form>
                 </div>
             </div>
@@ -537,27 +567,35 @@
                 <div style="padding: 48px 40px 32px;">
                     <div class="mb-4">
                         <div class="position-relative d-inline-block">
-                            {% if last_scanned_student.profile_picture_url %}
-                                <img src="{{ last_scanned_student.profile_picture_url }}" 
-                                     alt="{{ last_scanned_student.name }}" 
-                                     class="rounded-circle border border-5 border-white shadow-xl" 
-                                     loading="eager"
-                                     fetchpriority="high"
-                                     decoding="sync"
-                                     width="200"
-                                     height="200"
-                                     onload="this.style.opacity='1'"
-                                     style="width: 200px; height: 200px; object-fit: cover; opacity: 0; transition: opacity 0.15s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); will-change: opacity;">
+                            {% if show_photo %}
+                                {% if last_scanned_student.profile_picture_url %}
+                                    <img src="{{ last_scanned_student.profile_picture_url }}" 
+                                         alt="{{ last_scanned_student.name }}" 
+                                         class="rounded-circle border border-5 border-white shadow-xl" 
+                                         loading="eager"
+                                         fetchpriority="high"
+                                         decoding="sync"
+                                         width="200"
+                                         height="200"
+                                         onload="this.style.opacity='1'"
+                                         style="width: 200px; height: 200px; object-fit: cover; opacity: 0; transition: opacity 0.15s; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04); will-change: opacity;">
+                                {% else %}
+                                    <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" 
+                                         alt="{{ last_scanned_student.name }}" 
+                                         class="rounded-circle border border-5 border-white shadow-xl" 
+                                         loading="eager"
+                                         fetchpriority="high"
+                                         decoding="sync"
+                                         width="200"
+                                         height="200"
+                                         style="width: 200px; height: 200px; object-fit: cover; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+                                {% endif %}
                             {% else %}
-                                <img src="{% static 'attendance/img/default_profile_picture.jpeg' %}" 
-                                     alt="{{ last_scanned_student.name }}" 
-                                     class="rounded-circle border border-5 border-white shadow-xl" 
-                                     loading="eager"
-                                     fetchpriority="high"
-                                     decoding="sync"
-                                     width="200"
-                                     height="200"
-                                     style="width: 200px; height: 200px; object-fit: cover; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+                                <!-- Show placeholder when photo is hidden -->
+                                <div class="rounded-circle border border-5 border-white shadow-xl d-flex align-items-center justify-content-center" 
+                                     style="width: 200px; height: 200px; background: linear-gradient(135deg, #ffffff 0%, #f3f4f6 100%); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);">
+                                    <i class="bi bi-person-circle" style="font-size: 6rem; color: #d1d5db;"></i>
+                                </div>
                             {% endif %}
                             <div class="position-absolute top-0 start-50 translate-middle" style="margin-top: -12px;">
                                 {% if last_scanned_student.action == 'time_in' %}
@@ -684,7 +722,9 @@ let isDropdownFocused = false;
 let isChangingSubject = false;
 
 function changeSubject(subjectId) {
-    if (subjectId && subjectId !== '') {
+    const subjectSelect = document.getElementById('subject_id');
+    // Allow subject change if dropdown is enabled (admins or when no auto-selection)
+    if (subjectSelect && !subjectSelect.disabled && subjectId && subjectId !== '') {
         isChangingSubject = true;
         const url = new URL(window.location.href);
         url.searchParams.set('subject_id', subjectId);
@@ -808,7 +848,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const scanModal = document.getElementById('studentScanModal');
     if (scanModal) {
         // Fast image loading - make sure it displays immediately
-        {% if last_scanned_student.profile_picture_url %}
+        {% if last_scanned_student.profile_picture_url and show_photo %}
         const img = scanModal.querySelector('img');
         if (img) {
             // If image is already cached/loaded, show it immediately
@@ -851,6 +891,36 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+    {% endif %}
+    
+    // Auto-refresh page when schedule changes (check every 60 seconds)
+    // Only for non-admin users with auto-selected subjects
+    {% if auto_selected and not is_admin %}
+    setInterval(function() {
+        // Only refresh if the page is visible (user is actively viewing)
+        if (document.visibilityState === 'visible' && !isChangingSubject) {
+            // Check if the active subject has changed by fetching the page
+            fetch(window.location.href, {
+                method: 'GET',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            }).then(response => response.text()).then(html => {
+                // Parse the response to check if subject has changed
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, 'text/html');
+                const currentSubjectId = document.getElementById('subject_id')?.value;
+                const newSubjectId = doc.getElementById('subject_id')?.value;
+                
+                // If subject has changed, reload the page
+                if (currentSubjectId && newSubjectId && currentSubjectId !== newSubjectId) {
+                    window.location.reload();
+                }
+            }).catch(err => {
+                console.log('Auto-refresh check failed:', err);
+            });
+        }
+    }, 60000); // Check every 60 seconds
     {% endif %}
 });
 </script>

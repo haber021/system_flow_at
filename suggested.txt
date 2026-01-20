@@ -1,3 +1,11 @@
 name of the profile all capsluck
 
 enchance the design in the profile view 
+
+make not multiple login in same acc for security
+
+sending report seperated the student section by each student then the subjects
+
+make sure not upload dublicate profile picture  
+
+in the time in the student dont time in if the time not true the active time active week
