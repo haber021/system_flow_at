@@ -12,7 +12,7 @@
             <div class="card-body">
                 <div class="row mb-4">
                     <div class="col-md-6">
-                        <p><strong>Student Name:</strong> {{ student.name }}</p>
+                        <p><strong>Student Name:</strong> {{ student.name|upper }}</p>
                         <p><strong>Student ID:</strong> {{ student.student_id|default:student.rfid_id }}</p>
                         <p><strong>Course:</strong> {{ student.course }}</p>
                     </div>

@@ -702,7 +702,7 @@
                     {% for req in recent_requests %}
                     <div class="recent-item">
                         <div class="recent-item-header">
-                            <h6 class="recent-item-title">{{ req.student.name }}</h6>
+                            <h6 class="recent-item-title">{{ req.student.name|upper }}</h6>
                             <span class="badge bg-warning text-dark">Pending</span>
                         </div>
                         <div class="recent-item-content">
@@ -740,7 +740,7 @@
                     {% for att in recent_attendance %}
                     <div class="recent-item">
                         <div class="recent-item-header">
-                            <h6 class="recent-item-title">{{ att.student.name }}</h6>
+                            <h6 class="recent-item-title">{{ att.student.name|upper }}</h6>
                             <span class="badge 
                                 {% if att.status == 'PRESENT' %}bg-success
                                 {% elif att.status == 'ABSENT' %}bg-danger

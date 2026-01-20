@@ -313,7 +313,7 @@
                     <div class="d-flex justify-content-between align-items-start mb-1">
                         <div>
                             <div style="font-weight:700;">{{ req.subject.code }} — {{ req.subject.name }}</div>
-                            <div class="muted-small">{{ req.student.name }} • {{ req.student.course }}</div>
+                            <div class="muted-small">{{ req.student.name|upper }} • {{ req.student.course }}</div>
                         </div>
                         <div class="text-end">
                             <div class="badge-pending"><i class="bi bi-clock"></i> Pending</div>

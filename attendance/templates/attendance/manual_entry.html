@@ -17,7 +17,7 @@
                         <select class="form-select" id="student_id" name="student_id" required>
                             <option value="">Select Student</option>
                             {% for student in students %}
-                            <option value="{{ student.id }}">{{ student.name }} ({{ student.rfid_id }})</option>
+                            <option value="{{ student.id }}">{{ student.name|upper }} ({{ student.rfid_id }})</option>
                             {% endfor %}
                         </select>
                     </div>

@@ -54,7 +54,7 @@
                     {% for attendance in attendances %}
                     <tr>
                         <td>{{ attendance.student.rfid_id }}</td>
-                        <td>{{ attendance.student.name }}</td>
+                        <td>{{ attendance.student.name|upper }}</td>
                         <td>
                             {% if attendance.time_in %}
                                 {{ attendance.time_in|time:"g:i A" }}

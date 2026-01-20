@@ -109,7 +109,7 @@
                             | Time Out: {{ activity.time_out|time:"g:i A" }}
                         {% endif %}
                     </strong> - 
-                    {{ activity.student.name }} 
+                    {{ activity.student.name|upper }} 
                     <span class="badge bg-{% if activity.status == 'PRESENT' %}success{% elif activity.status == 'LATE' %}warning{% else %}danger{% endif %} status-badge">
                         {{ activity.status }}
                     </span>

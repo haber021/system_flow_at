@@ -917,14 +917,50 @@
                                 <i class="bi bi-calendar-date text-primary"></i>
                                 Date <span class="text-danger">*</span>
                             </label>
-                            <input 
-                                type="date" 
-                                name="date" 
-                                id="calendarDate" 
-                                class="form-control" 
-                                required 
-                                style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
-                            />
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="useDateRange" />
+                                <label class="form-check-label" for="useDateRange">
+                                    Use Date Range (apply to multiple days)
+                                </label>
+                            </div>
+                            <div id="singleDateContainer">
+                                <input 
+                                    type="date" 
+                                    name="date" 
+                                    id="calendarDate" 
+                                    class="form-control" 
+                                    required 
+                                    style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                                />
+                            </div>
+                            <div id="dateRangeContainer" class="d-none">
+                                <div class="row">
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label small">Start Date</label>
+                                        <input 
+                                            type="date" 
+                                            name="start_date" 
+                                            id="calendarStartDate" 
+                                            class="form-control" 
+                                            style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                                        />
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label small">End Date</label>
+                                        <input 
+                                            type="date" 
+                                            name="end_date" 
+                                            id="calendarEndDate" 
+                                            class="form-control" 
+                                            style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                                        />
+                                    </div>
+                                </div>
+                                <small class="form-text text-muted">
+                                    <i class="bi bi-info-circle"></i>
+                                    Event will be created for each day in the range
+                                </small>
+                            </div>
                         </div>
 
                         <!-- Type Field -->
@@ -1577,6 +1613,24 @@
                         if (typeVal === 'holiday' && !titleVal) {
                             fd.set('title', 'No Classes');
                         }
+                        
+                        // Handle date range
+                        const useDateRange = document.getElementById('useDateRange').checked;
+                        if (useDateRange) {
+                            const startDate = fd.get('start_date');
+                            const endDate = fd.get('end_date');
+                            if (!startDate || !endDate) {
+                                showNotification('Please specify both start and end dates', 'error');
+                                _calendarIsSubmitting = false;
+                                if (submitBtn) submitBtn.disabled = false;
+                                return;
+                            }
+                            fd.set('use_date_range', 'true');
+                            fd.delete('date'); // Remove single date if present
+                        } else {
+                            fd.delete('start_date');
+                            fd.delete('end_date');
+                        }
 
                         fetch(form.action, {
                             method: 'POST',
@@ -1592,6 +1646,10 @@
                             window.handleAjaxResponse(data, {
                                 onSuccess: function() {
                                     form.reset();
+                                    document.getElementById('useDateRange').checked = false;
+                                    document.getElementById('singleDateContainer').classList.remove('d-none');
+                                    document.getElementById('dateRangeContainer').classList.add('d-none');
+                                    document.getElementById('calendarDate').required = true;
                                     renderCalendarEvents();
                                 }
                             });
@@ -1602,6 +1660,32 @@
                             if (submitBtn) submitBtn.disabled = false;
                         });
                     });
+                    
+                    // Handle date range toggle
+                    const useDateRangeCheckbox = document.getElementById('useDateRange');
+                    const singleDateContainer = document.getElementById('singleDateContainer');
+                    const dateRangeContainer = document.getElementById('dateRangeContainer');
+                    const calendarDate = document.getElementById('calendarDate');
+                    const calendarStartDate = document.getElementById('calendarStartDate');
+                    const calendarEndDate = document.getElementById('calendarEndDate');
+                    
+                    if (useDateRangeCheckbox) {
+                        useDateRangeCheckbox.addEventListener('change', function() {
+                            if (this.checked) {
+                                singleDateContainer.classList.add('d-none');
+                                dateRangeContainer.classList.remove('d-none');
+                                calendarDate.required = false;
+                                calendarStartDate.required = true;
+                                calendarEndDate.required = true;
+                            } else {
+                                singleDateContainer.classList.remove('d-none');
+                                dateRangeContainer.classList.add('d-none');
+                                calendarDate.required = true;
+                                calendarStartDate.required = false;
+                                calendarEndDate.required = false;
+                            }
+                        });
+                    }
                 }
                 if (clearBtn) {
                     clearBtn.addEventListener('click', function() { form.reset(); });

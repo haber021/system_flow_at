@@ -497,7 +497,7 @@
                     {% if last_scan %}
                     <div class="last-scan-item">
                         <div class="last-scan-label">Student Name</div>
-                        <div class="last-scan-value">{{ last_scan.student.name }}</div>
+                        <div class="last-scan-value">{{ last_scan.student.name|upper }}</div>
                     </div>
                     <div class="last-scan-item">
                         <div class="last-scan-label">RFID ID</div>
@@ -612,7 +612,7 @@
                     </div>
                     
                     <h2 class="text-white mb-0 fw-bold" style="font-size: 2rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2); line-height: 1.2;">
-                        {{ last_scanned_student.name }}
+                        {{ last_scanned_student.name|upper }}
                     </h2>
                 </div>
                 

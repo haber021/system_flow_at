@@ -94,6 +94,18 @@
         text-decoration: underline !important;
         cursor: pointer;
     }
+    
+    /* Perfect attendance crown badge */
+    .badge.bg-success {
+        font-size: .9rem;
+        font-weight: 600;
+        padding: 0.4rem 0.7rem;
+    }
+    
+    .badge.bg-danger {
+        font-size: .9rem;
+        padding: 0.4rem 0.7rem;
+    }
 </style>
 {% endblock %}
 
@@ -195,6 +207,7 @@
                         <th>Course</th>
                         <th>Section</th>
                         <th>Adviser</th>
+                        <th>Absences</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -238,6 +251,13 @@
                         </td>
                         <td>{{ student.adviser.name|default:"N/A" }}</td>
                         <td>
+                            {% if student.absence_count == 0 %}
+                            <span class="badge bg-success" title="Perfect Attendance! No absences">👑 0</span>
+                            {% else %}
+                            <span class="badge bg-danger">{{ student.absence_count }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             <div class="action-buttons btn-group" role="group">
                                 <a href="{% url 'student_edit' student.id %}{{ query_string }}" class="btn btn-outline-primary" title="Edit"><i class="bi bi-pencil"></i></a>
                                 <a href="{% url 'student_summary_detail' student.id %}" class="btn btn-outline-info" title="View Summary"><i class="bi bi-graph-up"></i></a>
@@ -256,7 +276,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="7" class="text-center py-5">
+                        <td colspan="8" class="text-center py-5">
                             <div class="text-muted">
                                 <i class="bi bi-inbox" style="font-size: 2.5rem;"></i>
                                 <p class="mt-2 mb-1 fw-bold">No students found.</p>
@@ -1123,7 +1143,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const studentName = button.getAttribute('data-student-name');
             
             // Update modal title with student name
-            document.getElementById('student-name-display').textContent = studentName;
+            document.getElementById('student-name-display').textContent = studentName.toUpperCase();
             
             // Show loading state
             document.getElementById('subjects-loading').classList.remove('d-none');

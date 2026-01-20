@@ -29,7 +29,7 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-3">
-                    <strong>Name:</strong> {{ student.name }}
+                    <strong>Name:</strong> {{ student.name|upper }}
                 </div>
                 <div class="col-md-3">
                     <strong>RFID ID:</strong> {{ student.rfid_id }}
@@ -54,9 +54,15 @@
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-white bg-danger">
+            <div class="card text-white {% if stats.total_absent == 0 %}bg-success{% else %}bg-danger{% endif %}">
                 <div class="card-body">
-                    <h5 class="card-title">Absent</h5>
+                    <h5 class="card-title">
+                        {% if stats.total_absent == 0 %}
+                        👑 Perfect Attendance!
+                        {% else %}
+                        Absent
+                        {% endif %}
+                    </h5>
                     <p class="card-text display-4">{{ stats.total_absent }}</p>
                 </div>
             </div>

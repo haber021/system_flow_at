@@ -122,6 +122,124 @@
     .pagination .page-item.disabled .page-link {
         color: #9ca3af;
     }
+
+    .stats-card {
+        background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    }
+
+    .stats-card h5 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .top-student-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .top-student-item {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        backdrop-filter: blur(10px);
+        transition: all 0.2s;
+    }
+
+    .top-student-item:hover {
+        background: rgba(255, 255, 255, 0.25);
+        transform: translateX(4px);
+    }
+
+    .top-student-rank {
+        font-size: 1.5rem;
+        font-weight: 700;
+        opacity: 0.8;
+        min-width: 40px;
+    }
+
+    .top-student-info {
+        flex: 1;
+        padding: 0 1rem;
+    }
+
+    .top-student-name {
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    .top-student-meta {
+        font-size: 0.8rem;
+        opacity: 0.9;
+    }
+
+    .top-student-count {
+        background: rgba(255, 255, 255, 0.3);
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+
+    .medal-icon {
+        font-size: 1.25rem;
+    }
+
+    .empty-top-list {
+        text-align: center;
+        padding: 2rem;
+        opacity: 0.8;
+    }
+
+    .stats-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+    }
+
+    .toggle-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        color: white;
+        padding: 0.4rem 1rem;
+        border-radius: 6px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .toggle-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .stats-content {
+        transition: all 0.3s ease-in-out;
+        overflow: hidden;
+    }
+
+    .stats-content.hidden {
+        max-height: 0;
+        opacity: 0;
+        margin: 0;
+    }
     </style>
     {% endblock %}
     
@@ -134,6 +252,75 @@
     </h2>
     <p class="mb-0 opacity-75">Track and review student absences and justifications across your subjects.</p>
 </div>
+
+<!-- Top Absent Students Stats -->
+{% if top_absent_students %}
+<div class="stats-card">
+    <div class="stats-header">
+        <h5 class="mb-0">
+            <i class="bi bi-trophy-fill"></i>
+            Students with Most Absences
+            <small class="opacity-75" style="font-size: 0.85rem; font-weight: normal; margin-left: 0.5rem;">
+                {% if date_from or date_to %}(Filtered Period){% else %}(All Time){% endif %}
+            </small>
+        </h5>
+        <button type="button" class="toggle-btn" onclick="toggleTopStudents()">
+            <i class="bi bi-eye-slash" id="toggleIcon"></i>
+            <span id="toggleText">Hide</span>
+        </button>
+    </div>
+    <ul class="top-student-list stats-content" id="topStudentsContent">
+        {% for student in top_absent_students %}
+        <li class="top-student-item">
+            <span class="top-student-rank">
+                {% if forloop.counter == 1 %}
+                    <span class="medal-icon">🥇</span>
+                {% elif forloop.counter == 2 %}
+                    <span class="medal-icon">🥈</span>
+                {% elif forloop.counter == 3 %}
+                    <span class="medal-icon">🥉</span>
+                {% else %}
+                    #{{ forloop.counter }}
+                {% endif %}
+            </span>
+            <div class="top-student-info">
+                <div class="top-student-name">{{ student.student__name }}</div>
+                <div class="top-student-meta">
+                    <i class="bi bi-card-heading"></i> {{ student.student__student_id|default:"N/A" }}
+                    {% if student.student__email %}
+                    &nbsp;•&nbsp;
+                    <i class="bi bi-envelope"></i> {{ student.student__email }}
+                    {% endif %}
+                </div>
+            </div>
+            <span class="top-student-count">
+                {{ student.total_absences }} absence{{ student.total_absences|pluralize }}
+            </span>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% else %}
+<div class="stats-card">
+    <div class="stats-header">
+        <h5 class="mb-0">
+            <i class="bi bi-trophy-fill"></i>
+            Students with Most Absences
+            <small class="opacity-75" style="font-size: 0.85rem; font-weight: normal; margin-left: 0.5rem;">
+                {% if date_from or date_to %}(Filtered Period){% else %}(All Time){% endif %}
+            </small>
+        </h5>
+        <button type="button" class="toggle-btn" onclick="toggleTopStudents()">
+            <i class="bi bi-eye-slash" id="toggleIcon"></i>
+            <span id="toggleText">Hide</span>
+        </button>
+    </div>
+    <div class="empty-top-list stats-content" id="topStudentsContent">
+        <i class="bi bi-check-circle" style="font-size: 2rem; margin-bottom: 0.5rem;"></i>
+        <p class="mb-0">No absences recorded in the selected filters</p>
+    </div>
+</div>
+{% endif %}
     
 <!-- Filter Section -->
 <div class="card">
@@ -197,7 +384,7 @@
                     </td>
                     <td>
                         <div class="student-info">
-                            <span class="student-name">{{ att.student.name }}</span>
+                            <span class="student-name">{{ att.student.name|upper }}</span>
                             <span class="student-meta">
                                 <i class="bi bi-card-heading"></i> {{ att.student.student_id|default:"N/A" }}
                             </span>
@@ -267,6 +454,26 @@
                 {% endif %}
 
                 <li class="page-item active" aria-current="page"><span class="page-link">Page {{ absences.number }} of {{ absences.paginator.num_pages }}</span></li>
+
+    <script>
+    function toggleTopStudents() {
+        const content = document.getElementById('topStudentsContent');
+        const icon = document.getElementById('toggleIcon');
+        const text = document.getElementById('toggleText');
+        
+        if (content.classList.contains('hidden')) {
+            // Show
+            content.classList.remove('hidden');
+            icon.className = 'bi bi-eye-slash';
+            text.textContent = 'Hide';
+        } else {
+            // Hide
+            content.classList.add('hidden');
+            icon.className = 'bi bi-eye';
+            text.textContent = 'Show';
+        }
+    }
+    </script>
 
                 {% if absences.has_next %}
                     <li class="page-item">

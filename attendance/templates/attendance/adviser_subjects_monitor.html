@@ -566,7 +566,7 @@
                              data-student-name="{{ enrollment.student.name|lower }}"
                              data-student-rfid="{{ enrollment.student.rfid_id|lower }}"
                              data-student-course="{% if enrollment.student.course %}{{ enrollment.student.course.code|lower }}{% endif %}">
-                            <div class="student-name">{{ enrollment.student.name }}</div>
+                            <div class="student-name">{{ enrollment.student.name|upper }}</div>
                             <div class="student-details">
                                 <div class="student-detail">
                                     <i class="bi bi-credit-card"></i>

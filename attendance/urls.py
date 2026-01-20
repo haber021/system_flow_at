@@ -103,5 +103,6 @@ urlpatterns = [
     path('events/list/', views.events_list_api, name='events_list_api'),
     path('events/<int:event_id>/update/', views.events_update_api, name='events_update_api'),
     path('events/<int:event_id>/delete/', views.events_delete_api, name='events_delete_api'),
+    path('events/cleanup-holiday-absences/', views.cleanup_holiday_absences, name='cleanup_holiday_absences'),
     path('subject/<int:subject_id>/sections/', views.get_subject_sections_api, name='get_subject_sections_api'),
 ]

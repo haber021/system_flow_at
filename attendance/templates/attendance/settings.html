@@ -148,10 +148,142 @@
                 <button type="submit" class="btn btn-primary">
                     <i class="bi bi-save"></i> Save Settings
                 </button>
+                <button type="button" class="btn btn-warning" id="cleanupHolidayAbsencesBtn">
+                    <i class="bi bi-magic"></i> Fix Holiday Absences
+                </button>
                 <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get all date and time inputs
+    const semesterStartDate = document.getElementById('semester_start_date');
+    const semesterEndDate = document.getElementById('semester_end_date');
+    const classStartTime = document.getElementById('class_start_time');
+    const classEndTime = document.getElementById('class_end_time');
+    
+    // Add event listeners to all date/time inputs
+    const dateTimeInputs = [semesterStartDate, semesterEndDate, classStartTime, classEndTime];
+    
+    dateTimeInputs.forEach(input => {
+        if (input) {
+            // Listen for change events
+            input.addEventListener('change', function() {
+                console.log(`${this.id} changed to:`, this.value);
+                validateDatesAndTimes();
+            });
+            
+            // Listen for input events (real-time validation)
+            input.addEventListener('input', function() {
+                validateDatesAndTimes();
+            });
+        }
+    });
+    
+    function validateDatesAndTimes() {
+        let isValid = true;
+        
+        // Validate semester dates
+        if (semesterStartDate && semesterEndDate && semesterStartDate.value && semesterEndDate.value) {
+            const startDate = new Date(semesterStartDate.value);
+            const endDate = new Date(semesterEndDate.value);
+            
+            if (endDate < startDate) {
+                semesterEndDate.setCustomValidity('Semester end date must be after start date');
+                isValid = false;
+            } else {
+                semesterEndDate.setCustomValidity('');
+            }
+        }
+        
+        // Validate class times
+        if (classStartTime && classEndTime && classStartTime.value && classEndTime.value) {
+            const startTime = classStartTime.value;
+            const endTime = classEndTime.value;
+            
+            if (endTime <= startTime) {
+                classEndTime.setCustomValidity('Class end time must be after start time');
+                isValid = false;
+            } else {
+                classEndTime.setCustomValidity('');
+            }
+        }
+        
+        return isValid;
+    }
+    
+    // Validate on form submit
+    const form = document.querySelector('form');
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!validateDatesAndTimes()) {
+                e.preventDefault();
+                if (window.showNotification) {
+                    window.showNotification('Please fix the validation errors before saving', 'error');
+                } else {
+                    alert('Please fix the validation errors before saving');
+                }
+            }
+        });
+    }
+    
+    // Initial validation
+    validateDatesAndTimes();
+    
+    // Cleanup Holiday Absences button handler
+    const cleanupBtn = document.getElementById('cleanupHolidayAbsencesBtn');
+    if (cleanupBtn) {
+        cleanupBtn.addEventListener('click', async function() {
+            if (!confirm('This will convert all ABSENT records on holiday dates to PRESENT. Continue?')) {
+                return;
+            }
+            
+            cleanupBtn.disabled = true;
+            cleanupBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processing...';
+            
+            try {
+                const response = await fetch('{% url "cleanup_holiday_absences" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (window.showNotification) {
+                        window.showNotification(data.message, 'success');
+                    } else {
+                        alert(data.message);
+                    }
+                } else {
+                    if (window.showNotification) {
+                        window.showNotification(data.error || 'Failed to cleanup absences', 'error');
+                    } else {
+                        alert(data.error || 'Failed to cleanup absences');
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                if (window.showNotification) {
+                    window.showNotification('Failed to cleanup absences: ' + error.message, 'error');
+                } else {
+                    alert('Failed to cleanup absences: ' + error.message);
+                }
+            } finally {
+                cleanupBtn.disabled = false;
+                cleanupBtn.innerHTML = '<i class="bi bi-magic"></i> Fix Holiday Absences';
+            }
+        });
+    }
+});
+</script>
 {% endblock %}
 

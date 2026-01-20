@@ -84,7 +84,7 @@
                                 {{ log.created_at|date:"M d, Y g:i A" }}
                             {% endif %}
                         </td>
-                        <td>{{ log.student.name }}</td>
+                        <td>{{ log.student.name|upper }}</td>
                         <td>{{ log.student.student_id|default:"N/A" }}</td>
                         <td>
                             {% if log.email_type == 'SEMESTER' %}

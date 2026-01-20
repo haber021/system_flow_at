@@ -345,6 +345,88 @@
     </div>
 </div>
 
+<!-- Students with Most Absences (Section & Subject Filter) -->
+{% if top_absences_by_section %}
+<div class="card filter-card">
+    <div class="card-header">
+        <h5 class="mb-0">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>Students with Most Absences 
+            {% if selected_subject_id or date_from or date_to %}
+            (Filtered)
+            {% else %}
+            (All Time)
+            {% endif %}
+        </h5>
+        <small class="text-muted d-block mt-2">
+            <i class="bi bi-info-circle me-1"></i>
+            Showing classmates in <strong>{{ student.section.name }}</strong> enrolled in same subjects
+            {% if selected_subject_id %}
+                {% for subject in subjects %}
+                    {% if subject.id == selected_subject_id_int %}
+                        <br><i class="bi bi-book me-1"></i>Subject: <strong>{{ subject.code }} - {{ subject.name }}</strong>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+            {% if date_from or date_to %}
+                <br><i class="bi bi-calendar-range me-1"></i>Period: 
+                <strong>
+                    {% if date_from %}{{ date_from }}{% else %}Start{% endif %} - 
+                    {% if date_to %}{{ date_to }}{% else %}Today{% endif %}
+                </strong>
+            {% endif %}
+        </small>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">#</th>
+                        <th>Student ID</th>
+                        <th>Name</th>
+                        <th>Section</th>
+                        <th class="text-end">Total Absences</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in top_absences_by_section %}
+                    <tr {% if item.student.id == student.id %}class="table-primary"{% endif %}>
+                        <td class="fw-bold">{{ forloop.counter }}</td>
+                        <td>
+                            <span class="badge bg-secondary">{{ item.student.student_id|default:item.student.rfid_id }}</span>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                {% if item.student.profile_picture %}
+                                <img src="{{ item.student.profile_picture.url }}" alt="{{ item.student.name }}" 
+                                     class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover;">
+                                {% else %}
+                                <div class="rounded-circle bg-secondary text-white me-2 d-flex align-items-center justify-content-center" 
+                                     style="width: 32px; height: 32px; font-size: 0.875rem;">
+                                    {{ item.student.name|slice:":1"|upper }}
+                                </div>
+                                {% endif %}
+                                <span>{{ item.student.name|upper }}</span>
+                                {% if item.student.id == student.id %}
+                                <span class="badge bg-info ms-2">You</span>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ item.student.section.name }}</span>
+                        </td>
+                        <td class="text-end">
+                            <span class="badge bg-danger fs-6">{{ item.absence_count }}</span>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Attendance Records by Week -->
 {% if weeks %}
     {% for week in weeks %}

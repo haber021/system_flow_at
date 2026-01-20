@@ -796,6 +796,23 @@ def student_list(request):
 
             # Mark absent for each subject the student is enrolled in for today
             today = get_manila_now().date()
+            
+            # Check if there are any holiday/no-class events on this date
+            holiday_events = CalendarEvent.objects.filter(
+                date=today,
+                event_type='holiday'
+            )
+            
+            # Check if there's a global holiday (no subject specified)
+            has_global_holiday = holiday_events.filter(subject__isnull=True).exists()
+            
+            if has_global_holiday:
+                msg = f"Cannot mark {student.name} absent. There is a holiday/no-class event on {today.strftime('%B %d, %Y')}."
+                messages.error(request, msg)
+                if is_ajax:
+                    return JsonResponse({'success': False, 'error': msg}, status=400)
+                return redirect('student_list')
+            
             student_subjects = StudentSubject.objects.filter(student=student).select_related('subject')
             # If specific subject IDs were provided from the form, filter to those only
             subject_ids = request.POST.getlist('subject_ids')
@@ -806,10 +823,22 @@ def student_list(request):
                 except ValueError:
                     # ignore invalid ids and proceed with full list
                     pass
+            
             created_count = 0
             updated_count = 0
+            skipped_count = 0
+            skipped_subjects = []
+            
             with transaction.atomic():
                 for ss in student_subjects:
+                    # Check if there's a holiday event for this specific subject
+                    subject_holiday = holiday_events.filter(subject=ss.subject).exists()
+                    
+                    if subject_holiday:
+                        skipped_count += 1
+                        skipped_subjects.append(ss.subject.code)
+                        continue
+                    
                     attendance, created = Attendance.objects.get_or_create(
                         student=student,
                         subject=ss.subject,
@@ -839,7 +868,12 @@ def student_list(request):
             total_changed = created_count + updated_count
             if total_changed > 0:
                 msg = f"Marked {student.name} absent for {total_changed} subject(s)."
+                if skipped_count > 0:
+                    msg += f" Skipped {skipped_count} subject(s) with holiday/no-class events: {', '.join(skipped_subjects)}."
                 messages.success(request, msg)
+            elif skipped_count > 0:
+                msg = f"No absences marked. All {skipped_count} subject(s) have holiday/no-class events: {', '.join(skipped_subjects)}."
+                messages.warning(request, msg)
             else:
                 msg = f"No changes made. {student.name} already has attendance records for today."
                 messages.info(request, msg)
@@ -1115,6 +1149,21 @@ def student_list(request):
             pass
     
     page_obj = paginator.get_page(page_number)
+    
+    # Calculate absence counts for students on current page
+    student_ids = [s.id for s in page_obj]
+    absence_counts = {}
+    if student_ids:
+        attendance_qs = Attendance.objects.filter(
+            student_id__in=student_ids,
+            status='ABSENT'
+        ).values('student_id').annotate(absent_count=Count('id'))
+        for item in attendance_qs:
+            absence_counts[item['student_id']] = item['absent_count']
+    
+    # Annotate each student with their absence count
+    for student in page_obj:
+        student.absence_count = absence_counts.get(student.id, 0)
     
     sections = Section.objects.filter(is_active=True).order_by('code')
     
@@ -2856,6 +2905,7 @@ def scan_view(request):
             if request.POST.get('toggle_photo'):
                 current = request.session.get('show_student_photo', True)
                 request.session['show_student_photo'] = not current
+                request.session.modified = True  # Explicitly mark session as modified
                 return redirect(request.get_full_path())
             
             rfid_id = request.POST.get('rfid_id', '').strip()
@@ -6089,6 +6139,62 @@ def student_history(request):
         except (ValueError, TypeError):
             pass
     
+    # Calculate top 10 students with most absences in the same section (classmates)
+    # Filter by students in the same section enrolled in the same subjects
+    top_absences_by_section = []
+    if student.section:
+        # Get all subjects the current student is enrolled in
+        student_subject_ids = StudentSubject.objects.filter(student=student).values_list('subject_id', flat=True)
+        
+        # Get classmates in the same section enrolled in any of the same subjects
+        classmate_ids = StudentSubject.objects.filter(
+            subject_id__in=student_subject_ids,
+            student__section=student.section
+        ).values_list('student_id', flat=True).distinct()
+        
+        # Count absences for each classmate
+        absence_filter = Q(
+            student_id__in=classmate_ids,
+            status='ABSENT'
+        )
+        
+        # Apply subject filter if selected
+        if subject_id:
+            try:
+                absence_filter &= Q(subject_id=int(subject_id))
+            except (ValueError, TypeError):
+                pass
+        
+        # Apply date range filter if selected
+        if date_from:
+            try:
+                absence_filter &= Q(date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+            except (ValueError, TypeError):
+                pass
+        
+        if date_to:
+            try:
+                absence_filter &= Q(date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+            except (ValueError, TypeError):
+                pass
+        
+        absence_counts = Attendance.objects.filter(
+            absence_filter
+        ).values('student').annotate(
+            absence_count=Count('id')
+        ).order_by('-absence_count')[:10]
+        
+        # Get student details for top 10
+        for item in absence_counts:
+            try:
+                classmate = Student.objects.get(id=item['student'])
+                top_absences_by_section.append({
+                    'student': classmate,
+                    'absence_count': item['absence_count']
+                })
+            except Student.DoesNotExist:
+                pass
+    
     context = {
         'student': student,
         'weeks': weeks_list,
@@ -6097,6 +6203,7 @@ def student_history(request):
         'selected_subject_id_int': selected_subject_id_int,
         'date_from': date_from,
         'date_to': date_to,
+        'top_absences_by_section': top_absences_by_section,
     }
     return render(request, 'attendance/student_history.html', context)
 
@@ -6729,6 +6836,40 @@ def adviser_absent_students(request):
 
     absences_qs = absences_qs.order_by('-date', '-time')
 
+    # Calculate top absent students (students with most absences)
+    # Use the same filtered subjects but count across all dates (or filtered date range)
+    top_absent_queryset = Attendance.objects.filter(status='ABSENT', subject__in=subjects)
+    
+    # Apply date filters to top absent students if present
+    if date_from:
+        try:
+            top_absent_queryset = top_absent_queryset.filter(date__gte=datetime.strptime(date_from, '%Y-%m-%d').date())
+        except Exception:
+            pass
+    
+    if date_to:
+        try:
+            top_absent_queryset = top_absent_queryset.filter(date__lte=datetime.strptime(date_to, '%Y-%m-%d').date())
+        except Exception:
+            pass
+    
+    # Apply subject filter if present
+    if subject_id:
+        try:
+            top_absent_queryset = top_absent_queryset.filter(subject_id=int(subject_id))
+        except (ValueError, TypeError):
+            pass
+    
+    # Group by student and count absences, get top 10
+    top_absent_students = top_absent_queryset.values(
+        'student__id', 
+        'student__name', 
+        'student__student_id', 
+        'student__email'
+    ).annotate(
+        total_absences=Count('id')
+    ).order_by('-total_absences')[:10]
+
     # Pagination
     paginator = Paginator(absences_qs, 25)
     page_number = request.GET.get('page')
@@ -6746,6 +6887,7 @@ def adviser_absent_students(request):
         'date_to': date_to,
         'student_q': student_q,
         'is_staff': request.user.is_staff or request.user.is_superuser,
+        'top_absent_students': top_absent_students,
     }
     return render(request, 'attendance/adviser_absent_students.html', context)
 
@@ -6923,6 +7065,7 @@ def events_create_api(request):
     - Supports JSON POST (application/json) for API clients.
     - Supports regular HTML form POST (multipart/form-data or application/x-www-form-urlencoded)
       for the calendar modal form.
+    - Supports date ranges to create events for multiple consecutive days.
     Returns JSON with success flag and created id.
     """
     # Accept both JSON and regular form submissions
@@ -6936,6 +7079,9 @@ def events_create_api(request):
 
     title = (data.get('title') or '').strip()
     date_str = data.get('date')
+    start_date_str = data.get('start_date')
+    end_date_str = data.get('end_date')
+    use_date_range = data.get('use_date_range') == 'true'
     start_time_str = data.get('start_time')
     end_time_str = data.get('end_time')
     event_type = data.get('type', 'event')
@@ -6943,13 +7089,36 @@ def events_create_api(request):
     subject_id = data.get('subject_id')
     section_id = data.get('section_id')
 
-    if not title or not date_str:
-        return JsonResponse({'success': False, 'error': 'Title and date are required'}, status=400)
-
-    try:
-        date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
-    except Exception:
-        return JsonResponse({'success': False, 'error': 'Invalid date format, use YYYY-MM-DD'}, status=400)
+    if not title:
+        return JsonResponse({'success': False, 'error': 'Title is required'}, status=400)
+    
+    # Determine date(s) to process
+    dates_to_process = []
+    
+    if use_date_range and start_date_str and end_date_str:
+        try:
+            start_date_obj = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            end_date_obj = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            
+            if end_date_obj < start_date_obj:
+                return JsonResponse({'success': False, 'error': 'End date must be after start date'}, status=400)
+            
+            # Generate all dates in the range
+            current_date = start_date_obj
+            while current_date <= end_date_obj:
+                dates_to_process.append(current_date)
+                current_date += timedelta(days=1)
+                
+        except Exception as e:
+            return JsonResponse({'success': False, 'error': f'Invalid date range format: {str(e)}'}, status=400)
+    elif date_str:
+        try:
+            date_obj = datetime.strptime(date_str, '%Y-%m-%d').date()
+            dates_to_process.append(date_obj)
+        except Exception:
+            return JsonResponse({'success': False, 'error': 'Invalid date format, use YYYY-MM-DD'}, status=400)
+    else:
+        return JsonResponse({'success': False, 'error': 'Date or date range is required'}, status=400)
 
     start_time = None
     end_time = None
@@ -6978,120 +7147,135 @@ def events_create_api(request):
         except Exception:
             section = None
 
+    # Normalize title (collapse multiple spaces and trim)
+    normalized_title = ' '.join(title.strip().split())
+    if event_type == 'holiday' and not normalized_title:
+        normalized_title = 'No Classes'
+
+    # Process each date
+    created_events = []
+    updated_events = []
+    
     try:
-        # Normalize title (collapse multiple spaces and trim)
-        normalized_title = ' '.join(title.strip().split())
+        for date_obj in dates_to_process:
+            # Primary matching: avoid creating more than one event for the same
+            # date/event_type/subject/section combination
+            match_kwargs = {
+                'date': date_obj,
+                'event_type': event_type,
+                'subject': subject,
+                'section': section,
+            }
 
-        # Primary matching: avoid creating more than one event for the same
-        # date/event_type/subject/section combination. This prevents duplicate entries
-        # when the user accidentally submits twice or when titles differ only
-        # in casing/spacing.
-        match_kwargs = {
-            'date': date_obj,
-            'event_type': event_type,
-            'subject': subject,
-            'section': section,
-        }
+            defaults = {
+                'title': normalized_title,
+                'description': description,
+                'created_by': request.user,
+                'start_time': start_time,
+                'end_time': end_time,
+            }
 
-        defaults = {
-            'title': normalized_title,
-            'description': description,
-            'created_by': request.user,
-            'start_time': start_time,
-            'end_time': end_time,
-        }
-
-        # Use get_or_create which handles race conditions by catching
-        # IntegrityError internally and retrying the lookup.
-        try:
-            with transaction.atomic():
-                ev, created = CalendarEvent.objects.get_or_create(defaults=defaults, **match_kwargs)
-                # If the existing event had a different title but the same
-                # date/type/subject/section, update the title to the normalized one
-                if not created and ev.title != normalized_title:
-                    ev.title = normalized_title
-                    ev.description = description or ev.description
-                    ev.start_time = start_time or ev.start_time
-                    ev.end_time = end_time or ev.end_time
-                    ev.save(update_fields=['title', 'description', 'start_time', 'end_time'])
-        except IntegrityError:
-            # Another process may have created the same event concurrently.
-            # Re-fetch the existing event and proceed.
-            ev = CalendarEvent.objects.filter(**match_kwargs).first()
-            created = False
-
-        # Only apply holiday attendances when the event was newly created
-        if created and ev.event_type == 'holiday':
+            # Use get_or_create which handles race conditions
             try:
-                subjects_to_apply = [subject] if subject else Subject.objects.filter(is_active=True)
-                settings = get_cached_settings()
-                for subj in subjects_to_apply:
-                    schedule = SubjectSchedule.objects.filter(subject=subj).filter(
-                        Q(date=date_obj) | Q(day_of_week=date_obj.weekday())
-                    ).first()
+                with transaction.atomic():
+                    ev, created = CalendarEvent.objects.get_or_create(defaults=defaults, **match_kwargs)
+                    if not created and ev.title != normalized_title:
+                        ev.title = normalized_title
+                        ev.description = description or ev.description
+                        ev.start_time = start_time or ev.start_time
+                        ev.end_time = end_time or ev.end_time
+                        ev.save(update_fields=['title', 'description', 'start_time', 'end_time'])
+                        updated_events.append(ev)
+                    elif created:
+                        created_events.append(ev)
+            except IntegrityError:
+                ev = CalendarEvent.objects.filter(**match_kwargs).first()
+                if ev:
+                    updated_events.append(ev)
+                created = False
 
-                    class_start = None
-                    class_end = None
-                    if schedule:
-                        class_start = getattr(schedule, 'time_start', None)
-                        class_end = getattr(schedule, 'time_end', None)
-                    if not class_start:
-                        class_start = subj.schedule_time_start
-                    if not class_end:
-                        class_end = subj.schedule_time_end
-                    if not class_start:
-                        class_start = getattr(settings, 'class_start_time', None)
-                    if not class_end:
-                        class_end = getattr(settings, 'class_end_time', None)
+            # Apply holiday attendances for this event
+            if ev.event_type == 'holiday':
+                try:
+                    subjects_to_apply = [subject] if subject else Subject.objects.filter(is_active=True)
+                    settings = get_cached_settings()
+                    for subj in subjects_to_apply:
+                        schedule = SubjectSchedule.objects.filter(subject=subj).filter(
+                            Q(date=date_obj) | Q(day_of_week=date_obj.weekday())
+                        ).first()
 
-                    student_ids = StudentSubject.objects.filter(subject=subj).values_list('student_id', flat=True)
-                    students = Student.objects.filter(id__in=student_ids)
-                    
-                    # If event is for a specific section, filter students by that section
-                    if section:
-                        students = students.filter(section=section)
+                        class_start = None
+                        class_end = None
+                        if schedule:
+                            class_start = getattr(schedule, 'time_start', None)
+                            class_end = getattr(schedule, 'time_end', None)
+                        if not class_start:
+                            class_start = subj.schedule_time_start
+                        if not class_end:
+                            class_end = subj.schedule_time_end
+                        if not class_start:
+                            class_start = getattr(settings, 'class_start_time', None)
+                        if not class_end:
+                            class_end = getattr(settings, 'class_end_time', None)
 
-                    for stud in students:
-                        try:
-                            with transaction.atomic():
-                                attendance, created_att = Attendance.objects.select_for_update().get_or_create(
-                                    student=stud,
-                                    subject=subj,
-                                    date=date_obj,
-                                    defaults={'status': 'PRESENT', 'time_in': class_start, 'time_out': class_end, 'calendar_event': ev}
-                                )
-                                updated = False
-                                if not created_att:
-                                    if attendance.time_in != class_start:
-                                        attendance.time_in = class_start
-                                        updated = True
-                                    if attendance.time_out != class_end:
-                                        attendance.time_out = class_end
-                                        updated = True
-                                    if attendance.status != 'PRESENT':
-                                        attendance.status = 'PRESENT'
-                                        updated = True
-                                    if attendance.calendar_event_id != ev.id:
-                                        attendance.calendar_event = ev
-                                        updated = True
-                                    if updated:
-                                        attendance.save()
-                        except Exception:
-                            logger.exception('Failed to apply holiday attendance for student %s on %s', stud.id, date_obj)
-            except Exception:
-                logger.exception('Failed to apply holiday attendance after creating CalendarEvent')
+                        student_ids = StudentSubject.objects.filter(subject=subj).values_list('student_id', flat=True)
+                        students = Student.objects.filter(id__in=student_ids)
+                        
+                        if section:
+                            students = students.filter(section=section)
 
-        # Provide a helpful message for the frontend to show a notification. Include a created flag for clarity.
-        if created:
-            try:
-                date_display = ev.date.strftime('%Y-%m-%d')
-            except Exception:
-                date_display = str(ev.date)
-            message = f"Event '{ev.title}' created for {date_display}"
+                        for stud in students:
+                            try:
+                                with transaction.atomic():
+                                    attendance, created_att = Attendance.objects.select_for_update().get_or_create(
+                                        student=stud,
+                                        subject=subj,
+                                        date=date_obj,
+                                        defaults={'status': 'PRESENT', 'time_in': class_start, 'time_out': class_end, 'calendar_event': ev}
+                                    )
+                                    updated = False
+                                    if not created_att:
+                                        if attendance.time_in != class_start:
+                                            attendance.time_in = class_start
+                                            updated = True
+                                        if attendance.time_out != class_end:
+                                            attendance.time_out = class_end
+                                            updated = True
+                                        if attendance.status != 'PRESENT':
+                                            attendance.status = 'PRESENT'
+                                            updated = True
+                                        if attendance.calendar_event_id != ev.id:
+                                            attendance.calendar_event = ev
+                                            updated = True
+                                        if updated:
+                                            attendance.save()
+                            except Exception:
+                                logger.exception('Failed to apply holiday attendance for student %s on %s', stud.id, date_obj)
+                except Exception:
+                    logger.exception('Failed to apply holiday attendance after creating CalendarEvent')
+
+        # Generate response message
+        total_created = len(created_events)
+        total_updated = len(updated_events)
+        
+        if use_date_range:
+            if total_created > 0:
+                message = f"Created {total_created} event(s) from {dates_to_process[0].strftime('%Y-%m-%d')} to {dates_to_process[-1].strftime('%Y-%m-%d')}"
+            else:
+                message = f"Updated events from {dates_to_process[0].strftime('%Y-%m-%d')} to {dates_to_process[-1].strftime('%Y-%m-%d')}"
         else:
-            message = f"Event '{ev.title}' exists; updated"
+            if total_created > 0:
+                message = f"Event '{normalized_title}' created for {dates_to_process[0].strftime('%Y-%m-%d')}"
+            else:
+                message = f"Event '{normalized_title}' updated for {dates_to_process[0].strftime('%Y-%m-%d')}"
 
-        return JsonResponse({'success': True, 'id': ev.id, 'created': created, 'message': message})
+        return JsonResponse({
+            'success': True,
+            'created': total_created,
+            'updated': total_updated,
+            'total': total_created + total_updated,
+            'message': message
+        })
     except Exception as e:
         logger.error(f"Failed to create CalendarEvent: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
@@ -7417,6 +7601,77 @@ def events_delete_api(request, event_id):
         return JsonResponse({'success': True})
     except Exception as e:
         logger.error(f"Failed to delete CalendarEvent {event_id}: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required
+@require_http_methods(["POST"])
+def cleanup_holiday_absences(request):
+    """
+    Utility endpoint to clean up incorrect ABSENT records on dates with holiday events.
+    This fixes any ABSENT records that were created before a holiday event was added.
+    """
+    try:
+        # Get all holiday events
+        holiday_events = CalendarEvent.objects.filter(event_type='holiday')
+        
+        total_fixed = 0
+        for event in holiday_events:
+            # Get subjects to apply (all if event is global, or specific subject)
+            if event.subject:
+                subjects_to_apply = [event.subject]
+            else:
+                subjects_to_apply = Subject.objects.filter(is_active=True)
+            
+            settings = get_cached_settings()
+            
+            for subj in subjects_to_apply:
+                # Get schedule times
+                schedule = SubjectSchedule.objects.filter(subject=subj).filter(
+                    Q(date=event.date) | Q(day_of_week=event.date.weekday())
+                ).first()
+
+                class_start = None
+                class_end = None
+                if schedule:
+                    class_start = getattr(schedule, 'time_start', None)
+                    class_end = getattr(schedule, 'time_end', None)
+                if not class_start:
+                    class_start = subj.schedule_time_start
+                if not class_end:
+                    class_end = subj.schedule_time_end
+                if not class_start:
+                    class_start = getattr(settings, 'class_start_time', None)
+                if not class_end:
+                    class_end = getattr(settings, 'class_end_time', None)
+
+                # Find all ABSENT records on this date for this subject
+                absent_records = Attendance.objects.filter(
+                    date=event.date,
+                    subject=subj,
+                    status='ABSENT'
+                )
+                
+                # If event is for a specific section, only fix that section's students
+                if event.section:
+                    absent_records = absent_records.filter(student__section=event.section)
+                
+                # Update all to PRESENT
+                for attendance in absent_records:
+                    attendance.status = 'PRESENT'
+                    attendance.time_in = class_start
+                    attendance.time_out = class_end
+                    attendance.calendar_event = event
+                    attendance.save(update_fields=['status', 'time_in', 'time_out', 'calendar_event'])
+                    total_fixed += 1
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Fixed {total_fixed} incorrect absence record(s) on holiday dates.',
+            'total_fixed': total_fixed
+        })
+    except Exception as e:
+        logger.error(f"Failed to cleanup holiday absences: {str(e)}", exc_info=True)
         return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 
