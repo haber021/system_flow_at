@@ -238,6 +238,84 @@ def filter_by_adviser_students(queryset, user, student_field='student'):
         else:
             return queryset.none()
 
+def is_subject_currently_active(subject, attendance_date, attendance_time, settings=None):
+    """
+    Check if a subject is currently active (for auto-selection purposes).
+    This function determines if a class is in session RIGHT NOW, using only:
+    - Early attendance grace period before class start
+    - Actual class end time (NOT extended by late_attendance_minutes)
+    - Timeout window (minutes before class end)
+    
+    This ensures that the "time-out allowed" setting doesn't affect which subject is considered active.
+    
+    Returns a tuple: (is_active: bool, schedule: SubjectSchedule or None)
+    """
+    if settings is None:
+        settings = SystemSettings.get_settings()
+    
+    # If time validation is disabled, consider subject active
+    if not settings.enable_time_validation:
+        return True, None
+    
+    # Check if the date is within the active semester period
+    if settings.semester_start_date and settings.semester_end_date:
+        if attendance_date < settings.semester_start_date or attendance_date > settings.semester_end_date:
+            return False, None
+    
+    # Get the day of week for the attendance date
+    day_of_week = attendance_date.weekday()
+    
+    # First check for specific date schedules
+    date_schedules = SubjectSchedule.objects.filter(
+        subject=subject,
+        date=attendance_date
+    ).order_by('time_start')
+    
+    if date_schedules.exists():
+        schedules = date_schedules
+    else:
+        # Check for weekly schedules (day of week)
+        schedules = SubjectSchedule.objects.filter(
+            subject=subject,
+            day_of_week=day_of_week,
+            date__isnull=True
+        ).order_by('time_start')
+    
+    # Convert attendance_time to datetime for accurate comparison
+    attendance_datetime = make_aware_datetime(attendance_date, attendance_time)
+    
+    if schedules.exists():
+        # Check against schedules for this date/day
+        for schedule in schedules:
+            # Calculate the active window:
+            # Start: schedule.time_start - early_attendance_minutes
+            # End: schedule.time_end (actual end time, no late grace period)
+            start_datetime = make_aware_datetime(attendance_date, schedule.time_start)
+            early_start_dt = start_datetime - timedelta(minutes=settings.early_attendance_minutes)
+            
+            end_datetime = make_aware_datetime(attendance_date, schedule.time_end)
+            
+            # Check if current time is within the active window
+            if early_start_dt <= attendance_datetime <= end_datetime:
+                return True, schedule
+        
+        return False, None
+    
+    # No schedule found - check subject's general schedule as fallback
+    if subject.schedule_time_start and subject.schedule_time_end:
+        class_start = subject.schedule_time_start
+        class_end = subject.schedule_time_end
+        
+        start_datetime = make_aware_datetime(attendance_date, class_start)
+        end_datetime = make_aware_datetime(attendance_date, class_end)
+        early_start_dt = start_datetime - timedelta(minutes=settings.early_attendance_minutes)
+        
+        # Check if within active window (no late grace period)
+        if early_start_dt <= attendance_datetime <= end_datetime:
+            return True, None
+    
+    return False, None
+
 def validate_attendance_time(subject, attendance_date, attendance_time, settings=None):
     """
     Validate if attendance is allowed at the given date and time.
@@ -1533,6 +1611,12 @@ def student_export_csv(request):
 
 @login_required
 def send_student_summary_pdf_to_adviser(request):
+    """
+    Send PDF summary to adviser organized by:
+    1. Section
+    2. Student (within each section)
+    3. Subjects (for each student)
+    """
     academic_year = request.POST.get('academic_year', '').strip()
     semester = request.POST.get('semester', '').strip()
 
@@ -1559,12 +1643,11 @@ def send_student_summary_pdf_to_adviser(request):
         messages.error(request, "No recipient email found for adviser.")
         return redirect(f"{reverse('student_summary')}?academic_year={academic_year}&semester={semester}")
 
-    # Use StudentSubject to find enrolled students for the specific AY/Semester
-    # This ensures we get students even if they have no attendance records yet
+    # Get enrollments with section information
     enrollments = StudentSubject.objects.filter(
         academic_year=academic_year,
         semester=semester
-    ).select_related('student', 'student__course', 'subject')
+    ).select_related('student', 'student__course', 'student__section', 'subject')
 
     # Filter by adviser if not staff/superuser
     if hasattr(request.user, 'adviser_profile') and not (request.user.is_staff or request.user.is_superuser):
@@ -1574,134 +1657,206 @@ def send_student_summary_pdf_to_adviser(request):
     if hasattr(request.user, 'student_profile'):
         enrollments = enrollments.exclude(student=request.user.student_profile)
 
-    # Group by student to aggregate stats
-    student_data = {}
+    # Group by section, then by student
+    section_data = {}
     for enrollment in enrollments:
         student = enrollment.student
-        if student.id not in student_data:
-            student_data[student.id] = {
-                'student': student,
-                'subject_ids': set(),
-                'subject_codes': set()
+        section = student.section
+        section_key = section.code if section else 'No Section'
+        section_name = section.name if section else 'No Section'
+        
+        if section_key not in section_data:
+            section_data[section_key] = {
+                'section_name': section_name,
+                'students': {}
             }
-        student_data[student.id]['subject_ids'].add(enrollment.subject.id)
-        student_data[student.id]['subject_codes'].add(enrollment.subject.code)
-
-    summary = []
-    for sid, data in student_data.items():
-        student = data['student']
-        subject_ids = data['subject_ids']
-        subjects_str = ", ".join(sorted(data['subject_codes']))
         
-        # Count attendance for this student in enrolled subjects
-        atts = Attendance.objects.filter(
-            student_id=sid,
-            subject_id__in=subject_ids
-        )
+        if student.id not in section_data[section_key]['students']:
+            section_data[section_key]['students'][student.id] = {
+                'student': student,
+                'subjects': []
+            }
         
-        present = atts.filter(status='PRESENT').count()
-        absent = atts.filter(status='ABSENT').count()
-        late = atts.filter(status='LATE').count()
-        total = atts.count()
-        
-        summary.append({
-            'student__name': student.name,
-            'student__student_id': student.student_id,
-            'student__course__code': student.course.code if student.course else '',
-            'subjects': subjects_str,
-            'total_present': present,
-            'total_absent': absent,
-            'total_late': late,
-            'total_records': total
+        # Add subject details
+        section_data[section_key]['students'][student.id]['subjects'].append({
+            'code': enrollment.subject.code,
+            'name': enrollment.subject.name,
+            'subject_id': enrollment.subject.id
         })
+
+    # Sort sections and students
+    sorted_sections = sorted(section_data.items(), key=lambda x: x[0])
     
-    # Sort by name
-    summary.sort(key=lambda x: x['student__name'])
+    # Calculate attendance for each student's subjects
+    for section_key, section_info in sorted_sections:
+        sorted_students = sorted(section_info['students'].items(), key=lambda x: x[1]['student'].name)
+        section_info['students'] = sorted_students
+        
+        for student_id, student_info in sorted_students:
+            for subject in student_info['subjects']:
+                # Get attendance stats for this student-subject pair
+                atts = Attendance.objects.filter(
+                    student_id=student_id,
+                    subject_id=subject['subject_id']
+                )
+                subject['present'] = atts.filter(status='PRESENT').count()
+                subject['absent'] = atts.filter(status='ABSENT').count()
+                subject['late'] = atts.filter(status='LATE').count()
+                subject['total'] = atts.count()
 
+    # Generate PDF
     buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=landscape(letter))
-    width, height = landscape(letter)
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
 
-    title = "Student Attendance Summary"
-    subtitle = f"AY: {academic_year or 'All'}  |  Semester: {semester or 'All'}"
-    recip_line = f"Adviser: {adviser.name if adviser else (request.user.get_full_name() or request.user.username)}"
-
-    y = height - 1*inch
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(1*inch, y, title)
-    y -= 18
-    c.setFont("Helvetica", 10)
-    c.drawString(1*inch, y, subtitle)
-    y -= 14
-    c.drawString(1*inch, y, recip_line)
-    y -= 24
-
-    headers = ["#", "Student Name", "ID", "Course", "Subjects", "Present", "Absent", "Late", "Total"]
-    col_x = [0.5*inch, 0.9*inch, 3.0*inch, 4.0*inch, 4.8*inch, 8.2*inch, 8.8*inch, 9.4*inch, 10.0*inch]
-    c.setFont("Helvetica-Bold", 9)
-    for i, htxt in enumerate(headers):
-        c.drawString(col_x[i], y, htxt)
-    y -= 12
-    c.setStrokeColor(colors.black)
-    c.line(0.5*inch, y, 10.5*inch, y)
-    y -= 8
-
-    c.setFont("Helvetica", 9)
-    row = 0
-    totals = { 'present': 0, 'absent': 0, 'late': 0, 'records': 0 }
-    for item in summary:
-        row += 1
-        if y < 1*inch:
-            c.showPage()
-            y = height - 1*inch
-            c.setFont("Helvetica-Bold", 12)
-            c.drawString(1*inch, y, title + " (cont.)")
-            y -= 18
-            c.setFont("Helvetica-Bold", 9)
-            for i, htxt in enumerate(headers):
-                c.drawString(col_x[i], y, htxt)
-            y -= 12
-            c.line(0.5*inch, y, 10.5*inch, y)
-            y -= 8
-            c.setFont("Helvetica", 9)
-        c.drawString(col_x[0], y, str(row))
-        c.drawString(col_x[1], y, item['student__name'] or '')
-        c.drawString(col_x[2], y, (item['student__student_id'] or ''))
-        c.drawString(col_x[3], y, (item['student__course__code'] or ''))
-        # Truncate subjects if too long
-        subj_text = item['subjects']
-        if len(subj_text) > 55:
-            subj_text = subj_text[:52] + "..."
-        c.drawString(col_x[4], y, subj_text)
-        c.drawRightString(col_x[5]+30, y, str(item['total_present']))
-        c.drawRightString(col_x[6]+30, y, str(item['total_absent']))
-        c.drawRightString(col_x[7]+30, y, str(item['total_late']))
-        c.drawRightString(col_x[8]+30, y, str(item['total_records']))
+    def draw_header(c, y, title_suffix=""):
+        """Helper function to draw page header"""
+        title = "Student Attendance Summary by Section" + title_suffix
+        subtitle = f"AY: {academic_year or 'All'}  |  Semester: {semester or 'All'}"
+        recip_line = f"Adviser: {adviser.name if adviser else (request.user.get_full_name() or request.user.username)}"
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(0.75*inch, y, title)
+        y -= 16
+        c.setFont("Helvetica", 9)
+        c.drawString(0.75*inch, y, subtitle)
         y -= 12
-        totals['present'] += item['total_present']
-        totals['absent'] += item['total_absent']
-        totals['late'] += item['total_late']
-        totals['records'] += item['total_records']
+        c.drawString(0.75*inch, y, recip_line)
+        y -= 20
+        return y
 
-    y -= 6
-    c.line(0.5*inch, y, 10.5*inch, y)
-    y -= 14
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(0.5*inch, y, "Totals:")
-    c.drawRightString(col_x[5]+30, y, str(totals['present']))
-    c.drawRightString(col_x[6]+30, y, str(totals['absent']))
-    c.drawRightString(col_x[7]+30, y, str(totals['late']))
-    c.drawRightString(col_x[8]+30, y, str(totals['records']))
+    y = height - 0.75*inch
+    y = draw_header(c, y)
+    
+    grand_totals = {'present': 0, 'absent': 0, 'late': 0, 'records': 0}
+    
+    for section_key, section_info in sorted_sections:
+        section_name = section_info['section_name']
+        students_list = section_info['students']
+        
+        # Check if we need a new page for section header
+        if y < 2*inch:
+            c.showPage()
+            y = height - 0.75*inch
+            y = draw_header(c, y, " (cont.)")
+        
+        # Section Header
+        c.setFillColor(colors.HexColor('#2563eb'))
+        c.rect(0.5*inch, y-14, width-1*inch, 18, fill=True, stroke=False)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(0.65*inch, y-10, f"Section: {section_name}")
+        c.setFillColor(colors.black)
+        y -= 24
+        
+        for student_id, student_info in students_list:
+            student = student_info['student']
+            subjects = student_info['subjects']
+            
+            # Check if we need a new page
+            needed_space = 30 + (len(subjects) * 14) + 10  # student header + subjects + spacing
+            if y < needed_space + 1*inch:
+                c.showPage()
+                y = height - 0.75*inch
+                y = draw_header(c, y, " (cont.)")
+                # Redraw section header on new page
+                c.setFillColor(colors.HexColor('#2563eb'))
+                c.rect(0.5*inch, y-14, width-1*inch, 18, fill=True, stroke=False)
+                c.setFillColor(colors.white)
+                c.setFont("Helvetica-Bold", 11)
+                c.drawString(0.65*inch, y-10, f"Section: {section_name}")
+                c.setFillColor(colors.black)
+                y -= 24
+            
+            # Student Header
+            c.setFont("Helvetica-Bold", 10)
+            student_text = f"{student.name}"
+            if student.student_id:
+                student_text += f" (ID: {student.student_id})"
+            if student.course:
+                student_text += f" - {student.course.code}"
+            c.drawString(0.75*inch, y, student_text)
+            y -= 16
+            
+            # Subject table headers
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(1*inch, y, "Subject Code")
+            c.drawString(2.2*inch, y, "Subject Name")
+            c.drawString(4.8*inch, y, "Present")
+            c.drawString(5.5*inch, y, "Absent")
+            c.drawString(6.1*inch, y, "Late")
+            c.drawString(6.6*inch, y, "Total")
+            y -= 10
+            c.setStrokeColor(colors.grey)
+            c.line(1*inch, y, 7*inch, y)
+            y -= 4
+            
+            # Subject rows
+            c.setFont("Helvetica", 8)
+            student_totals = {'present': 0, 'absent': 0, 'late': 0, 'records': 0}
+            
+            for subject in subjects:
+                c.drawString(1*inch, y, subject['code'])
+                # Truncate subject name if too long
+                subj_name = subject['name']
+                if len(subj_name) > 35:
+                    subj_name = subj_name[:32] + "..."
+                c.drawString(2.2*inch, y, subj_name)
+                c.drawRightString(5.2*inch, y, str(subject['present']))
+                c.drawRightString(5.85*inch, y, str(subject['absent']))
+                c.drawRightString(6.4*inch, y, str(subject['late']))
+                c.drawRightString(6.9*inch, y, str(subject['total']))
+                y -= 12
+                
+                student_totals['present'] += subject['present']
+                student_totals['absent'] += subject['absent']
+                student_totals['late'] += subject['late']
+                student_totals['records'] += subject['total']
+            
+            # Student subtotal
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(1*inch, y, "Student Total:")
+            c.drawRightString(5.2*inch, y, str(student_totals['present']))
+            c.drawRightString(5.85*inch, y, str(student_totals['absent']))
+            c.drawRightString(6.4*inch, y, str(student_totals['late']))
+            c.drawRightString(6.9*inch, y, str(student_totals['records']))
+            y -= 18
+            
+            grand_totals['present'] += student_totals['present']
+            grand_totals['absent'] += student_totals['absent']
+            grand_totals['late'] += student_totals['late']
+            grand_totals['records'] += student_totals['records']
+    
+    # Grand totals
+    if y < 1.5*inch:
+        c.showPage()
+        y = height - 0.75*inch
+        y = draw_header(c, y, " (cont.)")
+    
+    y -= 10
+    c.setStrokeColor(colors.black)
+    c.line(0.5*inch, y, 7.5*inch, y)
+    y -= 16
+    c.setFont("Helvetica-Bold", 11)
+    c.drawString(0.75*inch, y, "GRAND TOTALS:")
+    c.drawRightString(5.2*inch, y, str(grand_totals['present']))
+    c.drawRightString(5.85*inch, y, str(grand_totals['absent']))
+    c.drawRightString(6.4*inch, y, str(grand_totals['late']))
+    c.drawRightString(6.9*inch, y, str(grand_totals['records']))
 
     c.showPage()
     c.save()
     pdf_data = buffer.getvalue()
     buffer.close()
 
-    subject_line = f"Student Attendance Summary - {academic_year or 'All AY'} - {semester or 'All Semesters'}"
+    subject_line = f"Student Attendance Summary by Section - {academic_year or 'All AY'} - {semester or 'All Semesters'}"
     body = (
         "Hello,\n\n"
-        f"Please find attached the attendance summary (present/absent/late) per student for {academic_year or 'all academic years'} - {semester or 'all semesters'}.\n\n"
+        f"Please find attached the attendance summary organized by section, student, and subjects for {academic_year or 'all academic years'} - {semester or 'all semesters'}.\n\n"
+        "The report is organized as follows:\n"
+        "1. Students grouped by their sections\n"
+        "2. Each student's enrolled subjects\n"
+        "3. Attendance statistics (present/absent/late) for each subject\n\n"
         f"This report was generated by {request.user.get_full_name() or request.user.username}.\n\n"
         "Regards,\nAttendance Monitoring System"
     )
@@ -1713,10 +1868,10 @@ def send_student_summary_pdf_to_adviser(request):
             from_email=django_settings.DEFAULT_FROM_EMAIL,
             to=[recipient_email],
         )
-        filename = f"attendance_summary_{academic_year or 'ALL'}_{semester or 'ALL'}.pdf".replace(' ', '_')
+        filename = f"attendance_summary_by_section_{academic_year or 'ALL'}_{semester or 'ALL'}.pdf".replace(' ', '_')
         email_message.attach(filename, pdf_data, 'application/pdf')
         email_message.send(fail_silently=False)
-        messages.success(request, f"Summary PDF sent to {recipient_email}.")
+        messages.success(request, f"Summary PDF (organized by section) sent to {recipient_email}.")
     except Exception as e:
         logger.error(f"Failed to send summary PDF: {e}")
         messages.error(request, "Failed to send summary PDF. Please check email settings.")
@@ -2603,11 +2758,13 @@ def scan_view(request):
     current_time = now_manila.time()
 
     # Identify a subject whose schedule is active right now (with grace periods)
+    # Use is_subject_currently_active instead of validate_attendance_time
+    # This ensures timeout settings don't affect active subject determination
     auto_subject = None
     auto_subject_window_start = None
     for subj in subjects_qs:
         try:
-            is_active_now, _, schedule = validate_attendance_time(
+            is_active_now, schedule = is_subject_currently_active(
                 subj, today, current_time, settings
             )
         except Exception:
