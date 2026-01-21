@@ -13,5 +13,8 @@ venv
 .env.production.local
 
 db.sqlite3
+db.sqlite3-wal
+db.sqlite3-shm
 
 media
+
