@@ -365,9 +365,30 @@
 <!-- Absences Table -->
 <div class="card">
     <div class="card-body p-0">
+        <form method="post" action="{% url 'adviser_mark_absences_present' %}">
+            {% csrf_token %}
+            <div class="d-flex justify-content-between align-items-center px-3 pt-3 pb-2 flex-wrap gap-2">
+                <div class="small text-muted">
+                    Select absences then click Mark Selected Present. Enable past-date override to edit older entries.
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="form-check form-switch me-3">
+                        <input class="form-check-input" type="checkbox" id="allowPast" name="allow_past" value="1">
+                        <label class="form-check-label small" for="allowPast">Allow past dates</label>
+                    </div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelectAll(true)">Select All</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelectAll(false)">Clear</button>
+                    <button type="submit" class="btn btn-success btn-sm">
+                        <i class="bi bi-check2-circle"></i> Mark Selected Present
+                    </button>
+                </div>
+            </div>
         <table class="table table-hover mb-0">
             <thead>
                 <tr>
+                    <th style="width:44px;">
+                        <input type="checkbox" class="form-check-input" id="selectAll" onchange="selectAllToggle(this)">
+                    </th>
                     <th>Date</th>
                     <th>Student Details</th>
                     <th>Subject</th>
@@ -378,6 +399,13 @@
             <tbody>
                 {% for att in absences %}
                 <tr>
+                    <td>
+                        {% if att.date == today %}
+                            <input type="checkbox" class="form-check-input row-check" name="attendance_ids" value="{{ att.id }}">
+                        {% else %}
+                            <input type="checkbox" class="form-check-input row-check past-check" name="attendance_ids" value="{{ att.id }}" title="Past date — will auto-enable 'Allow past dates' on submit">
+                        {% endif %}
+                    </td>
                     <td>
                         <div class="fw-semibold text-dark">{{ att.date|date:"M d, Y" }}</div>
                         <small class="text-muted">{{ att.date|date:"l" }}</small>
@@ -427,7 +455,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5">
+                    <td colspan="6">
                         <div class="empty-state">
                             <i class="bi bi-check-circle"></i>
                             <h5>No Absences Found</h5>
@@ -438,6 +466,7 @@
                 {% endfor %}
             </tbody>
     </table>
+        </form>
     </div>
 
     <!-- Pagination -->
@@ -473,6 +502,61 @@
             text.textContent = 'Show';
         }
     }
+
+    function selectAllToggle(master) {
+        const checks = document.querySelectorAll('.row-check');
+        checks.forEach(c => { if (!c.disabled) c.checked = master.checked; });
+    }
+
+    function toggleSelectAll(val) {
+        const checks = document.querySelectorAll('.row-check');
+        checks.forEach(c => { if (!c.disabled) c.checked = !!val; });
+        const master = document.getElementById('selectAll');
+        if (master) master.checked = !!val;
+    }
+
+    // Keep master checkbox in sync and make row clicks toggle checkbox
+    document.addEventListener('DOMContentLoaded', () => {
+        const master = document.getElementById('selectAll');
+        const rows = document.querySelectorAll('table.table tbody tr');
+        const syncMaster = () => {
+            const checks = Array.from(document.querySelectorAll('.row-check'));
+            if (!checks.length) { if (master) master.checked = false; return; }
+            const allChecked = checks.length > 0 && checks.every(c => c.checked || c.disabled);
+            if (master) master.checked = allChecked;
+        };
+
+        document.querySelectorAll('.row-check').forEach(chk => {
+            chk.addEventListener('change', syncMaster);
+        });
+
+        rows.forEach(row => {
+            row.addEventListener('click', (e) => {
+                // Avoid toggling when clicking interactive elements
+                const target = e.target;
+                if (target.closest('a, button, input, select, label, .evidence-link')) return;
+                const box = row.querySelector('.row-check');
+                if (box && !box.disabled) {
+                    box.checked = !box.checked;
+                    box.dispatchEvent(new Event('change', { bubbles: true }));
+                }
+            }, false);
+        });
+
+        // On submit, if any past records are selected, auto-enable Allow Past
+        const form = document.querySelector('form[action*="adviser_mark_absences_present"]');
+        const allowPast = document.getElementById('allowPast');
+        if (form) {
+            form.addEventListener('submit', (e) => {
+                const anyPastSelected = Array.from(document.querySelectorAll('.past-check')).some(c => c.checked);
+                if (anyPastSelected && allowPast && !allowPast.checked) {
+                    allowPast.checked = true;
+                }
+            });
+        }
+
+        syncMaster();
+    });
     </script>
 
                 {% if absences.has_next %}

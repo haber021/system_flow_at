@@ -403,18 +403,14 @@
                                 <i class="bi bi-pencil-square"></i>
                                 Manual Entry
                             </a>
+                            <button type="button" id="toggleModalBtn" class="btn btn-scan btn-scan-secondary" title="Show/Hide scan popup">
+                                <i class="bi bi-eye-slash"></i>
+                                <span id="toggleModalLabel">Hide Popup</span>
+                            </button>
                         </div>
                     </form>
                     
-                    <!-- Toggle Photo Button -->
-                    <form method="POST" action="{% url 'scan' %}" class="mt-3" id="togglePhotoForm">
-                        {% csrf_token %}
-                        <input type="hidden" name="toggle_photo" value="1">
-                        <button type="submit" class="btn btn-scan btn-scan-secondary w-100">
-                            <i class="bi bi-{% if show_photo %}eye-slash{% else %}eye{% endif %}-fill"></i>
-                            {% if show_photo %}Hide{% else %}Show{% endif %} Student Photo
-                        </button>
-                    </form>
+                    
                 </div>
             </div>
         </div>
@@ -598,11 +594,15 @@
                                 </div>
                             {% endif %}
                             <div class="position-absolute top-0 start-50 translate-middle" style="margin-top: -12px;">
-                                {% if last_scanned_student.action == 'time_in' %}
+                                {% if last_scanned_student.action == 'time_out' and enable_timeout_display %}
+                                    <span class="badge rounded-pill px-4 py-2" style="font-size: 0.9rem; font-weight: 600; background: white; color: #3b82f6; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+                                        <i class="bi bi-box-arrow-right"></i> TIME OUT
+                                    </span>
+                                {% elif last_scanned_student.action == 'time_in' %}
                                     <span class="badge rounded-pill px-4 py-2" style="font-size: 0.9rem; font-weight: 600; background: white; color: #10b981; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
                                         <i class="bi bi-check-circle-fill"></i> TIME IN
                                     </span>
-                                {% else %}
+                                {% elif enable_timeout_display %}
                                     <span class="badge rounded-pill px-4 py-2" style="font-size: 0.9rem; font-weight: 600; background: white; color: #3b82f6; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
                                         <i class="bi bi-box-arrow-right"></i> TIME OUT
                                     </span>
@@ -638,16 +638,7 @@
                     
                     <div class="mt-4 pt-4" style="border-top: 2px solid #f3f4f6;">
                         <div class="row text-center g-3">
-                            {% if last_scanned_student.action == 'time_in' %}
-                                <div class="col-12">
-                                    <div style="padding: 20px; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 12px; border: 2px solid #a7f3d0;">
-                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
-                                        <p class="mb-0 fw-bold" style="font-size: 1.75rem; color: #059669;">
-                                            <i class="bi bi-clock-fill"></i> {{ last_scanned_student.time_in }}
-                                        </p>
-                                    </div>
-                                </div>
-                            {% else %}
+                            {% if last_scanned_student.action == 'time_out' and enable_timeout_display %}
                                 <div class="col-6">
                                     <div style="padding: 16px; background: #f9fafb; border-radius: 12px;">
                                         <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
@@ -661,6 +652,41 @@
                                         <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time Out</p>
                                         <p class="mb-0 fw-bold" style="font-size: 1.25rem; color: #2563eb;">
                                             <i class="bi bi-arrow-left-circle-fill"></i> {{ last_scanned_student.time_out }}
+                                        </p>
+                                    </div>
+                                </div>
+                            {% elif last_scanned_student.action == 'time_in' %}
+                                <div class="col-12">
+                                    <div style="padding: 20px; background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); border-radius: 12px; border: 2px solid #a7f3d0;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.75rem; color: #059669;">
+                                            <i class="bi bi-clock-fill"></i> {{ last_scanned_student.time_in }}
+                                        </p>
+                                    </div>
+                                </div>
+                            {% elif enable_timeout_display %}
+                                <div class="col-6">
+                                    <div style="padding: 16px; background: #f9fafb; border-radius: 12px;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.25rem; color: #1f2937;">
+                                            <i class="bi bi-arrow-right-circle-fill" style="color: #10b981;"></i> {{ last_scanned_student.time_in }}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div style="padding: 16px; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-radius: 12px; border: 2px solid #bfdbfe;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time Out</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.25rem; color: #2563eb;">
+                                            <i class="bi bi-arrow-left-circle-fill"></i> {{ last_scanned_student.time_out }}
+                                        </p>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <div class="col-12">
+                                    <div style="padding: 20px; background: #f9fafb; border-radius: 12px;">
+                                        <p class="mb-2 text-muted" style="font-size: 0.85rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px;">Time In</p>
+                                        <p class="mb-0 fw-bold" style="font-size: 1.75rem; color: #1f2937;">
+                                            <i class="bi bi-arrow-right-circle-fill" style="color: #10b981;"></i> {{ last_scanned_student.time_in }}
                                         </p>
                                     </div>
                                 </div>
@@ -720,6 +746,7 @@
 <script>
 let isDropdownFocused = false;
 let isChangingSubject = false;
+let suppressModal = false;
 
 function changeSubject(subjectId) {
     const subjectSelect = document.getElementById('subject_id');
@@ -738,6 +765,31 @@ document.addEventListener('DOMContentLoaded', function() {
     const subjectSelect = document.getElementById('subject_id');
     const scanIcon = document.querySelector('.scan-icon');
     const scanContainer = document.querySelector('.scan-input-container');
+    const toggleBtn = document.getElementById('toggleModalBtn');
+    const toggleLabel = document.getElementById('toggleModalLabel');
+
+    // Load persisted preference for suppressing modal
+    suppressModal = (localStorage.getItem('suppressScanModal') === 'true');
+    function updateToggleUI() {
+        if (!toggleBtn || !toggleLabel) return;
+        if (suppressModal) {
+            toggleLabel.textContent = 'Show Popup';
+            toggleBtn.classList.add('active');
+        } else {
+            toggleLabel.textContent = 'Hide Popup';
+            toggleBtn.classList.remove('active');
+        }
+    }
+    updateToggleUI();
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function() {
+            suppressModal = !suppressModal;
+            localStorage.setItem('suppressScanModal', suppressModal ? 'true' : 'false');
+            updateToggleUI();
+            // Keep focus on input for continuous scanning
+            input && input.focus();
+        });
+    }
     
     // Only add dropdown event listeners if it's a select element
     if (subjectSelect && subjectSelect.tagName === 'SELECT') {
@@ -814,6 +866,16 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
+        // Prefer exact 10-digit auto submit (common RFID length)
+        const digitsOnly = input.value.replace(/\D+/g, '');
+        if (digitsOnly.length === 10) {
+            // Normalize field to digits only before submit
+            input.value = digitsOnly;
+            form.submit();
+            return;
+        }
+        
+        // Fallback: if 5+ characters typed, submit after short delay
         clearTimeout(submitTimeout);
         if (input.value.trim().length >= 5) {
             submitTimeout = setTimeout(function() {
@@ -846,20 +908,22 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-hide student scan modal after 4 seconds
     {% if last_scanned_student %}
     const scanModal = document.getElementById('studentScanModal');
-    if (scanModal) {
-        // Fast image loading - make sure it displays immediately
-        {% if last_scanned_student.profile_picture_url and show_photo %}
-        const img = scanModal.querySelector('img');
-        if (img) {
-            // If image is already cached/loaded, show it immediately
-            if (img.complete) {
-                img.style.opacity = '1';
+    if (scanModal && !suppressModal) {
+        // Fast image loading - make sure it displays immediately (only if photo should be shown)
+        {% if show_photo %}
+            {% if last_scanned_student.profile_picture_url %}
+            const img = scanModal.querySelector('img');
+            if (img) {
+                // If image is already cached/loaded, show it immediately
+                if (img.complete) {
+                    img.style.opacity = '1';
+                }
+                // Set very short timeout for image display if not already loaded
+                else {
+                    img.style.opacity = '1'; // Show anyway to prevent delay
+                }
             }
-            // Set very short timeout for image display if not already loaded
-            else {
-                img.style.opacity = '1'; // Show anyway to prevent delay
-            }
-        }
+            {% endif %}
         {% endif %}
         
         // Show modal immediately without delay
@@ -890,6 +954,12 @@ document.addEventListener('DOMContentLoaded', function() {
                 }, 500);
             }
         });
+    }
+    // If suppressed, ensure modal stays hidden
+    if (scanModal && suppressModal) {
+        scanModal.classList.remove('show');
+        scanModal.style.display = 'none';
+        input && input.focus();
     }
     {% endif %}
     

@@ -641,6 +641,32 @@ class AbsentAdmin(admin.ModelAdmin):
 
 @admin.register(SystemSettings)
 class SystemSettingsAdmin(admin.ModelAdmin):
+    fieldsets = (
+        ('Semester Settings', {
+            'fields': ('semester_start_date', 'semester_end_date')
+        }),
+        ('Class Time Settings', {
+            'fields': ('class_start_time', 'class_end_time')
+        }),
+        ('Attendance Settings', {
+            'fields': ('grace_period_minutes', 'late_threshold_minutes', 'absent_threshold_percent')
+        }),
+        ('Time Validation Settings', {
+            'fields': ('enable_time_validation', 'early_attendance_minutes', 'late_attendance_minutes', 'timeout_before_minutes')
+        }),
+        ('Display Settings', {
+            'fields': ('enable_timeout_display',),
+            'description': 'Control the display of various features in the system'
+        }),
+        ('Notification Settings', {
+            'fields': ('email_notifications_enabled', 'auto_send_reports', 'send_warnings_after')
+        }),
+        ('System Settings', {
+            'fields': ('auto_backup_enabled', 'data_retention_years', 'last_sync')
+        }),
+    )
+    readonly_fields = ['last_sync']
+    
     def has_add_permission(self, request):
         return False
     

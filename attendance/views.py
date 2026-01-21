@@ -11,7 +11,7 @@ from django.db.models import Q, Count, Sum, F
 from django.db import transaction, IntegrityError
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
-from django.views.decorators.cache import cache_page
+from django.views.decorators.cache import cache_page, never_cache
 from django.core.cache import cache
 from django.contrib.sessions.exceptions import SessionInterrupted
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -2785,6 +2785,7 @@ Attendance System"""
         logger.error(f"Failed to send attendance confirmation email to {student.email}: {str(e)}")
 
 @login_required
+@never_cache  # Prevent browser caching to ensure session state is always current
 def scan_view(request):
     # Filter subjects: If admin, show ALL subjects; otherwise filter by adviser's instructors only
     if request.user.is_superuser or request.user.is_staff:
@@ -2883,11 +2884,37 @@ def scan_view(request):
             subject_id__in=accessible_subject_ids
         ).order_by('-created_at').first()
     
+    # Handle POST requests first before creating context
+    if request.method == 'POST' and request.POST.get('toggle_photo'):
+        # Handle toggle photo action separately and return immediately
+        current = request.session.get('show_student_photo', True)
+        request.session['show_student_photo'] = not current
+        request.session.modified = True  # Explicitly mark session as modified
+        request.session.save()  # Force save to ensure it persists
+        return redirect(request.get_full_path())
+    
+    # Handle toggle timeout display action
+    if request.method == 'POST' and request.POST.get('toggle_timeout'):
+        # Only allow admins to toggle this setting
+        if is_admin:
+            settings = SystemSettings.get_settings()
+            settings.enable_timeout_display = not settings.enable_timeout_display
+            settings.save()
+            messages.success(request, f'TIME OUT display has been {"enabled" if settings.enable_timeout_display else "disabled"}.')
+        else:
+            messages.error(request, 'Only administrators can change this setting.')
+        return redirect(request.get_full_path())
+    
     # Get last scanned student from session for modal display
+    # Note: Use pop() to remove it after displaying once
     last_scanned_student = request.session.pop('last_scanned_student', None)
     
     # Get photo display preference from session (default to True)
     show_photo = request.session.get('show_student_photo', True)
+    
+    # Get system settings for timeout display
+    settings = SystemSettings.get_settings()
+    enable_timeout_display = settings.enable_timeout_display
     
     context = {
         'subject': active_subject,
@@ -2898,15 +2925,10 @@ def scan_view(request):
         'show_photo': show_photo,
         'is_admin': is_admin,
         'auto_selected': auto_selected,
+        'enable_timeout_display': enable_timeout_display,
     }
     
     if request.method == 'POST':
-            # Handle toggle photo action
-            if request.POST.get('toggle_photo'):
-                current = request.session.get('show_student_photo', True)
-                request.session['show_student_photo'] = not current
-                request.session.modified = True  # Explicitly mark session as modified
-                return redirect(request.get_full_path())
             
             rfid_id = request.POST.get('rfid_id', '').strip()
             subject_id = request.POST.get('subject_id', '')
@@ -3000,11 +3022,17 @@ def scan_view(request):
                                 # If parsing fails, use current time
                                 scan_time = now_time
                     
-                    # Check if student already has both time_in and time_out recorded for today
+                    # Check if student already has both time_in and time_out recorded for this session (schedule) today
+                    schedule_filter = {}
+                    if schedule:
+                        schedule_filter['schedule'] = schedule
+                    else:
+                        schedule_filter['schedule__isnull'] = True
                     existing_attendance_check = Attendance.objects.filter(
                         student=student,
                         subject=subject,
-                        date=attendance_date
+                        date=attendance_date,
+                        **schedule_filter
                     ).first()
                     
                     if existing_attendance_check and existing_attendance_check.time_in and existing_attendance_check.time_out:
@@ -3033,12 +3061,20 @@ def scan_view(request):
                     
                     # Use transaction with locking to prevent duplicate records
                     with transaction.atomic():
-                        # Get or create attendance record - only ONE record per student/subject/date
+                        # Get or create attendance record per student/subject/date and schedule slot
                         # Use select_for_update to lock the row and prevent race conditions
+                        get_or_create_kwargs = {
+                            'student': student,
+                            'subject': subject,
+                            'date': attendance_date,
+                        }
+                        if schedule:
+                            get_or_create_kwargs['schedule'] = schedule
+                        else:
+                            get_or_create_kwargs['schedule'] = None
+
                         existing_attendance, created = Attendance.objects.select_for_update().get_or_create(
-                            student=student,
-                            subject=subject,
-                            date=attendance_date,
+                            **get_or_create_kwargs,
                             defaults={
                                 'time': stored_time,
                                 'time_in': stored_time,
@@ -3298,12 +3334,20 @@ def manual_entry(request):
             
             # Use transaction to prevent duplicates
             with transaction.atomic():
-                # Get or create attendance record - only ONE record per student/subject/date
+                # Get or create per student/subject/date and schedule slot (if detected)
+                get_or_create_kwargs = {
+                    'student': student,
+                    'subject': subject,
+                    'date': attendance_date,
+                }
+                if not skip_validation and 'schedule' in locals() and schedule:
+                    get_or_create_kwargs['schedule'] = schedule
+                else:
+                    get_or_create_kwargs['schedule'] = None
+
                 # Use select_for_update to lock the row and prevent race conditions
                 existing, created = Attendance.objects.select_for_update().get_or_create(
-                    student=student,
-                    subject=subject,
-                    date=attendance_date,
+                    **get_or_create_kwargs,
                     defaults={
                         'time': time_in,
                         'time_in': time_in,
@@ -6878,6 +6922,9 @@ def adviser_absent_students(request):
     # Subjects list for filter dropdown
     subjects_list = subjects.order_by('code')
 
+    # Today (Manila) for enabling same-day overrides in UI
+    today_manila = get_manila_now().date()
+
     context = {
         'adviser_name': adviser_name,
         'absences': page_obj,
@@ -6888,8 +6935,83 @@ def adviser_absent_students(request):
         'student_q': student_q,
         'is_staff': request.user.is_staff or request.user.is_superuser,
         'top_absent_students': top_absent_students,
+        'today': today_manila,
     }
     return render(request, 'attendance/adviser_absent_students.html', context)
+
+@login_required
+@require_http_methods(["POST"])
+def adviser_mark_absences_present(request):
+    """Mark selected absent attendance records as PRESENT (same-day only).
+
+    - Limits scope to adviser's subjects unless staff/superuser.
+    - Only updates records dated today (Manila) to avoid backdating silently.
+    """
+    # Determine allowed subjects for this user
+    if request.user.is_staff or request.user.is_superuser:
+        allowed_subjects = Subject.objects.all().values_list('id', flat=True)
+    else:
+        if hasattr(request.user, 'adviser_profile'):
+            allowed_subjects = Subject.objects.filter(
+                instructor__adviser=request.user.adviser_profile
+            ).values_list('id', flat=True)
+        else:
+            allowed_subjects = Subject.objects.none().values_list('id', flat=True)
+
+    # Collect selected attendance IDs
+    raw_ids = request.POST.getlist('attendance_ids')
+    try:
+        selected_ids = [int(x) for x in raw_ids]
+    except Exception:
+        selected_ids = []
+
+    if not selected_ids:
+        messages.warning(request, "No absences selected.")
+        return redirect(request.META.get('HTTP_REFERER') or reverse('adviser_absent_students'))
+
+    today_manila = get_manila_now().date()
+    allow_past = request.POST.get('allow_past') == '1'
+
+    # Limit to ABSENT and allowed subjects; date filter only if not overriding past
+    filter_kwargs = {
+        'id__in': selected_ids,
+        'status': 'ABSENT',
+        'subject_id__in': allowed_subjects,
+    }
+    if not allow_past:
+        filter_kwargs['date'] = today_manila
+
+    qs = Attendance.objects.filter(**filter_kwargs)
+
+    updated_count = 0
+    now_time = get_manila_now().time()
+    with transaction.atomic():
+        for att in qs.select_for_update():
+            att.status = 'PRESENT'
+            # Set time_in for audit trail; keep legacy time aligned if empty
+            if not att.time_in:
+                att.time_in = now_time
+            if not att.time:
+                att.time = att.time_in or now_time
+            # Append a short note
+            if allow_past:
+                note_suffix = f"Marked PRESENT override on {today_manila.isoformat()}"
+            else:
+                note_suffix = f"Marked present by adviser on {today_manila.isoformat()}"
+            att.notes = (att.notes + "\n" if att.notes else "") + note_suffix
+            att.save(update_fields=['status', 'time_in', 'time', 'notes'])
+            updated_count += 1
+
+    if updated_count:
+        if allow_past:
+            messages.success(request, f"Updated {updated_count} record(s) to PRESENT (past-date override).")
+        else:
+            messages.success(request, f"Updated {updated_count} record(s) to PRESENT for today.")
+    else:
+        messages.info(request, "No eligible records updated (must be today's absences).")
+
+    # Redirect back to listing, preserving simple filters if present
+    return redirect(request.META.get('HTTP_REFERER') or reverse('adviser_absent_students'))
 
 @login_required
 def section_list(request):

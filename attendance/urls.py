@@ -88,6 +88,7 @@ urlpatterns = [
     path('adviser/features/', views.subject_list, name='adviser_features'),  # Redirects to subject_list which shows features for advisers
     path('adviser/subjects-monitor/', views.adviser_subjects_monitor, name='adviser_subjects_monitor'),
     path('adviser/absences/', views.adviser_absent_students, name='adviser_absent_students'),
+    path('adviser/absences/mark-present/', views.adviser_mark_absences_present, name='adviser_mark_absences_present'),
     path('api/enrollment-requests-count/', views.enrollment_requests_count_api, name='enrollment_requests_count_api'),
     
     # API Endpoints for Form Dropdowns

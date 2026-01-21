@@ -1,0 +1,75 @@
+{% extends 'attendance/base.html' %}
+
+{% block title %}{% block auth_page_title %}Auth - RFID Attendance System{% endblock %}{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --auth-from: #1e3a8a; /* default adviser/admin blue */
+        --auth-to: #2563eb;
+    }
+    .auth-wrap {
+        min-height: 85vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(1200px 600px at 10% 10%, #e0e7ff 0%, transparent 40%),
+                    radial-gradient(1000px 500px at 90% 20%, #d1fae5 0%, transparent 40%),
+                    #f8fafc;
+        padding: 24px;
+    }
+    .auth-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
+        overflow: hidden;
+        background: #fff;
+    }
+    .auth-header {
+        background: linear-gradient(135deg, var(--auth-from) 0%, var(--auth-to) 100%);
+        color: #fff;
+        padding: 28px 24px;
+        text-align: center;
+    }
+    .auth-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.15);
+        border: 1px solid rgba(255,255,255,0.2);
+        margin-bottom: 10px;
+    }
+    .auth-title { font-weight: 700; letter-spacing: -0.02em; }
+    .auth-subtitle { opacity: 0.85; }
+
+    .input-group-text { background-color: #f1f5f9; border: 1px solid #e5e7eb; }
+    .form-control:focus { border-color: #667eea; box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25); }
+    .btn-primary.auth-btn { background: #2563eb; border-color: #2563eb; }
+    .btn-primary.auth-btn:hover { background: #1e40af; border-color: #1e40af; }
+    .auth-footer a { color: #6b7280; }
+    .auth-footer a:hover { color: #111827; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-wrap">
+    <div class="col-11 col-sm-8 col-md-6 col-lg-4">
+        <div class="card auth-card">
+            <div class="auth-header">
+                <div class="auth-icon">{% block auth_icon %}<i class="bi bi-person-badge fs-4"></i>{% endblock %}</div>
+                <h4 class="auth-title mb-1">{% block auth_title %}Authentication{% endblock %}</h4>
+                <small class="auth-subtitle">{% block auth_subtitle %}RFID Attendance Monitoring System{% endblock %}</small>
+            </div>
+            <div class="card-body p-4">
+                {% block auth_body %}{% endblock %}
+            </div>
+            <div class="card-footer text-center bg-white">
+                {% block auth_footer %}<small class="text-muted auth-footer">Need help? Contact your system administrator.</small>{% endblock %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

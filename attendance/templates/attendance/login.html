@@ -2,41 +2,100 @@
 
 {% block title %}Login - RFID Attendance System{% endblock %}
 
+{% block extra_css %}
+<style>
+    .auth-wrap {
+        min-height: 85vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(1200px 600px at 10% 10%, #e0e7ff 0%, transparent 40%),
+                    radial-gradient(1000px 500px at 90% 20%, #d1fae5 0%, transparent 40%),
+                    #f8fafc;
+    }
+    .auth-card {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 30px rgba(16, 24, 40, 0.08);
+        overflow: hidden;
+    }
+    .auth-header {
+        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 60%, #3b82f6 100%);
+        color: #fff;
+        padding: 28px 24px;
+    }
+    .auth-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.15);
+        border: 1px solid rgba(255,255,255,0.2);
+        margin-bottom: 10px;
+    }
+    .auth-title { font-weight: 700; letter-spacing: -0.02em; }
+    .auth-subtitle { opacity: 0.85; }
+
+    .input-group-text {
+        background-color: #f1f5f9;
+        border: 1px solid #e5e7eb;
+    }
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+    }
+    .btn-login {
+        background: #2563eb;
+        border-color: #2563eb;
+    }
+    .btn-login:hover { background: #1e40af; border-color: #1e40af; }
+    .auth-footer a { color: #6b7280; }
+    .auth-footer a:hover { color: #111827; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center align-items-center" style="min-height: 80vh;">
-    <div class="col-md-4">
-        <div class="card shadow">
-            <div class="card-header bg-primary text-white text-center">
-                <h4 class="mb-0">
-                    <i class="bi bi-person-badge"></i><br>
-                    Adviser / Administrator Login
-                </h4>
-                <small class="text-white-50">RFID Attendance Monitoring System</small>
+<div class="auth-wrap">
+    <div class="col-11 col-sm-8 col-md-6 col-lg-4">
+        <div class="card auth-card">
+            <div class="auth-header text-center">
+                <div class="auth-icon">
+                    <i class="bi bi-person-badge fs-4"></i>
+                </div>
+                <h4 class="auth-title mb-1">Adviser / Administrator Login</h4>
+                <small class="auth-subtitle">RFID Attendance Monitoring System</small>
             </div>
-            <div class="card-body">
-                <form method="POST" action="{% url 'login' %}">
+            <div class="card-body p-4">
+                <form method="POST" action="{% url 'login' %}" novalidate>
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label for="username" class="form-label">Username / Employee ID:</label>
-                        <input type="text" class="form-control" id="username" name="username" required autofocus placeholder="Enter username or employee ID">
-                        <small class="form-text text-muted">You can login using your username or employee ID</small>
+                        <label for="username" class="form-label fw-semibold">Username / Employee ID</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person"></i></span>
+                            <input type="text" class="form-control" id="username" name="username" required autofocus placeholder="e.g., admin or 100">
+                        </div>
+                        <small class="form-text text-muted">Login with your username or employee ID.</small>
                     </div>
                     <div class="mb-3">
-                        <label for="password" class="form-label">Password:</label>
-                        <input type="password" class="form-control" id="password" name="password" required>
+                        <label for="password" class="form-label fw-semibold">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-lock"></i></span>
+                            <input type="password" class="form-control" id="password" name="password" required placeholder="Enter your password">
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary w-100 mb-2">
-                        <i class="bi bi-box-arrow-in-right"></i> LOGIN
+                    <button type="submit" class="btn btn-login w-100 mb-2">
+                        <i class="bi bi-box-arrow-in-right"></i> Login
                     </button>
-                    <div class="text-center">
-                        <a href="{% url 'forgot_password' %}" class="text-decoration-none">Forgot Password?</a>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="{% url 'forgot_password' %}" class="text-decoration-none"><i class="bi bi-question-circle"></i> Forgot Password</a>
+                        <a href="{% url 'student_login' %}" class="text-decoration-none"><i class="bi bi-mortarboard"></i> Student Login</a>
                     </div>
                 </form>
             </div>
-            <div class="card-footer text-center">
-                <small class="text-muted">
-                    <a href="{% url 'student_login' %}" class="text-decoration-none">Student Login</a>
-                </small>
+            <div class="card-footer text-center bg-white">
+                <small class="text-muted auth-footer">Need help? Contact your system administrator.</small>
             </div>
         </div>
     </div>

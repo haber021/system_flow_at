@@ -25,6 +25,7 @@ class SystemSettings(models.Model):
     send_warnings_after = models.IntegerField(default=3, validators=[MinValueValidator(1)])
     auto_backup_enabled = models.BooleanField(default=True)
     data_retention_years = models.IntegerField(default=5, validators=[MinValueValidator(1)])
+    enable_timeout_display = models.BooleanField(default=True, help_text="Enable/Disable the TIME OUT feature display in scan interface")
     last_sync = models.DateTimeField(auto_now=True)
     
     class Meta:
@@ -308,6 +309,8 @@ class Attendance(models.Model):
 
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='attendances')
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='attendances')
+    # Optional link to the specific schedule slot (session) for this attendance
+    schedule = models.ForeignKey('SubjectSchedule', on_delete=models.SET_NULL, null=True, blank=True, related_name='attendances')
     date = models.DateField()
     time = models.TimeField(null=True, blank=True, help_text="Legacy field - use time_in instead")
     time_in = models.TimeField(null=True, blank=True, help_text="Time when student checked in")
@@ -327,19 +330,26 @@ class Attendance(models.Model):
         return f"{self.student.name} - {self.subject.code} - {self.date} - {self.status}"
     
     class Meta:
-        # Prevent duplicate attendance records - only one record per student, subject, and date
-        # This ensures no redundant time_in or time_out data
+        # Allow multiple attendance records per subject/day by differentiating schedule slots
+        # Enforce uniqueness per (student, subject, date, schedule) when schedule is set,
+        # and preserve uniqueness per (student, subject, date) only when schedule is NULL
         ordering = ['-date', '-time_in']
         indexes = [
             models.Index(fields=['student', 'subject', 'date']),
+            models.Index(fields=['schedule']),
             models.Index(fields=['date', 'status']),
         ]
         constraints = [
-            # Prevent ALL duplicate attendance records for same student, subject, and date
-            # This ensures no redundant time_in or time_out data regardless of time_out status
+            # Unique when schedule is provided (multiple sessions per day)
+            models.UniqueConstraint(
+                fields=['student', 'subject', 'date', 'schedule'],
+                name='unique_attendance_per_day_per_schedule',
+            ),
+            # Backward-compat: unique per day only for legacy/no-schedule records
             models.UniqueConstraint(
                 fields=['student', 'subject', 'date'],
-                name='unique_attendance_per_day'
+                condition=models.Q(schedule__isnull=True),
+                name='unique_attendance_per_day_no_schedule',
             ),
         ]
 
