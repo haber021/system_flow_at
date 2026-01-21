@@ -57,6 +57,7 @@ urlpatterns = [
     
     # Settings
     path('settings/', views.settings_view, name='settings'),
+    path('settings/semester-reset/', views.semester_reset, name='semester_reset'),
     
     # Profile
     path('profile/', views.profile_view, name='profile'),

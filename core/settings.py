@@ -56,6 +56,8 @@ MIDDLEWARE = [
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.gzip.GZipMiddleware',  # Compression for faster mobile connections
     'core.middleware.MobileOptimizationMiddleware',  # Custom mobile optimization
+    'core.middleware.AcademicYearRolloverMiddleware',  # Auto-archive and rollover at academic year end
+    'core.middleware.SemesterRolloverMiddleware',  # Archive at semester end to reset visible state
     'core.middleware.SessionMiddleware',  # Custom session middleware that handles SessionInterrupted
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

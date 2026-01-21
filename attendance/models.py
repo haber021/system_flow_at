@@ -27,6 +27,13 @@ class SystemSettings(models.Model):
     data_retention_years = models.IntegerField(default=5, validators=[MinValueValidator(1)])
     enable_timeout_display = models.BooleanField(default=True, help_text="Enable/Disable the TIME OUT feature display in scan interface")
     last_sync = models.DateTimeField(auto_now=True)
+    # Academic year settings
+    academic_year_start_date = models.DateField(null=True, blank=True, help_text="Start date of the academic year")
+    academic_year_end_date = models.DateField(null=True, blank=True, help_text="End date of the academic year")
+    current_academic_year = models.CharField(max_length=20, default='2025-2026', help_text="Formatted academic year label, e.g., 2025-2026")
+    auto_archive_on_year_end = models.BooleanField(default=True, help_text="Automatically archive data at academic year end")
+    last_rollover_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when academic year rollover last executed")
+    last_semester_rollover_at = models.DateTimeField(null=True, blank=True, help_text="Timestamp when semester rollover last executed")
     
     class Meta:
         verbose_name_plural = "System Settings"
@@ -46,6 +53,10 @@ class SystemSettings(models.Model):
     def get_settings(cls):
         obj, created = cls.objects.get_or_create(pk=1)
         return obj
+
+    def get_current_year_label(self):
+        """Return the current academic year label."""
+        return self.current_academic_year or ''
 
 class Course(models.Model):
     """Course model for organizing students and subjects by academic program"""
@@ -325,9 +336,24 @@ class Attendance(models.Model):
     # Fields for absence justification
     reason = models.TextField(blank=True, default='', help_text="Reason for absence, if applicable")
     # evidence field removed, replaced with AbsenceEvidence model for multiple files
+    # Academic year and archive flags
+    academic_year = models.CharField(max_length=20, default='2025-2026', db_index=True)
+    is_archived = models.BooleanField(default=False, db_index=True)
+    archive_year = models.CharField(max_length=20, blank=True, default='')
+    archived_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.student.name} - {self.subject.code} - {self.date} - {self.status}"
+
+    def save(self, *args, **kwargs):
+        # Ensure academic_year is set to current settings if not provided
+        if not self.academic_year:
+            try:
+                settings_obj = SystemSettings.get_settings()
+                self.academic_year = settings_obj.get_current_year_label() or self.academic_year
+            except Exception:
+                pass
+        super().save(*args, **kwargs)
     
     class Meta:
         # Allow multiple attendance records per subject/day by differentiating schedule slots

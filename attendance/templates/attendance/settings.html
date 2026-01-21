@@ -25,6 +25,31 @@
                            value="{{ settings.semester_end_date|date:'Y-m-d' }}" required>
                 </div>
                 <div class="col-md-6 mb-3">
+                    <label for="academic_year_start_date" class="form-label">Academic Year Start Date:</label>
+                    <input type="date" class="form-control" id="academic_year_start_date" name="academic_year_start_date" 
+                           value="{{ settings.academic_year_start_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="academic_year_end_date" class="form-label">Academic Year End Date:</label>
+                    <input type="date" class="form-control" id="academic_year_end_date" name="academic_year_end_date" 
+                           value="{{ settings.academic_year_end_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="current_academic_year" class="form-label">Current Academic Year Label:</label>
+                    <input type="text" class="form-control" id="current_academic_year" name="current_academic_year" 
+                           value="{{ settings.current_academic_year }}" placeholder="e.g., 2025-2026">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <div class="form-check form-switch mt-4">
+                        <input class="form-check-input" type="checkbox" id="auto_archive_on_year_end" name="auto_archive_on_year_end" 
+                               {% if settings.auto_archive_on_year_end %}checked{% endif %}>
+                        <label class="form-check-label" for="auto_archive_on_year_end">
+                            <strong>Auto-Archive at Academic Year End</strong>
+                        </label>
+                        <small class="text-muted d-block">Automatically archive attendance and roll to the next academic year</small>
+                    </div>
+                </div>
+                <div class="col-md-6 mb-3">
                     <label for="class_start_time" class="form-label">Class Start Time:</label>
                     <input type="time" class="form-control" id="class_start_time" name="class_start_time" 
                            value="{{ settings.class_start_time|time:'H:i' }}" required>
@@ -151,6 +176,9 @@
                 <button type="button" class="btn btn-warning" id="cleanupHolidayAbsencesBtn">
                     <i class="bi bi-magic"></i> Fix Holiday Absences
                 </button>
+                <button type="button" class="btn btn-danger" id="semesterResetBtn">
+                    <i class="bi bi-arrow-repeat"></i> Reset Semester
+                </button>
                 <a href="{% url 'dashboard' %}" class="btn btn-secondary">Cancel</a>
             </div>
         </form>
@@ -166,9 +194,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const semesterEndDate = document.getElementById('semester_end_date');
     const classStartTime = document.getElementById('class_start_time');
     const classEndTime = document.getElementById('class_end_time');
+    const ayStartDate = document.getElementById('academic_year_start_date');
+    const ayEndDate = document.getElementById('academic_year_end_date');
     
     // Add event listeners to all date/time inputs
-    const dateTimeInputs = [semesterStartDate, semesterEndDate, classStartTime, classEndTime];
+    const dateTimeInputs = [semesterStartDate, semesterEndDate, ayStartDate, ayEndDate, classStartTime, classEndTime];
     
     dateTimeInputs.forEach(input => {
         if (input) {
@@ -201,6 +231,18 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
         
+        // Validate academic year dates
+        if (ayStartDate && ayEndDate && ayStartDate.value && ayEndDate.value) {
+            const ayStart = new Date(ayStartDate.value);
+            const ayEnd = new Date(ayEndDate.value);
+            if (ayEnd < ayStart) {
+                ayEndDate.setCustomValidity('Academic year end date must be after start date');
+                isValid = false;
+            } else {
+                ayEndDate.setCustomValidity('');
+            }
+        }
+
         // Validate class times
         if (classStartTime && classEndTime && classStartTime.value && classEndTime.value) {
             const startTime = classStartTime.value;
@@ -280,6 +322,55 @@ document.addEventListener('DOMContentLoaded', function() {
             } finally {
                 cleanupBtn.disabled = false;
                 cleanupBtn.innerHTML = '<i class="bi bi-magic"></i> Fix Holiday Absences';
+            }
+        });
+    }
+
+    // Semester Reset button handler
+    const semesterResetBtn = document.getElementById('semesterResetBtn');
+    if (semesterResetBtn) {
+        semesterResetBtn.addEventListener('click', async function() {
+            if (!confirm('This will archive current-year attendance and clear enrollments for a new semester. Continue?')) {
+                return;
+            }
+
+            semesterResetBtn.disabled = true;
+            semesterResetBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Resetting...';
+
+            try {
+                const response = await fetch('{% url "semester_reset" %}', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': '{{ csrf_token }}',
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    const msg = `Semester reset complete.\nArchived attendance: ${data.archived_attendance}\nDeleted enrollments: ${data.deleted_student_subjects}\nDeleted requests: ${data.deleted_enrollment_requests}`;
+                    if (window.showNotification) {
+                        window.showNotification(msg, 'success');
+                    } else {
+                        alert(msg);
+                    }
+                } else {
+                    if (window.showNotification) {
+                        window.showNotification(data.error || 'Semester reset failed', 'error');
+                    } else {
+                        alert(data.error || 'Semester reset failed');
+                    }
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                if (window.showNotification) {
+                    window.showNotification('Semester reset failed: ' + error.message, 'error');
+                } else {
+                    alert('Semester reset failed: ' + error.message);
+                }
+            } finally {
+                semesterResetBtn.disabled = false;
+                semesterResetBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Reset Semester';
             }
         });
     }

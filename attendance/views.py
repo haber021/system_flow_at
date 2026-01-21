@@ -73,6 +73,27 @@ def invalidate_settings_cache():
     cache.delete(SETTINGS_CACHE_KEY)
 
 
+def get_active_year_label(request=None):
+    """
+    Determine which academic year label to use for filtering. Optionally accepts
+    a `year` query parameter; falls back to current settings.
+    """
+    try:
+        if request:
+            year_param = request.GET.get('year', '').strip()
+            if year_param:
+                return year_param
+    except Exception:
+        pass
+    return get_cached_settings().current_academic_year
+
+
+def filter_current_year_attendance(queryset, request=None):
+    """Filter an Attendance queryset to the active academic year and non-archived records."""
+    year_label = get_active_year_label(request)
+    return queryset.filter(academic_year=year_label, is_archived=False)
+
+
 def _forward_attendance_payload(payload):
     """Synchronously forward attendance payload to configured remote hosts.
 
@@ -98,6 +119,18 @@ def send_attendance_to_hosts_async(payload):
         t.start()
     except Exception as e:
         logger.warning(f"Failed to start forwarder thread: {e}")
+
+def run_async(func, *args, **kwargs):
+    """Run a callable in a daemon thread to avoid blocking the request."""
+    try:
+        t = threading.Thread(target=func, args=args, kwargs=kwargs, daemon=True)
+        t.start()
+    except Exception as e:
+        try:
+            name = getattr(func, '__name__', str(func))
+        except Exception:
+            name = 'unknown'
+        logger.warning(f"Failed to start async task {name}: {e}")
 
 def mask_email(email):
     """
@@ -718,7 +751,7 @@ def dashboard(request):
     if today_data is None:
         today = get_manila_now().date()
         # Filter attendance by user's own data
-        attendance_qs = Attendance.objects.filter(date=today)
+        attendance_qs = filter_current_year_attendance(Attendance.objects.filter(date=today), request)
         # Use the new helper function to filter by adviser's students
         attendance_qs = filter_by_adviser_students(attendance_qs, request.user, student_field='student')
         
@@ -1154,10 +1187,10 @@ def student_list(request):
     student_ids = [s.id for s in page_obj]
     absence_counts = {}
     if student_ids:
-        attendance_qs = Attendance.objects.filter(
+        attendance_qs = filter_current_year_attendance(Attendance.objects.filter(
             student_id__in=student_ids,
             status='ABSENT'
-        ).values('student_id').annotate(absent_count=Count('id'))
+        ), request).values('student_id').annotate(absent_count=Count('id'))
         for item in attendance_qs:
             absence_counts[item['student_id']] = item['absent_count']
     
@@ -3155,31 +3188,43 @@ def scan_view(request):
                                     'subject_code': subject.code
                                 }
 
-                                # Send email notification for check-out
-                                send_attendance_confirmation_email(
-                                    student=student,
-                                    subject=subject,
-                                    attendance_date=attendance_date,
-                                    time_in=existing_attendance.time_in,
-                                    time_out=existing_attendance.time_out,
-                                    status=existing_attendance.status
-                                )
-                                # Forward attendance to configured remote hosts asynchronously
+                                # After committing DB changes, send email and forward payload without blocking
+                                def _post_commit_timeout_actions(att_id, student_id):
+                                    try:
+                                        att = Attendance.objects.select_related('student', 'subject').get(id=att_id)
+                                        # Send email notification for check-out (async)
+                                        run_async(
+                                            send_attendance_confirmation_email,
+                                            student=att.student,
+                                            subject=att.subject,
+                                            attendance_date=att.date,
+                                            time_in=att.time_in,
+                                            time_out=att.time_out,
+                                            status=att.status,
+                                        )
+                                        # Forward attendance to configured remote hosts asynchronously
+                                        try:
+                                            payload = {
+                                                'student_rfid': att.student.rfid_id,
+                                                'student_id': getattr(att.student, 'student_id', None),
+                                                'student_name': att.student.name,
+                                                'subject_code': att.subject.code if att.subject else None,
+                                                'date': att.date.strftime('%Y-%m-%d'),
+                                                'time_in': att.time_in.strftime('%H:%M') if att.time_in else None,
+                                                'time_out': att.time_out.strftime('%H:%M') if att.time_out else None,
+                                                'status': att.status,
+                                                'action': 'time_out'
+                                            }
+                                            send_attendance_to_hosts_async(payload)
+                                        except Exception:
+                                            logger.exception('Failed to enqueue attendance forward for time_out')
+                                    except Exception:
+                                        logger.exception('Post-commit timeout actions failed')
+
                                 try:
-                                    payload = {
-                                        'student_rfid': student.rfid_id,
-                                        'student_id': getattr(student, 'student_id', None),
-                                        'student_name': student.name,
-                                        'subject_code': subject.code,
-                                        'date': attendance_date.strftime('%Y-%m-%d'),
-                                        'time_in': existing_attendance.time_in.strftime('%H:%M') if existing_attendance.time_in else None,
-                                        'time_out': existing_attendance.time_out.strftime('%H:%M') if existing_attendance.time_out else None,
-                                        'status': existing_attendance.status,
-                                        'action': 'time_out'
-                                    }
-                                    send_attendance_to_hosts_async(payload)
+                                    transaction.on_commit(lambda att_id=existing_attendance.id, sid=student.id: _post_commit_timeout_actions(att_id, sid))
                                 except Exception:
-                                    logger.exception('Failed to enqueue attendance forward for time_out')
+                                    logger.exception('Failed to register post-commit timeout actions')
                             else:
                                 # Time-out already recorded at this time - no duplicate
                                 time_in_str = existing_attendance.time_in.strftime('%I:%M %p') if existing_attendance.time_in else 'N/A'
@@ -3221,36 +3266,50 @@ def scan_view(request):
                                     'subject_code': subject.code
                                 }
 
-                                # Send email notification for check-in
-                                send_attendance_confirmation_email(
-                                    student=student,
-                                    subject=subject,
-                                    attendance_date=attendance_date,
-                                    time_in=stored_time,
-                                    time_out=None,
-                                    status=status
-                                )
+                                # After committing DB changes, send email and forward payload without blocking
+                                def _post_commit_timein_actions(att_id):
+                                    try:
+                                        att = Attendance.objects.select_related('student', 'subject').get(id=att_id)
+                                        # Send email notification for check-in (async)
+                                        run_async(
+                                            send_attendance_confirmation_email,
+                                            student=att.student,
+                                            subject=att.subject,
+                                            attendance_date=att.date,
+                                            time_in=att.time_in,
+                                            time_out=None,
+                                            status=att.status,
+                                        )
+                                        # Forward attendance to configured remote hosts asynchronously
+                                        try:
+                                            payload = {
+                                                'student_rfid': att.student.rfid_id,
+                                                'student_id': getattr(att.student, 'student_id', None),
+                                                'student_name': att.student.name,
+                                                'subject_code': att.subject.code if att.subject else None,
+                                                'date': att.date.strftime('%Y-%m-%d'),
+                                                'time_in': att.time_in.strftime('%H:%M') if att.time_in else None,
+                                                'time_out': None,
+                                                'status': att.status,
+                                                'action': 'time_in'
+                                            }
+                                            send_attendance_to_hosts_async(payload)
+                                        except Exception:
+                                            logger.exception('Failed to enqueue attendance forward for time_in')
+                                    except Exception:
+                                        logger.exception('Post-commit time-in actions failed')
 
-                                # Forward attendance to configured remote hosts asynchronously
                                 try:
-                                    payload = {
-                                        'student_rfid': student.rfid_id,
-                                        'student_id': getattr(student, 'student_id', None),
-                                        'student_name': student.name,
-                                        'subject_code': subject.code,
-                                        'date': attendance_date.strftime('%Y-%m-%d'),
-                                        'time_in': stored_time.strftime('%H:%M') if stored_time else None,
-                                        'time_out': None,
-                                        'status': status,
-                                        'action': 'time_in'
-                                    }
-                                    send_attendance_to_hosts_async(payload)
+                                    transaction.on_commit(lambda att_id=existing_attendance.id: _post_commit_timein_actions(att_id))
                                 except Exception:
-                                    logger.exception('Failed to enqueue attendance forward for time_in')
+                                    logger.exception('Failed to register post-commit time-in actions')
 
                                 # Check and send warning email if student has reached absence threshold
                                 if status == 'ABSENT':
-                                    check_and_send_warning_email(student, subject)
+                                    try:
+                                        transaction.on_commit(lambda s=student, sub=subject: run_async(check_and_send_warning_email, s, sub))
+                                    except Exception:
+                                        logger.exception('Failed to register post-commit warning email action')
                             
                         return redirect(reverse('scan'))
 
@@ -3373,44 +3432,60 @@ def manual_entry(request):
                     if updated:
                         existing.save()
                         messages.success(request, "Attendance updated successfully!")
+                        # Forward after commit
+                        def _post_commit_manual_update(att_id):
+                            try:
+                                att = Attendance.objects.select_related('student', 'subject').get(id=att_id)
+                                payload = {
+                                    'student_rfid': att.student.rfid_id,
+                                    'student_id': getattr(att.student, 'student_id', None),
+                                    'student_name': att.student.name,
+                                    'subject_code': att.subject.code if att.subject else None,
+                                    'date': att.date.strftime('%Y-%m-%d'),
+                                    'time_in': att.time_in.strftime('%H:%M') if att.time_in else None,
+                                    'time_out': att.time_out.strftime('%H:%M') if att.time_out else None,
+                                    'status': att.status,
+                                    'action': 'manual_update'
+                                }
+                                send_attendance_to_hosts_async(payload)
+                            except Exception:
+                                logger.exception('Failed to enqueue attendance forward for manual update')
                         try:
-                            payload = {
-                                'student_rfid': existing.student.rfid_id,
-                                'student_id': getattr(existing.student, 'student_id', None),
-                                'student_name': existing.student.name,
-                                'subject_code': existing.subject.code,
-                                'date': existing.date.strftime('%Y-%m-%d'),
-                                'time_in': existing.time_in.strftime('%H:%M') if existing.time_in else None,
-                                'time_out': existing.time_out.strftime('%H:%M') if existing.time_out else None,
-                                'status': existing.status,
-                                'action': 'manual_update'
-                            }
-                            send_attendance_to_hosts_async(payload)
+                            transaction.on_commit(lambda att_id=existing.id: _post_commit_manual_update(att_id))
                         except Exception:
-                            logger.exception('Failed to enqueue attendance forward for manual update')
+                            logger.exception('Failed to register post-commit manual update forwarder')
                     else:
                         messages.info(request, "Attendance already exists with the same data. No duplicate created.")
                 else:
                     messages.success(request, "Attendance recorded successfully!")
+                    # Forward after commit
+                    def _post_commit_manual_create(stu_id, subj_id, att_date, tin, tout, stat):
+                        try:
+                            payload = {
+                                'student_rfid': student.rfid_id,
+                                'student_id': getattr(student, 'student_id', None),
+                                'student_name': student.name,
+                                'subject_code': subject.code,
+                                'date': attendance_date.strftime('%Y-%m-%d'),
+                                'time_in': time_in.strftime('%H:%M') if time_in else None,
+                                'time_out': time_out.strftime('%H:%M') if time_out else None,
+                                'status': status,
+                                'action': 'manual_create'
+                            }
+                            send_attendance_to_hosts_async(payload)
+                        except Exception:
+                            logger.exception('Failed to enqueue attendance forward for manual create')
                     try:
-                        payload = {
-                            'student_rfid': student.rfid_id,
-                            'student_id': getattr(student, 'student_id', None),
-                            'student_name': student.name,
-                            'subject_code': subject.code,
-                            'date': attendance_date.strftime('%Y-%m-%d'),
-                            'time_in': time_in.strftime('%H:%M') if time_in else None,
-                            'time_out': time_out.strftime('%H:%M') if time_out else None,
-                            'status': status,
-                            'action': 'manual_create'
-                        }
-                        send_attendance_to_hosts_async(payload)
+                        transaction.on_commit(lambda: _post_commit_manual_create(student.id, subject.id, attendance_date, time_in, time_out, status))
                     except Exception:
-                        logger.exception('Failed to enqueue attendance forward for manual create')
+                        logger.exception('Failed to register post-commit manual create forwarder')
                     
                     # Check and send warning email if status is ABSENT
                     if status == 'ABSENT':
-                        check_and_send_warning_email(student, subject)
+                        try:
+                            transaction.on_commit(lambda s=student, sub=subject: run_async(check_and_send_warning_email, s, sub))
+                        except Exception:
+                            logger.exception('Failed to register post-commit manual warning email')
             return redirect('scan')
         except Exception as e:
             messages.error(request, f"Error: {str(e)}")
@@ -3433,7 +3508,7 @@ def attendance_logs(request):
         filter_date = timezone.now().date()
     
     # Filter by user's accessible courses or adviser's students
-    attendances = Attendance.objects.filter(date=filter_date).select_related('student', 'subject')
+    attendances = filter_current_year_attendance(Attendance.objects.filter(date=filter_date).select_related('student', 'subject'), request)
     # Use the new helper function to filter by adviser's students
     attendances = filter_by_adviser_students(attendances, request.user, student_field='student')
     
@@ -3520,7 +3595,7 @@ def attendance_logs(request):
                     subject = Subject.objects.get(id=subject_id_int)
                     check_and_send_warning_email(student, subject)
         
-        attendances = Attendance.objects.filter(date=filter_date, subject_id=subject_id_int).select_related('student', 'subject')
+        attendances = filter_current_year_attendance(Attendance.objects.filter(date=filter_date, subject_id=subject_id_int).select_related('student', 'subject'), request)
         # Use the new helper function to filter by adviser's students
         attendances = filter_by_adviser_students(attendances, request.user, student_field='student')
     
@@ -3557,7 +3632,7 @@ def attendance_logs_export_csv(request):
         filter_date = timezone.now().date()
     
     # Filter by user's accessible courses or adviser's students (same logic as attendance_logs view)
-    attendances = Attendance.objects.filter(date=filter_date).select_related('student', 'subject')
+    attendances = filter_current_year_attendance(Attendance.objects.filter(date=filter_date).select_related('student', 'subject'), request)
     # Use the new helper function to filter by adviser's students
     attendances = filter_by_adviser_students(attendances, request.user, student_field='student')
     
@@ -4253,16 +4328,26 @@ def settings_view(request):
             # Parse and validate dates
             semester_start_date_str = request.POST.get('semester_start_date')
             semester_end_date_str = request.POST.get('semester_end_date')
+            academic_year_start_date_str = request.POST.get('academic_year_start_date')
+            academic_year_end_date_str = request.POST.get('academic_year_end_date')
             
             if semester_start_date_str:
                 settings.semester_start_date = datetime.strptime(semester_start_date_str, '%Y-%m-%d').date()
             if semester_end_date_str:
                 settings.semester_end_date = datetime.strptime(semester_end_date_str, '%Y-%m-%d').date()
+            if academic_year_start_date_str:
+                settings.academic_year_start_date = datetime.strptime(academic_year_start_date_str, '%Y-%m-%d').date()
+            if academic_year_end_date_str:
+                settings.academic_year_end_date = datetime.strptime(academic_year_end_date_str, '%Y-%m-%d').date()
             
             # Validate that end date is after start date
             if settings.semester_start_date and settings.semester_end_date:
                 if settings.semester_end_date < settings.semester_start_date:
                     messages.error(request, "Semester end date must be after start date.")
+                    return render(request, 'attendance/settings.html', {'settings': settings})
+            if settings.academic_year_start_date and settings.academic_year_end_date:
+                if settings.academic_year_end_date < settings.academic_year_start_date:
+                    messages.error(request, "Academic year end date must be after start date.")
                     return render(request, 'attendance/settings.html', {'settings': settings})
             
             # Parse and validate times
@@ -4347,6 +4432,12 @@ def settings_view(request):
             settings.auto_send_reports = request.POST.get('auto_send_reports') == 'on'
             settings.auto_backup_enabled = request.POST.get('auto_backup_enabled') == 'on'
             settings.enable_time_validation = request.POST.get('enable_time_validation') == 'on'
+            settings.auto_archive_on_year_end = request.POST.get('auto_archive_on_year_end') == 'on'
+
+            # Optional: current academic year label update
+            current_year_label = request.POST.get('current_academic_year', '').strip()
+            if current_year_label:
+                settings.current_academic_year = current_year_label
             
             # Save settings
             settings.save()
@@ -4363,6 +4454,58 @@ def settings_view(request):
             traceback.print_exc()
     
     return render(request, 'attendance/settings.html', {'settings': settings})
+
+@login_required
+@require_http_methods(["POST"])
+def semester_reset(request):
+    """
+    Reset data to begin a new semester.
+    - Archives current academic year's attendance records
+    - Deletes current academic year's student enrollments and enrollment requests
+    - Updates rollover timestamp in system settings
+    Only staff/superusers can perform this action.
+    Returns JSON with counts of affected records.
+    """
+    if not (request.user.is_superuser or request.user.is_staff):
+        return JsonResponse({
+            'success': False,
+            'error': 'Permission denied. Admin access required.'
+        }, status=403)
+
+    try:
+        settings = get_cached_settings()
+        active_year = settings.current_academic_year
+        now = timezone.now()
+
+        with transaction.atomic():
+            # Archive current year's attendance
+            attendance_qs = Attendance.objects.filter(academic_year=active_year, is_archived=False)
+            archived_count = attendance_qs.update(is_archived=True, archive_year=active_year, archived_at=now)
+
+            # Delete current year's student-subject enrollments
+            ss_qs = StudentSubject.objects.filter(academic_year=active_year)
+            ss_deleted, _ = ss_qs.delete()
+
+            # Delete current year's enrollment requests (all statuses)
+            er_qs = EnrollmentRequest.objects.filter(academic_year=active_year)
+            er_deleted, _ = er_qs.delete()
+
+            # Update settings timestamp and invalidate cache
+            settings.last_semester_rollover_at = now
+            settings.save(update_fields=["last_semester_rollover_at"]) 
+            invalidate_settings_cache()
+
+        return JsonResponse({
+            'success': True,
+            'message': 'Semester reset completed successfully.',
+            'archived_attendance': archived_count,
+            'deleted_student_subjects': ss_deleted,
+            'deleted_enrollment_requests': er_deleted,
+            'academic_year': active_year,
+        })
+    except Exception as e:
+        logger.error(f"Semester reset failed: {e}", exc_info=True)
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
 
 # User Profile
 @login_required
@@ -5032,7 +5175,7 @@ def student_dashboard(request):
     past_week_start = today - timedelta(days=7)
     
     # Get all attendances for this student
-    attendances = Attendance.objects.filter(student=student).select_related('subject')
+    attendances = filter_current_year_attendance(Attendance.objects.filter(student=student).select_related('subject'), request)
     
     # Filter by subject if provided
     if subject_id:
@@ -5321,7 +5464,7 @@ def student_absences(request):
     semester = request.GET.get('semester', '1st Semester')
 
     # Base queryset for absences
-    absences_qs = Attendance.objects.filter(student=student, status='ABSENT').select_related('subject')
+    absences_qs = filter_current_year_attendance(Attendance.objects.filter(student=student, status='ABSENT').select_related('subject'), request)
 
     # Apply filters
     if subject_id:
@@ -5564,7 +5707,7 @@ def student_features_view(request):
         return redirect('student_login')
 
     # Get all attendances for this student
-    attendances = Attendance.objects.filter(student=student).select_related('subject').order_by('-date', '-time')
+    attendances = filter_current_year_attendance(Attendance.objects.filter(student=student).select_related('subject').order_by('-date', '-time'), request)
     
     # Today's attendance statistics
     today = timezone.now().date()
@@ -5947,7 +6090,7 @@ def student_history(request):
     date_from = request.GET.get('date_from', '')
     date_to = request.GET.get('date_to', '')
     
-    attendances_qs = Attendance.objects.filter(student=student).select_related('subject')
+    attendances_qs = filter_current_year_attendance(Attendance.objects.filter(student=student).select_related('subject'), request)
     
     # Filter by subject if provided
     if subject_id:
@@ -6624,7 +6767,7 @@ def adviser_features_view(request):
         # Staff/superuser can see all students
         assigned_students = Student.objects.all()
         enrollment_requests_base = EnrollmentRequest.objects.all()
-        attendance_base = Attendance.objects.all()
+        attendance_base = filter_current_year_attendance(Attendance.objects.all(), request)
         adviser_name = "All Advisers"
     else:
         # Regular users: match by adviser profile
@@ -6639,9 +6782,9 @@ def adviser_features_view(request):
             assigned_students = Student.objects.none()
             enrollment_requests_base = EnrollmentRequest.objects.none()
             adviser_name = request.user.get_full_name() or request.user.username
-        attendance_base = Attendance.objects.filter(
+        attendance_base = filter_current_year_attendance(Attendance.objects.filter(
             student__in=assigned_students
-        )
+        ), request)
     
     # Statistics
     total_students = assigned_students.count()
@@ -6799,10 +6942,10 @@ def adviser_subjects_monitor(request):
         enrolled_students = StudentSubject.objects.filter(subject=subject).select_related('student')
         
         # Get today's attendance for this subject
-        today_attendance = Attendance.objects.filter(
+        today_attendance = filter_current_year_attendance(Attendance.objects.filter(
             subject=subject,
             date=today
-        )
+        ), request)
         
         present_today = today_attendance.filter(status='PRESENT').count()
         absent_today = today_attendance.filter(status='ABSENT').count()
@@ -6851,7 +6994,7 @@ def adviser_absent_students(request):
     student_q = request.GET.get('student_q', '').strip()
 
     # Base queryset: absences in adviser's subjects
-    absences_qs = Attendance.objects.filter(status='ABSENT', subject__in=subjects).select_related('student', 'subject').prefetch_related('evidences')
+    absences_qs = filter_current_year_attendance(Attendance.objects.filter(status='ABSENT', subject__in=subjects).select_related('student', 'subject').prefetch_related('evidences'), request)
 
     if subject_id:
         try:
@@ -6882,7 +7025,7 @@ def adviser_absent_students(request):
 
     # Calculate top absent students (students with most absences)
     # Use the same filtered subjects but count across all dates (or filtered date range)
-    top_absent_queryset = Attendance.objects.filter(status='ABSENT', subject__in=subjects)
+    top_absent_queryset = filter_current_year_attendance(Attendance.objects.filter(status='ABSENT', subject__in=subjects), request)
     
     # Apply date filters to top absent students if present
     if date_from:
