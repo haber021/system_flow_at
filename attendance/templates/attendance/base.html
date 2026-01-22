@@ -963,6 +963,37 @@
                             </div>
                         </div>
 
+                        <!-- Time Field -->
+                        <div class="mb-4">
+                            <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
+                                <i class="bi bi-clock text-primary"></i>
+                                Time <span class="text-muted small">(optional)</span>
+                            </label>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <input
+                                        type="text"
+                                        name="start_time"
+                                        id="calendarStartTime"
+                                        class="form-control"
+                                        placeholder="e.g., 11:00 AM or 11:00"
+                                        style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                                    />
+                                    <small class="form-text text-muted"><i class="bi bi-info-circle"></i> Supports AM/PM or 24-hour format.</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <input
+                                        type="text"
+                                        name="end_time"
+                                        id="calendarEndTime"
+                                        class="form-control"
+                                        placeholder="e.g., 12:00 PM or 12:00"
+                                        style="border-radius: 10px; border: 2px solid #e2e8f0; padding: 0.75rem 1rem; font-size: 0.95rem;"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Type Field -->
                         <div class="mb-4">
                             <label class="form-label d-flex align-items-center gap-2" style="font-weight: 600; color: #2d3748; font-size: 0.95rem;">
@@ -1524,6 +1555,7 @@
                             <div>
                                 <div class="fw-bold">${titleText} ${count > 1 ? `<span class="badge bg-secondary ms-2">${count}x</span>` : ''}</div>
                                 <div class="text-muted">${dateStr} · <small>${typeLabel}</small></div>
+                                ${ev.start_time ? `<div class="small text-muted">Time: ${ev.start_time}${ev.end_time ? ' - ' + ev.end_time : ''}</div>` : ''}
                                 ${subjectHTML}
                                 <div class="small">${ev.description || ''}</div>
                             </div>

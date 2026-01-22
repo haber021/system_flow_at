@@ -9,3 +9,10 @@ sending report seperated the student section by each student then the subjects
 make sure not upload dublicate profile picture  
 
 in the time in the student dont time in if the time not true the active time active week
+
+did not reset the data of the student if the semester end 
+
+
+in the student view they pick the semester and year they what to retrive the data 
+
+also reset the history attendance 

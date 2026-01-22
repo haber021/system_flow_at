@@ -349,6 +349,61 @@ def is_subject_currently_active(subject, attendance_date, attendance_time, setti
     
     return False, None
 
+def get_exact_active_schedule(subject, attendance_date, attendance_time, settings=None):
+    """
+    Strictly determine if a subject has a schedule active at the exact time.
+    - Matches only schedules where start <= time <= end (no grace periods)
+    - Prefers date-specific schedules; falls back to weekly schedules for the same weekday
+    - Does not consider subject-level general times or any grace settings
+
+    Returns the matching SubjectSchedule or None.
+    """
+    if settings is None:
+        settings = get_cached_settings()
+
+    # If time validation is disabled globally, allow any schedule match
+    if not settings.enable_time_validation:
+        # Still require an actual schedule record if present
+        # Try date-specific first
+        day_of_week = attendance_date.weekday()
+        date_schedules = SubjectSchedule.objects.filter(subject=subject, date=attendance_date).order_by('time_start')
+        if date_schedules.exists():
+            schedules = date_schedules
+        else:
+            schedules = SubjectSchedule.objects.filter(subject=subject, day_of_week=day_of_week, date__isnull=True).order_by('time_start')
+        attendance_datetime = make_aware_datetime(attendance_date, attendance_time)
+        for schedule in schedules:
+            start_dt = make_aware_datetime(attendance_date, schedule.time_start)
+            end_dt = make_aware_datetime(attendance_date, schedule.time_end)
+            if start_dt <= attendance_datetime <= end_dt:
+                return schedule
+        return None
+
+    # Strict semester boundaries if configured
+    settings_obj = SystemSettings.get_settings()
+    if settings_obj.semester_start_date and settings_obj.semester_end_date:
+        if attendance_date < settings_obj.semester_start_date or attendance_date > settings_obj.semester_end_date:
+            return None
+
+    # Determine schedules for date or weekday
+    day_of_week = attendance_date.weekday()
+    date_schedules = SubjectSchedule.objects.filter(subject=subject, date=attendance_date).order_by('time_start')
+    if date_schedules.exists():
+        schedules = date_schedules
+    else:
+        schedules = SubjectSchedule.objects.filter(subject=subject, day_of_week=day_of_week, date__isnull=True).order_by('time_start')
+
+    attendance_datetime = make_aware_datetime(attendance_date, attendance_time)
+    for schedule in schedules:
+        start_dt = make_aware_datetime(attendance_date, schedule.time_start)
+        end_dt = make_aware_datetime(attendance_date, schedule.time_end)
+        # Strict window: no grace; inclusive bounds
+        if start_dt <= attendance_datetime <= end_dt:
+            return schedule
+
+    # No exact schedule match
+    return None
+
 def validate_attendance_time(subject, attendance_date, attendance_time, settings=None):
     """
     Validate if attendance is allowed at the given date and time.
@@ -2840,33 +2895,21 @@ def scan_view(request):
     today = now_manila.date()
     current_time = now_manila.time()
 
-    # Identify a subject whose schedule is active right now (with grace periods)
-    # Use is_subject_currently_active instead of validate_attendance_time
-    # This ensures timeout settings don't affect active subject determination
+    # Identify a subject whose schedule is active right now using strict window (no grace)
     auto_subject = None
     auto_subject_window_start = None
     for subj in subjects_qs:
         try:
-            is_active_now, schedule = is_subject_currently_active(
-                subj, today, current_time, settings
-            )
+            strict_schedule = get_exact_active_schedule(subj, today, current_time, settings)
         except Exception:
-            # Skip subjects that fail validation to avoid breaking the scan page
             continue
 
-        if not is_active_now:
+        if not strict_schedule:
             continue
 
-        # Use the beginning of the valid window so we pick the earliest active class
-        window_start_dt = None
-        if schedule and schedule.time_start:
-            window_start_dt = make_aware_datetime(today, schedule.time_start) - timedelta(minutes=settings.early_attendance_minutes)
-        elif subj.schedule_time_start:
-            window_start_dt = make_aware_datetime(today, subj.schedule_time_start) - timedelta(minutes=settings.early_attendance_minutes)
-        elif getattr(settings, 'class_start_time', None):
-            window_start_dt = make_aware_datetime(today, settings.class_start_time) - timedelta(minutes=settings.early_attendance_minutes)
-
-        if auto_subject_window_start is None or (window_start_dt and window_start_dt < auto_subject_window_start):
+        # Pick the earliest starting active class strictly
+        window_start_dt = make_aware_datetime(today, strict_schedule.time_start)
+        if auto_subject_window_start is None or window_start_dt < auto_subject_window_start:
             auto_subject = subj
             auto_subject_window_start = window_start_dt
     
@@ -3055,17 +3098,22 @@ def scan_view(request):
                                 # If parsing fails, use current time
                                 scan_time = now_time
                     
-                    # Check if student already has both time_in and time_out recorded for this session (schedule) today
-                    schedule_filter = {}
-                    if schedule:
-                        schedule_filter['schedule'] = schedule
-                    else:
-                        schedule_filter['schedule__isnull'] = True
+                    # Determine strict schedule active at this exact time
+                    schedule = get_exact_active_schedule(subject, attendance_date, scan_time, settings)
+
+                    # Enforce strict schedule: disallow scans if no exact active schedule
+                    if not schedule:
+                        day_of_week = attendance_date.weekday()
+                        day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day_of_week]
+                        messages.error(request, f"✗ Attendance not allowed. {subject.code} has no active schedule at {scan_time.strftime('%I:%M %p')} on {day_name}.")
+                        return redirect(reverse('scan'))
+
+                    # Check if student already has both time_in and time_out recorded for this exact schedule today
                     existing_attendance_check = Attendance.objects.filter(
                         student=student,
                         subject=subject,
                         date=attendance_date,
-                        **schedule_filter
+                        schedule=schedule
                     ).first()
                     
                     if existing_attendance_check and existing_attendance_check.time_in and existing_attendance_check.time_out:
@@ -3075,19 +3123,7 @@ def scan_view(request):
                         messages.info(request, f"ℹ You already have time in and time out recorded for today. Time In: {time_in_str}, Time Out: {time_out_str}")
                         return redirect(reverse('scan'))
                     
-                    # Validate attendance time and date using actual time
-                    is_valid, error_message, schedule = validate_attendance_time(
-                        subject, attendance_date, scan_time, settings
-                    )
-                    
-                    if not is_valid:
-                        # Check if the error is about time window being closed
-                        error_msg = error_message or "Attendance not allowed at this time."
-                        if "not allowed at this time" in error_msg.lower() or "valid time window" in error_msg.lower():
-                            messages.error(request, f"✗ The time is no longer available. {error_msg}")
-                        else:
-                            messages.error(request, f"✗ {error_msg}")
-                        return redirect(reverse('scan'))
+                    # Strict validation already performed above (schedule required)
                     
                     # Normalize time only when storing to database (remove seconds/microseconds)
                     stored_time = scan_time.replace(second=0, microsecond=0)
@@ -3116,13 +3152,8 @@ def scan_view(request):
                         )
                         
                         # Determine status based on time (if this is a new record, we'll update it)
-                        class_start = None
-                        if schedule:
-                            class_start = schedule.time_start
-                        elif subject.schedule_time_start:
-                            class_start = subject.schedule_time_start
-                        else:
-                            class_start = settings.class_start_time
+                        # Determine status relative to schedule start time only
+                        class_start = schedule.time_start
                         
                         status = 'PRESENT'
                         if class_start:
@@ -7385,18 +7416,39 @@ def events_create_api(request):
     else:
         return JsonResponse({'success': False, 'error': 'Date or date range is required'}, status=400)
 
-    start_time = None
-    end_time = None
-    try:
-        if start_time_str:
-            start_time = datetime.strptime(start_time_str, '%H:%M').time()
-    except Exception:
-        start_time = None
-    try:
-        if end_time_str:
-            end_time = datetime.strptime(end_time_str, '%H:%M').time()
-    except Exception:
-        end_time = None
+    # Helper to parse flexible time inputs (supports 24-hour and 12-hour AM/PM)
+    def _parse_time(ts):
+        if not ts:
+            return None
+        s = (ts or '').strip()
+        if not s:
+            return None
+        try:
+            # Detect AM/PM variants
+            lower = s.lower()
+            if 'am' in lower or 'pm' in lower:
+                # Ensure space before AM/PM if missing (e.g., "4:00pm")
+                if lower.endswith('am') or lower.endswith('pm'):
+                    s = s[:-2].strip() + ' ' + s[-2:].upper()
+                # Try with seconds then without
+                try:
+                    return datetime.strptime(s, '%I:%M:%S %p').time()
+                except Exception:
+                    return datetime.strptime(s, '%I:%M %p').time()
+            # 24-hour formats
+            try:
+                return datetime.strptime(s, '%H:%M:%S').time()
+            except Exception:
+                return datetime.strptime(s, '%H:%M').time()
+        except Exception:
+            return None
+
+    start_time = _parse_time(start_time_str)
+    end_time = _parse_time(end_time_str)
+
+    # Validate time range if both provided
+    if start_time and end_time and start_time >= end_time:
+        return JsonResponse({'success': False, 'error': 'Start time must be before end time'}, status=400)
 
     subject = None
     if subject_id:
@@ -7425,11 +7477,14 @@ def events_create_api(request):
         for date_obj in dates_to_process:
             # Primary matching: avoid creating more than one event for the same
             # date/event_type/subject/section combination
+            # Include time fields in matching to allow multiple sessions per day
             match_kwargs = {
                 'date': date_obj,
                 'event_type': event_type,
                 'subject': subject,
                 'section': section,
+                'start_time': start_time,
+                'end_time': end_time,
             }
 
             defaults = {
@@ -7444,13 +7499,19 @@ def events_create_api(request):
             try:
                 with transaction.atomic():
                     ev, created = CalendarEvent.objects.get_or_create(defaults=defaults, **match_kwargs)
-                    if not created and ev.title != normalized_title:
-                        ev.title = normalized_title
-                        ev.description = description or ev.description
-                        ev.start_time = start_time or ev.start_time
-                        ev.end_time = end_time or ev.end_time
-                        ev.save(update_fields=['title', 'description', 'start_time', 'end_time'])
-                        updated_events.append(ev)
+                    if not created:
+                        # Update mutable fields when same slot exists
+                        changed = False
+                        if ev.title != normalized_title:
+                            ev.title = normalized_title
+                            changed = True
+                        if description and ev.description != description:
+                            ev.description = description
+                            changed = True
+                        # start_time/end_time are part of match_kwargs; no change needed here
+                        if changed:
+                            ev.save(update_fields=['title', 'description'])
+                            updated_events.append(ev)
                     elif created:
                         created_events.append(ev)
             except IntegrityError:
@@ -7574,8 +7635,11 @@ def events_list_api(request):
             subject_id = e.subject.id if e.subject else None
             title_key = normalize_title(e.title)
             type_key = normalize_type(e.event_type)
-            key = (e.date, type_key, subject_id, title_key)
-            k = f"{key[0] or ''}|{key[1] or ''}|{key[2] or ''}|{key[3] or ''}"
+            # Include time range in grouping to differentiate sessions
+            start_key = e.start_time.strftime('%H:%M:%S') if e.start_time else ''
+            end_key = e.end_time.strftime('%H:%M:%S') if e.end_time else ''
+            key = (e.date, type_key, subject_id, title_key, start_key, end_key)
+            k = f"{key[0] or ''}|{key[1] or ''}|{key[2] or ''}|{key[3] or ''}|{key[4]}|{key[5]}"
 
             if k not in groups:
                 groups[k] = {
@@ -7585,6 +7649,8 @@ def events_list_api(request):
                     'type': e.event_type,
                     'description': e.description or '',
                     'subject_id': subject_id,
+                    'start_time': e.start_time.strftime('%I:%M %p') if e.start_time else None,
+                    'end_time': e.end_time.strftime('%I:%M %p') if e.end_time else None,
                     'count': 1,
                     'ids': [e.id],
                 }
@@ -7737,21 +7803,35 @@ def events_update_api(request, event_id):
         section_id = data.get('section_id')
         start_time_str = data.get('start_time', '').strip()
         end_time_str = data.get('end_time', '').strip()
-        
-        # Parse times
-        start_time = None
-        if start_time_str:
+
+        # Parse times (supports 24h and 12h AM/PM)
+        def _parse_time(ts):
+            if not ts:
+                return None
+            s = ts.strip()
+            if not s:
+                return None
             try:
-                start_time = datetime.strptime(start_time_str, '%H:%M').time()
+                lower = s.lower()
+                if 'am' in lower or 'pm' in lower:
+                    if lower.endswith('am') or lower.endswith('pm'):
+                        s = s[:-2].strip() + ' ' + s[-2:].upper()
+                    try:
+                        return datetime.strptime(s, '%I:%M:%S %p').time()
+                    except Exception:
+                        return datetime.strptime(s, '%I:%M %p').time()
+                try:
+                    return datetime.strptime(s, '%H:%M:%S').time()
+                except Exception:
+                    return datetime.strptime(s, '%H:%M').time()
             except Exception:
-                start_time = None
-        
-        end_time = None
-        if end_time_str:
-            try:
-                end_time = datetime.strptime(end_time_str, '%H:%M').time()
-            except Exception:
-                end_time = None
+                return None
+
+        start_time = _parse_time(start_time_str)
+        end_time = _parse_time(end_time_str)
+
+        if start_time and end_time and start_time >= end_time:
+            return JsonResponse({'success': False, 'error': 'Start time must be before end time'}, status=400)
         
         subject = None
         if subject_id:
