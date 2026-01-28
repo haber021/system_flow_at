@@ -513,14 +513,12 @@
                             <i class="bi bi-arrow-right-circle"></i> {{ last_scan.time_in|time:"g:i A"|default:"--:--" }}
                         </div>
                     </div>
-                    {% if last_scan.time_out %}
                     <div class="last-scan-item">
                         <div class="last-scan-label">Time Out</div>
                         <div class="last-scan-value" style="color: #3b82f6;">
-                            <i class="bi bi-arrow-left-circle"></i> {{ last_scan.time_out|time:"g:i A" }}
+                            <i class="bi bi-arrow-left-circle"></i> {{ last_scan.time_out|time:"g:i A"|default:"--:--" }}
                         </div>
                     </div>
-                    {% endif %}
                     <div class="last-scan-item">
                         <div class="last-scan-label">Status</div>
                         <div class="last-scan-value">

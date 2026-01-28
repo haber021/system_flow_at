@@ -1,6 +1,11 @@
 from django.test import TestCase, RequestFactory
+from django.urls import reverse
+from unittest.mock import patch
+from datetime import datetime, date, time
+import pytz
 from django.contrib.auth.models import User
 from .models import Adviser, Instructor, Student, Subject, StudentSubject, Course, Section, FeatureSuggestion
+from .models import SubjectSchedule, Attendance, SystemSettings
 from .views import filter_subjects_by_user
 
 from django.test import Client
@@ -106,3 +111,87 @@ class SubjectFilterTest(TestCase):
 
         # Check the total count
         self.assertEqual(filtered_subjects.count(), 3)
+
+
+class ScanStrictScheduleTest(TestCase):
+    def setUp(self):
+        # Create staff user to bypass adviser/instructor filtering in scan_view
+        self.staff_user = User.objects.create_user(username='staff', password='password', is_staff=True)
+        self.client = Client()
+        self.client.login(username='staff', password='password')
+
+        # Settings covering today
+        self.settings = SystemSettings.get_settings()
+        today = datetime.now().date()
+        self.settings.semester_start_date = today
+        self.settings.semester_end_date = today
+        self.settings.enable_time_validation = True
+        self.settings.save()
+
+        # Base course/section
+        self.course = Course.objects.create(code='BSIT', name='Bachelor of Science in IT')
+        self.section = Section.objects.create(code='SEC-A', name='Section A')
+
+        # Subjects
+        self.subject_a = Subject.objects.create(code='SUBJ-A', name='Subject A', course=self.course, is_active=True)
+        self.subject_a.sections.add(self.section)
+        self.subject_b = Subject.objects.create(code='SUBJ-B', name='Subject B', course=self.course, is_active=True)
+        self.subject_b.sections.add(self.section)
+
+        # Today-specific schedules
+        self.today = today
+        SubjectSchedule.objects.create(subject=self.subject_a, date=self.today, time_start=time(8, 0), time_end=time(9, 0))
+        SubjectSchedule.objects.create(subject=self.subject_b, date=self.today, time_start=time(9, 0), time_end=time(10, 0))
+
+        # Student enrolled in subject A
+        self.student = Student.objects.create(
+            rfid_id='RFID-001',
+            student_id='S-001',
+            name='Scan Student',
+            course=self.course,
+            section=self.section,
+            email='scan@example.com'
+        )
+        StudentSubject.objects.create(student=self.student, subject=self.subject_a)
+
+    def _manila_dt(self, h, m):
+        tz = pytz.timezone('Asia/Manila')
+        naive = datetime(self.today.year, self.today.month, self.today.day, h, m, 0)
+        return tz.localize(naive)
+
+    @patch('attendance.views.get_manila_now')
+    def test_auto_selection_strict_active_subject(self, mock_now):
+        # At 08:30, Subject A should be strictly active
+        mock_now.return_value = self._manila_dt(8, 30)
+        resp = self.client.get(reverse('scan'))
+        self.assertEqual(resp.status_code, 200)
+        # Confirm auto-selected subject is Subject A
+        self.assertEqual(resp.context['subject'].id, self.subject_a.id)
+        self.assertTrue(resp.context['auto_selected'])
+
+    def test_scan_post_reject_outside_exact_window(self):
+        # 07:59 is outside strict window for Subject A
+        resp = self.client.post(reverse('scan'), {
+            'rfid_id': 'RFID-001',
+            'subject_id': str(self.subject_a.id),
+            'manual_time': '07:59'
+        }, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        # No attendance should be created
+        self.assertFalse(Attendance.objects.filter(student=self.student, subject=self.subject_a, date=self.today).exists())
+        # Check error message
+        messages = list(resp.context['messages'])
+        self.assertTrue(any('not allowed' in m.message.lower() or 'no active schedule' in m.message.lower() for m in messages))
+
+    def test_scan_post_success_inside_exact_window(self):
+        # 08:05 is inside Subject A's strict window
+        resp = self.client.post(reverse('scan'), {
+            'rfid_id': 'RFID-001',
+            'subject_id': str(self.subject_a.id),
+            'manual_time': '08:05'
+        }, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        att = Attendance.objects.filter(student=self.student, subject=self.subject_a, date=self.today).first()
+        self.assertIsNotNone(att)
+        self.assertIsNotNone(att.time_in)
+        self.assertIsNotNone(att.schedule)

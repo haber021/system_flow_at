@@ -2,76 +2,424 @@
 
 {% block title %}User Profile{% endblock %}
 
+{% block extra_css %}
+<style>
+    .profile-container {
+        background: #f8f9fa;
+        min-height: 100vh;
+        padding: 2rem 0;
+    }
+    
+    .profile-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 2.5rem;
+        border-radius: 12px 12px 0 0;
+        text-align: center;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .profile-header h4 {
+        margin: 0;
+        font-weight: 600;
+        font-size: 1.75rem;
+    }
+    
+    .profile-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+    
+    .profile-picture-preview {
+        width: 160px;
+        height: 160px;
+        object-fit: cover;
+        border-radius: 50%;
+        border: 5px solid white;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        margin-bottom: 1rem;
+    }
+    
+    .profile-placeholder {
+        width: 160px;
+        height: 160px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4rem;
+        color: white;
+        margin-bottom: 1rem;
+        border: 5px solid white;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    .profile-picture-section {
+        text-align: center;
+        padding: 2.5rem;
+        background: linear-gradient(to bottom, #f8f9fa, white);
+        border-bottom: 1px solid #e9ecef;
+    }
+    
+    .section-card {
+        padding: 2rem;
+        background: white;
+    }
+    
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: #2d3748;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid #e9ecef;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .section-title i {
+        color: #667eea;
+    }
+    
+    .form-label {
+        font-weight: 500;
+        color: #4a5568;
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+    }
+    
+    .form-control {
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        padding: 0.625rem 0.875rem;
+        transition: all 0.2s;
+    }
+    
+    .form-control:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+    
+    .form-control:disabled {
+        background-color: #f7fafc;
+        color: #718096;
+    }
+    
+    .btn {
+        padding: 0.625rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 500;
+        transition: all 0.2s;
+        border: none;
+    }
+    
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+    
+    .btn-warning {
+        background: linear-gradient(135deg, #f6ad55 0%, #ed8936 100%);
+        color: white;
+    }
+    
+    .btn-warning:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(237, 137, 54, 0.4);
+    }
+    
+    .btn-danger {
+        background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+        color: white;
+    }
+    
+    .btn-danger:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(245, 101, 101, 0.4);
+    }
+    
+    .info-badge {
+        background: #e6f3ff;
+        color: #0066cc;
+        padding: 0.75rem 1rem;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        margin-bottom: 1.5rem;
+        display: inline-block;
+        border-left: 4px solid #0066cc;
+    }
+    
+    .divider {
+        border: 0;
+        height: 1px;
+        background: linear-gradient(to right, transparent, #e2e8f0, transparent);
+        margin: 2rem 0;
+    }
+    
+    .upload-area {
+        border: 2px dashed #cbd5e0;
+        border-radius: 8px;
+        padding: 1rem;
+        background: #f7fafc;
+        transition: all 0.2s;
+    }
+    
+    .upload-area:hover {
+        border-color: #667eea;
+        background: #edf2f7;
+    }
+    
+    .stat-card {
+        background: linear-gradient(135deg, #edf2f7 0%, #e2e8f0 100%);
+        padding: 1rem;
+        border-radius: 8px;
+        text-align: center;
+        border-left: 4px solid #667eea;
+    }
+    
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #2d3748;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: #718096;
+        margin-top: 0.25rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-0"><i class="bi bi-person-circle"></i> User Profile</h4>
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{% url 'profile' %}">
-                    {% csrf_token %}
-                    
-                    <h5 class="mb-3">Profile Information</h5>
-                    <div class="mb-3">
-                        <label class="form-label">Username:</label>
-                        <input type="text" class="form-control" value="{{ user.username }}" disabled>
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-md-6">
-                            <label for="first_name" class="form-label">First Name:</label>
-                            <input type="text" class="form-control" id="first_name" name="first_name" 
-                                   value="{{ user.first_name }}">
-                        </div>
-                        <div class="col-md-6">
-                            <label for="last_name" class="form-label">Last Name:</label>
-                            <input type="text" class="form-control" id="last_name" name="last_name" 
-                                   value="{{ user.last_name }}">
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label for="email" class="form-label">Email:</label>
-                        <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Role:</label>
-                        <input type="text" class="form-control" value="{% if user.is_superuser %}Administrator{% else %}User{% endif %}" disabled>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Last Login:</label>
-                        <input type="text" class="form-control" value="{{ user.last_login|date:'m/d/Y g:i A'|default:'Never' }}" disabled>
+<div class="profile-container">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-9 col-xl-8">
+                <!-- Profile Card -->
+                <div class="profile-card">
+                    <!-- Header -->
+                    <div class="profile-header">
+                        <h4><i class="bi bi-person-circle me-2"></i>User Profile</h4>
                     </div>
                     
-                    <button type="submit" name="update_profile" class="btn btn-primary mb-4">
-                        <i class="bi bi-check-circle"></i> Update Profile
-                    </button>
-                </form>
-                
-                <hr>
-                
-                <h5 class="mb-3">Change Password</h5>
-                <form method="POST" action="{% url 'profile' %}">
-                    {% csrf_token %}
-                    <div class="mb-3">
-                        <label for="old_password" class="form-label">Old Password:</label>
-                        <input type="password" class="form-control" id="old_password" name="old_password" required>
+                    {% if adviser %}
+                    <!-- Adviser Profile Picture Section -->
+                    <div class="profile-picture-section">
+                        {% if adviser.profile_picture %}
+                            <img src="{{ adviser.profile_picture.url }}" alt="{{ adviser.name }}" class="profile-picture-preview">
+                        {% else %}
+                            <div class="profile-placeholder mx-auto">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                        {% endif %}
+                        
+                        <div class="info-badge">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Your profile picture will be displayed on all subject cards in the student enrollment page.
+                        </div>
+                        
+                        <form method="POST" enctype="multipart/form-data">
+                            {% csrf_token %}
+                            <div class="upload-area mb-3">
+                                <input type="file" class="form-control" name="profile_picture" accept="image/*" id="profile_picture_input">
+                                <small class="text-muted d-block mt-2">
+                                    <i class="bi bi-check-circle me-1"></i>JPG, PNG, GIF • Max 5MB
+                                </small>
+                            </div>
+                            <div class="d-flex gap-2 justify-content-center">
+                                <button type="submit" name="update_profile" class="btn btn-primary">
+                                    <i class="bi bi-upload me-1"></i> Upload Picture
+                                </button>
+                                {% if adviser.profile_picture %}
+                                <button type="submit" name="remove_picture" class="btn btn-danger" 
+                                        onclick="return confirm('Are you sure you want to remove your profile picture?')">
+                                    <i class="bi bi-trash me-1"></i> Remove
+                                </button>
+                                {% endif %}
+                            </div>
+                        </form>
                     </div>
-                    <div class="mb-3">
-                        <label for="new_password" class="form-label">New Password:</label>
-                        <input type="password" class="form-control" id="new_password" name="new_password" required>
+                    {% endif %}
+                    
+                    <!-- Profile Information Section -->
+                    <div class="section-card">
+                        <h5 class="section-title">
+                            <i class="bi bi-info-circle"></i>
+                            Profile Information
+                        </h5>
+                        
+                        <form method="POST" action="{% url 'profile' %}" {% if adviser %}enctype="multipart/form-data"{% endif %}>
+                            {% csrf_token %}
+                            
+                            {% if adviser %}
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="adviser_name" class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="adviser_name" name="adviser_name" 
+                                           value="{{ adviser.name }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="department" class="form-label">Department</label>
+                                    <input type="text" class="form-control" id="department" name="department" 
+                                           value="{{ adviser.department }}">
+                                </div>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Employee ID</label>
+                                    <input type="text" class="form-control" value="{{ adviser.employee_id }}" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Email Address</label>
+                                    <input type="text" class="form-control" value="{{ adviser.email }}" disabled>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <div class="stat-card">
+                                    <div class="stat-value">{{ adviser.subjects.count }}</div>
+                                    <div class="stat-label">Active Subject{{ adviser.subjects.count|pluralize }}</div>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            <div class="mb-3">
+                                <label class="form-label">Username</label>
+                                <input type="text" class="form-control" value="{{ user.username }}" disabled>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="first_name" class="form-label">First Name</label>
+                                    <input type="text" class="form-control" id="first_name" name="first_name" 
+                                           value="{{ user.first_name }}">
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="last_name" class="form-label">Last Name</label>
+                                    <input type="text" class="form-control" id="last_name" name="last_name" 
+                                           value="{{ user.last_name }}">
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="email" class="form-label">User Email</label>
+                                <input type="email" class="form-control" id="email" name="email" value="{{ user.email }}">
+                            </div>
+                            
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <label class="form-label">Role</label>
+                                    <input type="text" class="form-control" 
+                                           value="{% if adviser %}Adviser{% elif user.is_superuser %}Administrator{% else %}User{% endif %}" disabled>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Last Login</label>
+                                    <input type="text" class="form-control" 
+                                           value="{{ user.last_login|date:'m/d/Y g:i A'|default:'Never' }}" disabled>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" name="update_profile" class="btn btn-primary">
+                                <i class="bi bi-check-circle me-1"></i> Update Profile
+                            </button>
+                        </form>
                     </div>
-                    <div class="mb-3">
-                        <label for="confirm_password" class="form-label">Confirm New Password:</label>
-                        <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                    
+                    <!-- Divider -->
+                    <hr class="divider">
+                    
+                    <!-- Change Password Section -->
+                    <div class="section-card">
+                        <h5 class="section-title">
+                            <i class="bi bi-shield-lock"></i>
+                            Security Settings
+                        </h5>
+                        
+                        <form method="POST" action="{% url 'profile' %}">
+                            {% csrf_token %}
+                            
+                            <div class="mb-3">
+                                <label for="old_password" class="form-label">Current Password</label>
+                                <input type="password" class="form-control" id="old_password" name="old_password" 
+                                       placeholder="Enter your current password" required>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="new_password" class="form-label">New Password</label>
+                                    <input type="password" class="form-control" id="new_password" name="new_password" 
+                                           placeholder="Enter new password" required>
+                                    <small class="text-muted">Minimum 8 characters</small>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="confirm_password" class="form-label">Confirm New Password</label>
+                                    <input type="password" class="form-control" id="confirm_password" name="confirm_password" 
+                                           placeholder="Confirm new password" required>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" name="change_password" class="btn btn-warning">
+                                <i class="bi bi-key me-1"></i> Change Password
+                            </button>
+                        </form>
                     </div>
-                    <button type="submit" name="change_password" class="btn btn-warning">
-                        <i class="bi bi-key"></i> Save Password
-                    </button>
-                </form>
+                </div>
             </div>
         </div>
     </div>
 </div>
+
+<script>
+    // Image preview functionality
+    document.getElementById('profile_picture_input')?.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            // Check file size (5MB max)
+            if (file.size > 5 * 1024 * 1024) {
+                alert('File size must be less than 5MB');
+                e.target.value = '';
+                return;
+            }
+            
+            // Check file type
+            if (!file.type.match('image.*')) {
+                alert('Please select an image file');
+                e.target.value = '';
+                return;
+            }
+            
+            // Preview the image
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.querySelector('.profile-picture-preview, .profile-placeholder');
+                if (preview) {
+                    if (preview.tagName === 'IMG') {
+                        preview.src = e.target.result;
+                    } else {
+                        // Replace placeholder with image
+                        const img = document.createElement('img');
+                        img.src = e.target.result;
+                        img.className = 'profile-picture-preview';
+                        img.alt = 'Preview';
+                        preview.parentNode.replaceChild(img, preview);
+                    }
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+</script>
 {% endblock %}
 

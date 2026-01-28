@@ -92,7 +92,7 @@ class AdviserAdmin(admin.ModelAdmin):
     readonly_fields = ['calendar_events_preview']
     fieldsets = (
         ('Basic Information', {
-            'fields': ('name', 'email', 'employee_id', 'department', 'courses')
+            'fields': ('name', 'email', 'employee_id', 'department', 'profile_picture', 'courses')
         }),
         ('Calendar', {
             'fields': ('calendar_events_preview',),

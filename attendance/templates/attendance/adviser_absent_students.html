@@ -265,11 +265,11 @@
             </small>
         </h5>
         <button type="button" class="toggle-btn" onclick="toggleTopStudents()">
-            <i class="bi bi-eye-slash" id="toggleIcon"></i>
-            <span id="toggleText">Hide</span>
+            <i class="bi bi-eye" id="toggleIcon"></i>
+            <span id="toggleText">Show</span>
         </button>
     </div>
-    <ul class="top-student-list stats-content" id="topStudentsContent">
+    <ul class="top-student-list stats-content hidden" id="topStudentsContent">
         {% for student in top_absent_students %}
         <li class="top-student-item">
             <span class="top-student-rank">
@@ -311,11 +311,11 @@
             </small>
         </h5>
         <button type="button" class="toggle-btn" onclick="toggleTopStudents()">
-            <i class="bi bi-eye-slash" id="toggleIcon"></i>
-            <span id="toggleText">Hide</span>
+            <i class="bi bi-eye" id="toggleIcon"></i>
+            <span id="toggleText">Show</span>
         </button>
     </div>
-    <div class="empty-top-list stats-content" id="topStudentsContent">
+    <div class="empty-top-list stats-content hidden" id="topStudentsContent">
         <i class="bi bi-check-circle" style="font-size: 2rem; margin-bottom: 0.5rem;"></i>
         <p class="mb-0">No absences recorded in the selected filters</p>
     </div>
@@ -369,7 +369,7 @@
             {% csrf_token %}
             <div class="d-flex justify-content-between align-items-center px-3 pt-3 pb-2 flex-wrap gap-2">
                 <div class="small text-muted">
-                    Select absences then click Mark Selected Present. Enable past-date override to edit older entries.
+                    Select specific absences to mark them present, or click "Bulk Mark Present" to mark ALL students as present EXCEPT those who already timed in today.
                 </div>
                 <div class="d-flex gap-2">
                     <div class="form-check form-switch me-3">
@@ -378,7 +378,10 @@
                     </div>
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelectAll(true)">Select All</button>
                     <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleSelectAll(false)">Clear</button>
-                    <button type="submit" class="btn btn-success btn-sm">
+                    <button type="submit" class="btn btn-primary btn-sm" onclick="return confirmMarkPresent(this)">
+                        <i class="bi bi-check-all"></i> Bulk Mark Present
+                    </button>
+                    <button type="submit" class="btn btn-success btn-sm" onclick="return validateSelection()">
                         <i class="bi bi-check2-circle"></i> Mark Selected Present
                     </button>
                 </div>
@@ -513,6 +516,25 @@
         checks.forEach(c => { if (!c.disabled) c.checked = !!val; });
         const master = document.getElementById('selectAll');
         if (master) master.checked = !!val;
+    }
+
+    function validateSelection() {
+        const checks = document.querySelectorAll('.row-check:checked');
+        if (checks.length === 0) {
+            alert('Please select at least one student to mark present.');
+            return false;
+        }
+        return true;
+    }
+
+    function confirmMarkPresent(btn) {
+        // Clear all selections when using "Bulk Mark Present"
+        const checks = document.querySelectorAll('.row-check');
+        checks.forEach(c => c.checked = false);
+        const master = document.getElementById('selectAll');
+        if (master) master.checked = false;
+        
+        return confirm('You are about to mark all filtered students as PRESENT, except those who already timed in during the active time today. Continue?');
     }
 
     // Keep master checkbox in sync and make row clicks toggle checkbox

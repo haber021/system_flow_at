@@ -556,6 +556,23 @@
                     <div class="card-body">
                         <h6 class="subject-title">{{ item.subject.name }}</h6>
                         
+                        {% if item.subject.adviser %}
+                        <div class="subject-info">
+                            {% if item.subject.adviser.profile_picture %}
+                            <img src="{{ item.subject.adviser.profile_picture.url }}" 
+                                 alt="{{ item.subject.adviser.name }}" 
+                                 class="rounded-circle" 
+                                 style="width: 32px; height: 32px; object-fit: cover;">
+                            {% else %}
+                            <i class="bi bi-person-circle"></i>
+                            {% endif %}
+                            <div>
+                                <strong>Adviser:</strong>
+                                <span>{{ item.subject.adviser.name }}</span>
+                            </div>
+                        </div>
+                        {% endif %}
+                        
                         <div class="subject-info">
                             <i class="bi bi-person-circle"></i>
                             <div>
@@ -655,6 +672,23 @@
                     </div>
                     <div class="card-body">
                         <h6 class="subject-title">{{ item.subject.name }}</h6>
+                        
+                        {% if item.subject.adviser %}
+                        <div class="subject-info">
+                            {% if item.subject.adviser.profile_picture %}
+                            <img src="{{ item.subject.adviser.profile_picture.url }}" 
+                                 alt="{{ item.subject.adviser.name }}" 
+                                 class="rounded-circle" 
+                                 style="width: 32px; height: 32px; object-fit: cover;">
+                            {% else %}
+                            <i class="bi bi-person-circle"></i>
+                            {% endif %}
+                            <div>
+                                <strong>Adviser:</strong>
+                                <span>{{ item.subject.adviser.name }}</span>
+                            </div>
+                        </div>
+                        {% endif %}
                         
                         <div class="subject-info">
                             <i class="bi bi-person-circle"></i>
@@ -759,6 +793,23 @@
                     </div>
                     <div class="card-body">
                         <h6 class="subject-title">{{ item.subject.name }}</h6>
+                        
+                        {% if item.subject.adviser %}
+                        <div class="subject-info">
+                            {% if item.subject.adviser.profile_picture %}
+                            <img src="{{ item.subject.adviser.profile_picture.url }}" 
+                                 alt="{{ item.subject.adviser.name }}" 
+                                 class="rounded-circle" 
+                                 style="width: 32px; height: 32px; object-fit: cover;">
+                            {% else %}
+                            <i class="bi bi-person-circle"></i>
+                            {% endif %}
+                            <div>
+                                <strong>Adviser:</strong>
+                                <span>{{ item.subject.adviser.name }}</span>
+                            </div>
+                        </div>
+                        {% endif %}
                         
                         <div class="subject-info">
                             <i class="bi bi-person-circle"></i>

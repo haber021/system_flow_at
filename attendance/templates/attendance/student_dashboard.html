@@ -50,6 +50,25 @@
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
     }
     
+    .header-action-btn.active {
+        background: rgba(255, 255, 255, 0.4);
+        border-color: rgba(255, 255, 255, 0.6);
+        animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7);
+        }
+        50% {
+            box-shadow: 0 0 0 10px rgba(255, 255, 255, 0);
+        }
+    }
+    
+    .auto-reload-controls {
+        text-align: center;
+    }
+    
     /* Statistics Cards */
     .stat-card {
         border: none;
@@ -460,6 +479,17 @@
                 </div>
             </div>
         </div>
+        <div class="d-flex gap-2 mt-3 mt-md-0 align-items-center">
+            <div class="auto-reload-controls">
+                <button type="button" id="autoReloadToggle" class="btn btn-sm header-action-btn" onclick="toggleAutoReload()">
+                    <i class="bi bi-arrow-clockwise me-1"></i>
+                    <span id="autoReloadText">Enable Auto-Reload</span>
+                </button>
+                <div id="autoReloadTimer" class="text-white-50 small mt-1" style="display: none;">
+                    Next reload in: <span id="countdown">30</span>s
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -566,7 +596,12 @@
         <h5 class="mb-0">
             <i class="bi bi-calendar3 me-2"></i>Academic Calendar - {{ month_name }} {{ current_year }}
         </h5>
-        <div class="d-flex gap-2 mt-2 mt-md-0">
+        <div class="d-flex gap-2 mt-2 mt-md-0 align-items-center">
+            <select id="yearSelector" class="form-select form-select-sm" style="width: auto;" onchange="changeCalendarYear(this.value)">
+                {% for year_option in year_range %}
+                <option value="{{ year_option }}" {% if year_option == current_year %}selected{% endif %}>{{ year_option }}</option>
+                {% endfor %}
+            </select>
             <a href="?month={{ prev_month }}&year={{ prev_year }}{% if selected_subject_id %}&subject_id={{ selected_subject_id }}{% endif %}{% if date_from %}&date_from={{ date_from }}{% endif %}{% if date_to %}&date_to={{ date_to }}{% endif %}{% if academic_year %}&academic_year={{ academic_year }}{% endif %}{% if semester %}&semester={{ semester }}{% endif %}" class="btn btn-sm btn-outline-primary">
                 <i class="bi bi-chevron-left"></i> Previous
             </a>
@@ -581,7 +616,7 @@
         </div>
         
         <!-- Legend -->
-        <div class="d-flex flex-wrap gap-3 mt-3 pt-3 border-top">
+        <div class="calendar-legend d-flex flex-wrap gap-3 mt-3 pt-3 border-top">
             <div class="d-flex align-items-center gap-2">
                 <span class="badge" style="background-color: #dc3545;">
                     <i class="bi bi-calendar-x me-1"></i>Holiday
@@ -623,13 +658,15 @@
 }
 
 .calendar-day {
-    min-height: 80px;
+    min-height: 90px;
     padding: 0.5rem;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
     background-color: white;
     position: relative;
     transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
 }
 
 .calendar-day:hover {
@@ -684,20 +721,102 @@
     background-color: #6c757d;
 }
 
-@media (max-width: 768px) {
+.calendar-legend {
+    justify-content: center;
+}
+
+#calendar-container {
+    overflow: visible;
+}
+
+@media (max-width: 992px) {
     .calendar-day {
-        min-height: 60px;
-        padding: 0.25rem;
+        min-height: 70px;
+        padding: 0.4rem;
     }
     
     .calendar-day-header {
-        padding: 0.5rem 0.25rem;
+        padding: 0.6rem 0.3rem;
+        font-size: 0.8rem;
+    }
+    
+    .calendar-event-badge {
+        font-size: 0.62rem;
+        padding: 0.18rem 0.35rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .calendar-grid {
+        gap: 2px;
+    }
+    
+    .calendar-day {
+        min-height: 65px;
+        padding: 0.3rem;
+    }
+    
+    .calendar-day-header {
+        padding: 0.5rem 0.2rem;
+        font-size: 0.7rem;
+    }
+    
+    .calendar-day-number {
         font-size: 0.75rem;
     }
     
     .calendar-event-badge {
-        font-size: 0.6rem;
-        padding: 0.15rem 0.3rem;
+        font-size: 0.58rem;
+        padding: 0.15rem 0.25rem;
+        margin-top: 0.15rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .calendar-grid {
+        gap: 1px;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .calendar-day {
+        min-height: 55px;
+        padding: 0.25rem;
+    }
+    
+    .calendar-day-header {
+        padding: 0.4rem 0.1rem;
+        font-size: 0.65rem;
+    }
+    
+    .calendar-day-number {
+        font-size: 0.7rem;
+        margin-bottom: 0.15rem;
+    }
+    
+    .calendar-event-badge {
+        font-size: 0.5rem;
+        padding: 0.12rem 0.2rem;
+        margin-top: 0.1rem;
+    }
+    
+    .card-header h5 {
+        font-size: 1rem;
+    }
+    
+    .btn-sm {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .calendar-legend {
+        flex-direction: column;
+        gap: 0.75rem !important;
+        align-items: flex-start !important;
+    }
+    
+    .calendar-legend small {
+        font-size: 0.75rem;
     }
 }
 </style>
@@ -760,9 +879,9 @@ function renderCalendar(year, month, events) {
         calendarGrid.appendChild(dayElement);
     }
     
-    // Add next month's leading days
+    // Add next month's leading days to complete the grid (always show 6 weeks)
     const totalCells = calendarGrid.children.length - 7; // Subtract day headers
-    const remainingCells = 35 - totalCells; // 5 weeks * 7 days - headers
+    const remainingCells = 42 - totalCells; // 6 weeks * 7 days - current cells
     
     for (let day = 1; day <= remainingCells; day++) {
         const dayElement = createCalendarDay(day, true, false, []);
@@ -858,6 +977,136 @@ function showEventDetails(event) {
         modalElement.remove();
     });
 }
+
+function changeCalendarYear(selectedYear) {
+    // Get current URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    
+    // Update year parameter
+    urlParams.set('year', selectedYear);
+    
+    // Keep the current month or default to January
+    if (!urlParams.has('month')) {
+        urlParams.set('month', '1');
+    }
+    
+    // Redirect to updated URL
+    window.location.href = '?' + urlParams.toString();
+}
+
+// Auto-reload functionality
+let autoReloadInterval = null;
+let countdownInterval = null;
+let reloadSeconds = 30; // Reload every 30 seconds
+let currentCountdown = reloadSeconds;
+
+function toggleAutoReload() {
+    const isEnabled = localStorage.getItem('autoReloadEnabled') === 'true';
+    
+    if (isEnabled) {
+        disableAutoReload();
+    } else {
+        enableAutoReload();
+    }
+}
+
+function enableAutoReload() {
+    localStorage.setItem('autoReloadEnabled', 'true');
+    
+    // Update UI
+    document.getElementById('autoReloadText').textContent = 'Disable Auto-Reload';
+    document.getElementById('autoReloadToggle').classList.add('active');
+    document.getElementById('autoReloadTimer').style.display = 'block';
+    
+    // Start countdown
+    currentCountdown = reloadSeconds;
+    updateCountdown();
+    
+    countdownInterval = setInterval(() => {
+        currentCountdown--;
+        updateCountdown();
+        
+        if (currentCountdown <= 0) {
+            currentCountdown = reloadSeconds;
+        }
+    }, 1000);
+    
+    // Start auto-reload
+    autoReloadInterval = setInterval(() => {
+        location.reload();
+    }, reloadSeconds * 1000);
+    
+    showNotification('Auto-reload enabled. Page will refresh every ' + reloadSeconds + ' seconds.', 'success');
+}
+
+function disableAutoReload() {
+    localStorage.setItem('autoReloadEnabled', 'false');
+    
+    // Update UI
+    document.getElementById('autoReloadText').textContent = 'Enable Auto-Reload';
+    document.getElementById('autoReloadToggle').classList.remove('active');
+    document.getElementById('autoReloadTimer').style.display = 'none';
+    
+    // Clear intervals
+    if (autoReloadInterval) {
+        clearInterval(autoReloadInterval);
+        autoReloadInterval = null;
+    }
+    
+    if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+    }
+    
+    showNotification('Auto-reload disabled.', 'info');
+}
+
+function updateCountdown() {
+    document.getElementById('countdown').textContent = currentCountdown;
+}
+
+function showNotification(message, type = 'info') {
+    // Create toast notification
+    const toastHtml = `
+        <div class="toast align-items-center text-white bg-${type === 'success' ? 'success' : type === 'error' ? 'danger' : 'info'} border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi bi-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+        </div>
+    `;
+    
+    // Add to toast container or create one
+    let toastContainer = document.getElementById('toastContainer');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toastContainer';
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
+    }
+    
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    const toastElement = toastContainer.lastElementChild;
+    const toast = new bootstrap.Toast(toastElement, { delay: 3000 });
+    toast.show();
+    
+    // Remove toast element after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', () => {
+        toastElement.remove();
+    });
+}
+
+// Initialize auto-reload on page load
+document.addEventListener('DOMContentLoaded', function() {
+    if (localStorage.getItem('autoReloadEnabled') === 'true') {
+        enableAutoReload();
+    }
+});
+
 </script>
 
 <!-- Filters -->

@@ -119,8 +119,9 @@
                 <i class="bi bi-check2-square"></i> Bulk Actions
             </button>
             <ul class="dropdown-menu">
-                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#bulkMarkAttendanceModal" data-status="PRESENT">Mark Filtered as Present</a></li>
-                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#bulkMarkAttendanceModal" data-status="ABSENT">Mark Filtered as Absent</a></li>
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#bulkMarkAttendanceModal" data-status="AUTO">Auto-Mark Attendance (Present/Absent based on Time-in)</a></li>
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#bulkMarkAttendanceModal" data-status="ABSENT">Force Mark All as Absent</a></li>
+                <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#bulkMarkAttendanceModal" data-status="PRESENT_FORCE">Force Mark All as Present</a></li>
             </ul>
         </div>
         {% endif %}
@@ -482,7 +483,7 @@
                 <input type="hidden" name="action" value="bulk_mark_attendance">
                 <input type="hidden" id="bulk_attendance_status" name="status">
                 <div class="modal-body">
-                    <p>You are about to mark all <strong>{{ total_count }}</strong> filtered students as <strong id="bulk_status_display"></strong> for the selected subject.</p>
+                    <p id="bulk_action_description">You are about to mark all <strong>{{ total_count }}</strong> filtered students for the selected subject.</p>
                     <div class="mb-3">
                         <label for="bulk_subject_id" class="form-label">Subject *</label>
                         <select class="form-select" id="bulk_subject_id" name="subject_id" required>
@@ -491,7 +492,7 @@
                             <option value="{{ subject.id }}">{{ subject.code }} - {{ subject.name }}</option>
                             {% endfor %}
                         </select>
-                        <small class="text-muted">This action will apply to all students matching the current filters for the selected subject.</small>
+                        <small class="text-muted" id="bulk_hint_text">Students who timed in will be marked PRESENT. Students who did NOT time in will be marked ABSENT.</small>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -706,21 +707,29 @@ document.addEventListener('DOMContentLoaded', function() {
             const button = event.relatedTarget;
             const status = button.getAttribute('data-status');
             const modalTitle = bulkModal.querySelector('.modal-title');
-            const statusDisplay = bulkModal.querySelector('#bulk_status_display');
             const statusInput = bulkModal.querySelector('#bulk_attendance_status');
             const submitButton = bulkModal.querySelector('button[type="submit"]');
             const form = document.getElementById('bulkMarkAttendanceForm');
+            const hint = bulkModal.querySelector('#bulk_hint_text');
 
             statusInput.value = status;
-            statusDisplay.textContent = status;
-            modalTitle.textContent = 'Bulk Mark as ' + status;
 
-            if (status === 'PRESENT') {
-                submitButton.className = 'btn btn-success';
-                submitButton.textContent = 'Mark Present';
-            } else {
+            // Friendly titles and button styles per mode
+            if (status === 'ABSENT') {
+                modalTitle.textContent = 'Force Mark All as Absent';
                 submitButton.className = 'btn btn-warning';
                 submitButton.textContent = 'Mark Absent';
+                if (hint) hint.textContent = 'All filtered students enrolled in the selected subject will be marked ABSENT for today.';
+            } else if (status === 'PRESENT_FORCE') {
+                modalTitle.textContent = 'Force Mark All as Present';
+                submitButton.className = 'btn btn-success';
+                submitButton.textContent = 'Mark Present';
+                if (hint) hint.textContent = 'All filtered students enrolled in the selected subject will be marked PRESENT for today.';
+            } else {
+                modalTitle.textContent = 'Auto-Mark Attendance';
+                submitButton.className = 'btn btn-primary';
+                submitButton.textContent = 'Confirm';
+                if (hint) hint.textContent = 'Students who timed in will be marked PRESENT. Students who did NOT time in will be marked ABSENT.';
             }
 
             // Populate hidden filter inputs into the modal form

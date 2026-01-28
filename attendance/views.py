@@ -8,6 +8,7 @@ from django.http import JsonResponse, HttpResponse
 from django.utils import timezone
 from django.conf import settings as django_settings
 from django.db.models import Q, Count, Sum, F
+from django.contrib.sessions.models import Session
 from django.db import transaction, IntegrityError
 from django.core.paginator import Paginator
 from django.views.decorators.http import require_http_methods
@@ -404,6 +405,70 @@ def get_exact_active_schedule(subject, attendance_date, attendance_time, setting
     # No exact schedule match
     return None
 
+
+def get_active_schedule_with_grace(subject, attendance_date, attendance_time, settings=None):
+    """
+    Determine if a subject has a schedule active at the given time WITH grace periods.
+    - Applies early_attendance_minutes before class start
+    - Applies late_attendance_minutes after class end
+    - Prefers date-specific schedules; falls back to weekly schedules for the same weekday
+    
+    This function should be used for attendance scanning to allow students to scan
+    during the configured late attendance window.
+
+    Returns the matching SubjectSchedule or None.
+    """
+    if settings is None:
+        settings = get_cached_settings()
+
+    # If time validation is disabled globally, allow any schedule match
+    if not settings.enable_time_validation:
+        # Still require an actual schedule record if present
+        # Try date-specific first
+        day_of_week = attendance_date.weekday()
+        date_schedules = SubjectSchedule.objects.filter(subject=subject, date=attendance_date).order_by('time_start')
+        if date_schedules.exists():
+            schedules = date_schedules
+        else:
+            schedules = SubjectSchedule.objects.filter(subject=subject, day_of_week=day_of_week, date__isnull=True).order_by('time_start')
+        attendance_datetime = make_aware_datetime(attendance_date, attendance_time)
+        for schedule in schedules:
+            start_dt = make_aware_datetime(attendance_date, schedule.time_start)
+            end_dt = make_aware_datetime(attendance_date, schedule.time_end)
+            # Apply grace periods even when validation is disabled
+            early_start_dt = start_dt - timedelta(minutes=settings.early_attendance_minutes)
+            late_end_dt = end_dt + timedelta(minutes=settings.late_attendance_minutes)
+            if early_start_dt <= attendance_datetime <= late_end_dt:
+                return schedule
+        return None
+
+    # Strict semester boundaries if configured
+    settings_obj = SystemSettings.get_settings()
+    if settings_obj.semester_start_date and settings_obj.semester_end_date:
+        if attendance_date < settings_obj.semester_start_date or attendance_date > settings_obj.semester_end_date:
+            return None
+
+    # Determine schedules for date or weekday
+    day_of_week = attendance_date.weekday()
+    date_schedules = SubjectSchedule.objects.filter(subject=subject, date=attendance_date).order_by('time_start')
+    if date_schedules.exists():
+        schedules = date_schedules
+    else:
+        schedules = SubjectSchedule.objects.filter(subject=subject, day_of_week=day_of_week, date__isnull=True).order_by('time_start')
+
+    attendance_datetime = make_aware_datetime(attendance_date, attendance_time)
+    for schedule in schedules:
+        start_dt = make_aware_datetime(attendance_date, schedule.time_start)
+        end_dt = make_aware_datetime(attendance_date, schedule.time_end)
+        # Apply grace periods: early_attendance_minutes before start, late_attendance_minutes after end
+        early_start_dt = start_dt - timedelta(minutes=settings.early_attendance_minutes)
+        late_end_dt = end_dt + timedelta(minutes=settings.late_attendance_minutes)
+        if early_start_dt <= attendance_datetime <= late_end_dt:
+            return schedule
+
+    # No schedule match even with grace periods
+    return None
+
 def validate_attendance_time(subject, attendance_date, attendance_time, settings=None):
     """
     Validate if attendance is allowed at the given date and time.
@@ -572,29 +637,47 @@ def login_view(request):
                 pass
         
         if user is not None:
-            login(request, user)
-            # Check if user is a student and redirect accordingly
-            if hasattr(user, 'student_profile'):
-                messages.success(request, f"Welcome, {user.student_profile.name}!")
-                return redirect('student_dashboard')
-            # Check if user is an adviser (not staff/admin and has assigned students)
-            elif not (user.is_staff or user.is_superuser):
-                if hasattr(user, 'adviser_profile'):
-                    has_assigned_students = Student.objects.filter(adviser=user.adviser_profile).exists()
-                    adviser_name = user.adviser_profile.name
-                    if has_assigned_students:
-                        messages.success(request, f"Welcome, {adviser_name}!")
-                        return redirect('scan')
+            # Check if user already has an active session on another device
+            active_sessions = Session.objects.filter(expire_date__gte=timezone.now())
+            user_has_active_session = False
+            
+            for session in active_sessions:
+                try:
+                    session_data = session.get_decoded()
+                    if session_data.get('_auth_user_id') == str(user.id):
+                        user_has_active_session = True
+                        break
+                except Exception:
+                    continue
+            
+            if user_has_active_session:
+                # Prevent login if account is already active on another device
+                messages.error(request, "Your account is open on another device. Please logout from the other device first.")
+            else:
+                # Allow login if no active session exists
+                login(request, user)
+                # Check if user is a student and redirect accordingly
+                if hasattr(user, 'student_profile'):
+                    messages.success(request, f"Welcome, {user.student_profile.name}!")
+                    return redirect('student_dashboard')
+                # Check if user is an adviser (not staff/admin and has assigned students)
+                elif not (user.is_staff or user.is_superuser):
+                    if hasattr(user, 'adviser_profile'):
+                        has_assigned_students = Student.objects.filter(adviser=user.adviser_profile).exists()
+                        adviser_name = user.adviser_profile.name
+                        if has_assigned_students:
+                            messages.success(request, f"Welcome, {adviser_name}!")
+                            return redirect('scan')
+                        else:
+                            messages.success(request, f"Welcome, {adviser_name}!")
+                            return redirect('dashboard')
                     else:
-                        messages.success(request, f"Welcome, {adviser_name}!")
+                        messages.success(request, f"Welcome, {user.get_full_name() or user.username}!")
                         return redirect('dashboard')
                 else:
+                    # Admin/Staff user
                     messages.success(request, f"Welcome, {user.get_full_name() or user.username}!")
                     return redirect('dashboard')
-            else:
-                # Admin/Staff user
-                messages.success(request, f"Welcome, {user.get_full_name() or user.username}!")
-                return redirect('dashboard')
         else:
             messages.error(request, "Invalid username/employee ID or password.")
     
@@ -1062,35 +1145,121 @@ def student_list(request):
             enrolled_student_ids = StudentSubject.objects.filter(subject=subject).values_list('student_id', flat=True)
             target_students = students_to_update.filter(id__in=enrolled_student_ids)
 
-            today = get_manila_now().date()
-            updated_count, created_count = 0, 0
+            # Determine schedule context for today for the selected subject
+            now_dt = get_manila_now()
+            today = now_dt.date()
+            now_time = now_dt.time()
+            day_of_week = today.weekday()
+            schedules_today = SubjectSchedule.objects.filter(subject=subject, date=today).order_by('time_start')
+            if not schedules_today.exists():
+                schedules_today = SubjectSchedule.objects.filter(
+                    subject=subject, date__isnull=True, day_of_week=day_of_week
+                ).order_by('time_start')
+
+            selected_schedule = None
+            if schedules_today.exists():
+                covering = None
+                upcoming = None
+                last_slot = None
+                for sch in schedules_today:
+                    if sch.time_start <= now_time <= sch.time_end:
+                        covering = sch
+                        break
+                    if now_time < sch.time_start and upcoming is None:
+                        upcoming = sch
+                    last_slot = sch
+                selected_schedule = covering or upcoming or last_slot
+
+            def build_present_defaults():
+                if selected_schedule:
+                    ti = selected_schedule.time_start
+                    to = selected_schedule.time_end if now_time >= selected_schedule.time_end else None
+                    return {'status': 'PRESENT', 'time_in': ti, 'time_out': to}
+                if getattr(subject, 'schedule_time_start', None) and getattr(subject, 'schedule_time_end', None):
+                    ti = subject.schedule_time_start
+                    to = subject.schedule_time_end if now_time >= subject.schedule_time_end else None
+                    return {'status': 'PRESENT', 'time_in': ti, 'time_out': to}
+                return {'status': 'PRESENT'}
+            updated_count, created_count, absent_count, present_count = 0, 0, 0, 0
 
             with transaction.atomic():
                 for student in target_students:
-                    defaults = {'status': status}
+                    # If status is ABSENT, force all to absent
                     if status == 'ABSENT':
-                        defaults['time_in'], defaults['time_out'] = None, None
-                    elif status == 'PRESENT':
-                        # Get schedule for today to set time_in and time_out
-                        day_of_week = today.weekday()
-                        schedule = SubjectSchedule.objects.filter(
+                        defaults = {
+                            'status': 'ABSENT',
+                            'time_in': None,
+                            'time_out': None
+                        }
+                        obj, created = Attendance.objects.update_or_create(
+                            student=student,
                             subject=subject,
-                            day_of_week=day_of_week,
-                            date__isnull=True
+                            date=today,
+                            defaults=defaults
+                        )
+                        absent_count += 1
+                    # If status requests to force present, override to PRESENT for everyone
+                    elif status == 'PRESENT_FORCE':
+                        defaults = build_present_defaults()
+                        obj, created = Attendance.objects.update_or_create(
+                            student=student,
+                            subject=subject,
+                            date=today,
+                            defaults=defaults
+                        )
+                        present_count += 1
+                    else:
+                        # Auto-mode: Check if student already has an attendance record with time_in
+                        existing_attendance = Attendance.objects.filter(
+                            student=student,
+                            subject=subject,
+                            date=today
                         ).first()
+                        
+                        # Determine actual status based on whether student timed in
+                        if existing_attendance and existing_attendance.time_in:
+                            # Student has timed in - mark as PRESENT
+                            defaults = {'status': 'PRESENT'}
+                            # Keep existing time_in and time_out
+                            if existing_attendance.time_out:
+                                defaults['time_out'] = existing_attendance.time_out
+                            present_count += 1
+                        else:
+                            # Student did NOT time in - mark as ABSENT
+                            defaults = {
+                                'status': 'ABSENT',
+                                'time_in': None,
+                                'time_out': None
+                            }
+                            absent_count += 1
+                        obj, created = Attendance.objects.update_or_create(
+                            student=student,
+                            subject=subject,
+                            date=today,
+                            defaults=defaults
+                        )
 
-                        if schedule:
-                            defaults['time_in'] = schedule.time_start
-                            defaults['time_out'] = schedule.time_end
-                        elif subject.schedule_time_start and subject.schedule_time_end:
-                            defaults['time_in'] = subject.schedule_time_start
-                            defaults['time_out'] = subject.schedule_time_end
-                        # If no schedule found, leave time_in and time_out as None (existing behavior)
-                    _, created = Attendance.objects.update_or_create(student=student, subject=subject, date=today, defaults=defaults)
-                    if created: created_count += 1
-                    else: updated_count += 1
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
             
-            messages.success(request, f"Bulk action for {target_students.count()} student(s) completed. {created_count} created, {updated_count} updated.")
+            if status == 'ABSENT':
+                messages.success(
+                    request, 
+                    f"Bulk action completed: {absent_count} student(s) marked ABSENT. "
+                    f"Total: {created_count} created, {updated_count} updated."
+                )
+            else:
+                messages.success(
+                    request,
+                    (
+                        "Bulk action completed: "
+                        + (f"{present_count} marked PRESENT. " if status == 'PRESENT_FORCE' else f"{present_count} marked PRESENT (timed in), ")
+                        + f"{absent_count} marked ABSENT" + (" (did not time in). " if status != 'PRESENT_FORCE' else ". ")
+                        + f"Total: {created_count} created, {updated_count} updated."
+                    )
+                )
             return redirect(request.get_full_path())
     # Get search parameters
     search_query = request.GET.get('search', '').strip()
@@ -3098,14 +3267,40 @@ def scan_view(request):
                                 # If parsing fails, use current time
                                 scan_time = now_time
                     
-                    # Determine strict schedule active at this exact time
-                    schedule = get_exact_active_schedule(subject, attendance_date, scan_time, settings)
+                    # Determine schedule active at this time WITH grace periods (early + late attendance)
+                    schedule = get_active_schedule_with_grace(subject, attendance_date, scan_time, settings)
 
-                    # Enforce strict schedule: disallow scans if no exact active schedule
+                    # Enforce schedule requirement: disallow scans if no active schedule (including grace periods)
                     if not schedule:
                         day_of_week = attendance_date.weekday()
                         day_name = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][day_of_week]
-                        messages.error(request, f"✗ Attendance not allowed. {subject.code} has no active schedule at {scan_time.strftime('%I:%M %p')} on {day_name}.")
+                        
+                        # Get all schedules for this day to show in error message
+                        schedules_for_day = SubjectSchedule.objects.filter(
+                            subject=subject,
+                            day_of_week=day_of_week,
+                            date__isnull=True
+                        ).order_by('time_start')
+                        
+                        if schedules_for_day.exists():
+                            schedule_info = []
+                            for sched in schedules_for_day:
+                                start_dt = make_aware_datetime(attendance_date, sched.time_start)
+                                end_dt = make_aware_datetime(attendance_date, sched.time_end)
+                                early_start = (start_dt - timedelta(minutes=settings.early_attendance_minutes)).time()
+                                late_end = (end_dt + timedelta(minutes=settings.late_attendance_minutes)).time()
+                                schedule_info.append(
+                                    f"{sched.time_start.strftime('%I:%M %p')} - {sched.time_end.strftime('%I:%M %p')} "
+                                    f"(Allowed: {early_start.strftime('%I:%M %p')} - {late_end.strftime('%I:%M %p')})"
+                                )
+                            schedule_str = " | ".join(schedule_info)
+                            messages.error(
+                                request, 
+                                f"✗ Attendance not allowed. {subject.code} has no active schedule at {scan_time.strftime('%I:%M %p')} on {day_name}. "
+                                f"Valid time windows: {schedule_str}"
+                            )
+                        else:
+                            messages.error(request, f"✗ Attendance not allowed. {subject.code} has no schedule configured for {day_name}.")
                         return redirect(reverse('scan'))
 
                     # Check if student already has both time_in and time_out recorded for this exact schedule today
@@ -3145,8 +3340,9 @@ def scan_view(request):
                         existing_attendance, created = Attendance.objects.select_for_update().get_or_create(
                             **get_or_create_kwargs,
                             defaults={
-                                'time': stored_time,
-                                'time_in': stored_time,
+                                'time': stored_time,  # Actual scan time
+                                'time_in': stored_time,  # Actual scan time for check-in
+                                'time_out': None,  # Initially no time-out
                                 'status': 'PRESENT'
                             }
                         )
@@ -3164,41 +3360,67 @@ def scan_view(request):
                             time_diff = scan_datetime - start_datetime
                             minutes_late = time_diff.total_seconds() / 60
                             
-                            # If grace_period_minutes or more late, mark as LATE
-                            if minutes_late >= settings.grace_period_minutes:
-                                status = 'LATE'
+                            # Enhanced late determination using both grace_period and late_threshold settings
+                            # - Within grace_period_minutes: PRESENT
+                            # - Between grace_period and late_threshold_minutes: LATE
+                            # - Beyond late_threshold_minutes: ABSENT (too late)
+                            if minutes_late > settings.late_threshold_minutes:
+                                status = 'ABSENT'  # Too late, marked as absent
+                            elif minutes_late > settings.grace_period_minutes:
+                                status = 'LATE'  # Late but within acceptable threshold
                             else:
-                                status = 'PRESENT'
+                                status = 'PRESENT'  # On time or within grace period
                         
-                        # Check if this should be a time-out or time-in update
+                        # Pre-calculate timeout validity once
+                        is_timeout_valid, timeout_error = validate_timeout_time(
+                            subject, attendance_date, scan_time, schedule, settings
+                        )
+
+                        # Check if this should be a time-out or a combined one-tap time-out update
                         should_do_timeout = False
-                        if not created and existing_attendance.time_out is None:
-                            # Student has an existing time-in without time_out
-                            # Check if this is a valid time-out attempt
-                            is_timeout_valid, timeout_error = validate_timeout_time(
-                                subject, attendance_date, scan_time, schedule, settings
-                            )
-                            
+
+                        # Case 1: Existing record with time_in, no time_out yet -> normal time-out
+                        if not created and existing_attendance.time_out is None and existing_attendance.time_in is not None:
                             if is_timeout_valid:
                                 should_do_timeout = True
-                        
-                        if should_do_timeout:
-                            # Valid time-out - student is checking out
-                            # Prefer using the scheduled class end time as the time-out when available
-                            class_end_time = None
-                            if schedule and getattr(schedule, 'time_end', None):
-                                class_end_time = schedule.time_end
-                            elif subject.schedule_time_end:
-                                class_end_time = subject.schedule_time_end
-                            else:
-                                class_end_time = getattr(settings, 'class_end_time', None)
 
-                            time_out_to_set = class_end_time if class_end_time else stored_time
+                        # Case 2: One-tap time-out has been DISABLED
+                        # Students must explicitly scan again to time-out
+                        # Do NOT automatically create time-out on first scan
+                        one_tap_timeout = False
+                        
+                        if should_do_timeout or one_tap_timeout:
+                            # Valid time-out - student is checking out
+                            # Use actual scan time for time_out (not scheduled time)
+                            time_out_to_set = stored_time
 
                             # Only update if time_out is not already set or if new time is different
                             if existing_attendance.time_out is None or existing_attendance.time_out != time_out_to_set:
+                                # For one-tap timeout, ensure time_in is set (defaults already set on created)
+                                if existing_attendance.time_in is None:
+                                    existing_attendance.time_in = stored_time
                                 existing_attendance.time_out = time_out_to_set
-                                existing_attendance.save(update_fields=['time_out'])
+                                
+                                # Recalculate status based on time_in (not current scan time)
+                                # If student has both time_in and time_out, they attended the class
+                                timeout_status = 'PRESENT'
+                                if class_start and existing_attendance.time_in:
+                                    timein_datetime = make_aware_datetime(attendance_date, existing_attendance.time_in)
+                                    start_datetime = make_aware_datetime(attendance_date, class_start)
+                                    time_diff = timein_datetime - start_datetime
+                                    minutes_late = time_diff.total_seconds() / 60
+                                    
+                                    # Student attended (has both time_in and time_out)
+                                    # They should be PRESENT or LATE, never ABSENT
+                                    if minutes_late > settings.late_threshold_minutes:
+                                        timeout_status = 'LATE'  # Very late but attended
+                                    elif minutes_late > settings.grace_period_minutes:
+                                        timeout_status = 'LATE'  # Late but within threshold
+                                    else:
+                                        timeout_status = 'PRESENT'  # On time
+                                
+                                existing_attendance.status = timeout_status
+                                existing_attendance.save(update_fields=['time_in', 'time_out', 'status'])
                                 time_in_str = existing_attendance.time_in.strftime('%I:%M %p') if existing_attendance.time_in else 'N/A'
                                 time_out_str = existing_attendance.time_out.strftime('%I:%M %p')
                                 messages.success(request, f"✓ Time Out recorded! {student.name} - Time In: {time_in_str}, Time Out: {time_out_str}")
@@ -3274,8 +3496,9 @@ def scan_view(request):
                                 )
                             else:
                                 # Only set time-in when it has not been recorded yet
+                                # Use actual scan time for time_in
                                 existing_attendance.time = stored_time  # Keep for backward compatibility
-                                existing_attendance.time_in = stored_time
+                                existing_attendance.time_in = stored_time  # Record actual scan time
                                 existing_attendance.status = status
                                 existing_attendance.save(update_fields=['time', 'time_in', 'status'])
                                 time_in_str = stored_time.strftime('%I:%M %p')
@@ -4541,13 +4764,39 @@ def semester_reset(request):
 # User Profile
 @login_required
 def profile_view(request):
+    # Check if user has an adviser profile
+    adviser = None
+    try:
+        adviser = request.user.adviser_profile
+    except:
+        pass
+    
     if request.method == 'POST':
         if 'update_profile' in request.POST:
             request.user.first_name = request.POST.get('first_name', '')
             request.user.last_name = request.POST.get('last_name', '')
             request.user.email = request.POST.get('email', '')
             request.user.save()
-            messages.success(request, "Profile updated successfully!")
+            
+            # Update adviser profile if exists
+            if adviser:
+                adviser.name = request.POST.get('adviser_name', adviser.name)
+                adviser.department = request.POST.get('department', adviser.department)
+                
+                # Handle profile picture upload
+                if 'profile_picture' in request.FILES:
+                    adviser.profile_picture = request.FILES['profile_picture']
+                
+                adviser.save()
+                messages.success(request, "Profile updated successfully!")
+            else:
+                messages.success(request, "Profile updated successfully!")
+        
+        elif 'remove_picture' in request.POST:
+            if adviser and adviser.profile_picture:
+                adviser.profile_picture.delete()
+                adviser.save()
+                messages.success(request, "Profile picture removed successfully!")
         
         elif 'change_password' in request.POST:
             old_password = request.POST.get('old_password')
@@ -4566,7 +4815,10 @@ def profile_view(request):
                 messages.success(request, "Password changed successfully!")
                 return redirect('login')
     
-    return render(request, 'attendance/profile.html')
+    context = {
+        'adviser': adviser,
+    }
+    return render(request, 'attendance/profile.html', context)
 
 # Real-time Monitoring
 @login_required
@@ -4788,11 +5040,16 @@ def mobile_scan(request):
                                         time_diff = scan_datetime - start_datetime
                                         minutes_late = time_diff.total_seconds() / 60
 
-                                        # If grace_period_minutes or more late, mark as LATE
-                                        if minutes_late >= settings.grace_period_minutes:
-                                            status = 'LATE'
+                                        # Enhanced late determination using both grace_period and late_threshold settings
+                                        # - Within grace_period_minutes: PRESENT
+                                        # - Between grace_period and late_threshold_minutes: LATE
+                                        # - Beyond late_threshold_minutes: ABSENT (too late)
+                                        if minutes_late > settings.late_threshold_minutes:
+                                            status = 'ABSENT'  # Too late, marked as absent
+                                        elif minutes_late > settings.grace_period_minutes:
+                                            status = 'LATE'  # Late but within acceptable threshold
                                         else:
-                                            status = 'PRESENT'
+                                            status = 'PRESENT'  # On time or within grace period
 
                                         # Check if this should be a time-out or time-in update
                                         should_do_timeout = False
@@ -5131,11 +5388,29 @@ def student_login(request):
                 
                 # Check if student has a linked user account
                 if student.user:
-                    # Log in the student using their linked user account
+                    # Check if user already has an active session on another device
                     user = student.user
-                    login(request, user)
-                    messages.success(request, f"Welcome, {student.name}!")
-                    return redirect('student_history')
+                    active_sessions = Session.objects.filter(expire_date__gte=timezone.now())
+                    user_has_active_session = False
+                    
+                    for session in active_sessions:
+                        try:
+                            session_data = session.get_decoded()
+                            if session_data.get('_auth_user_id') == str(user.id):
+                                user_has_active_session = True
+                                break
+                        except Exception:
+                            continue
+                    
+                    if user_has_active_session:
+                        # Prevent login if account is already active on another device
+                        messages.error(request, "Your account is open on another device. Please logout from the other device first.")
+                        return render(request, 'attendance/student_login.html')
+                    else:
+                        # Log in the student using their linked user account
+                        login(request, user)
+                        messages.success(request, f"Welcome, {student.name}!")
+                        return redirect('student_history')
                 else:
                     # Automatically create a user account for the student
                     try:
@@ -5206,7 +5481,12 @@ def student_dashboard(request):
     past_week_start = today - timedelta(days=7)
     
     # Get all attendances for this student
-    attendances = filter_current_year_attendance(Attendance.objects.filter(student=student).select_related('subject'), request)
+    # Don't pass request to avoid month/year navigation interfering with academic year filtering
+    attendances = Attendance.objects.filter(
+        student=student,
+        academic_year=academic_year,
+        is_archived=False
+    ).select_related('subject')
     
     # Filter by subject if provided
     if subject_id:
@@ -5389,6 +5669,9 @@ def student_dashboard(request):
         )
     calendar_events = calendar_events.order_by('date')
     
+    # Generate year range for dropdown (current year ± 5 years)
+    year_range = list(range(current_year - 5, current_year + 6))
+    
     # Prepare calendar data for template
     calendar_data = []
     for event in calendar_events:
@@ -5436,6 +5719,7 @@ def student_dashboard(request):
         'prev_year': prev_year,
         'next_month': next_month,
         'next_year': next_year,
+        'year_range': year_range,
     }
     return render(request, 'attendance/student_dashboard.html', context)
 
@@ -5647,7 +5931,7 @@ def student_enroll_subjects(request):
     
     # Get all active subjects for the selected semester with prefetched schedules
     # Filter by student's section - ONLY show subjects assigned to their specific section
-    all_subjects = Subject.objects.filter(is_active=True, semester=semester).prefetch_related('schedules')
+    all_subjects = Subject.objects.filter(is_active=True, semester=semester).select_related('adviser', 'instructor').prefetch_related('schedules')
     
     # Check if student is regular or irregular
     if not student.is_regular:
@@ -5665,19 +5949,19 @@ def student_enroll_subjects(request):
         all_subjects = all_subjects.order_by('code')
     
     # Get enrolled subject IDs for current academic year and semester
-    enrolled_subject_ids = StudentSubject.objects.filter(
+    enrolled_subject_ids = list(StudentSubject.objects.filter(
         student=student,
         academic_year=academic_year,
         semester=semester
-    ).values_list('subject_id', flat=True)
+    ).values_list('subject_id', flat=True))
     
     # Get pending request subject IDs
-    pending_subject_ids = EnrollmentRequest.objects.filter(
+    pending_subject_ids = list(EnrollmentRequest.objects.filter(
         student=student,
         academic_year=academic_year,
         semester=semester,
         status='PENDING'
-    ).values_list('subject_id', flat=True)
+    ).values_list('subject_id', flat=True))
     
     # Prepare subject data separated by status
     enrolled_subjects = []
@@ -5970,6 +6254,16 @@ def student_profile_view(request):
             cropped_image_data = request.POST.get('cropped_image')
             profile_picture = request.FILES.get('profile_picture')
 
+            try:
+                logger.info(
+                    "Student profile upload POST received | student_id=%s has_cropped=%s has_file=%s",
+                    student.id,
+                    bool(cropped_image_data),
+                    bool(profile_picture),
+                )
+            except Exception:
+                pass
+
             # Prefer cropped image data if provided
             if cropped_image_data:
                 try:
@@ -5995,43 +6289,70 @@ def student_profile_view(request):
                         )
                 except Exception as exc:
                     logger.exception("Failed to decode cropped image", exc_info=exc)
-                    messages.error(request, "Could not process cropped image. Please try again.")
-                    profile_picture = None
+                    # Fall back to original uploaded file if available
+                    fallback_file = request.FILES.get('profile_picture')
+                    if fallback_file:
+                        messages.warning(request, "Could not process cropped image. Using original upload instead.")
+                        profile_picture = fallback_file
+                    else:
+                        messages.error(request, "Could not process cropped image. Please try again.")
+                        profile_picture = None
 
             if profile_picture:
                 # Validate file size (max 5MB)
                 if profile_picture.size > 5 * 1024 * 1024:
                     messages.error(request, "Image size must be less than 5MB.")
+                    return redirect('student_profile')
                 else:
                     # Validate file type
-                    allowed_types = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif']
+                    allowed_types = [
+                        'image/jpeg', 'image/jpg', 'image/pjpeg',  # jpeg variants
+                        'image/png', 'image/x-png',                 # png variants
+                        'image/gif'
+                    ]
                     if profile_picture.content_type not in allowed_types:
                         messages.error(request, "Please upload a valid image file (JPEG, PNG, or GIF).")
+                        return redirect('student_profile')
                     else:
-                        # Store old profile picture path BEFORE assigning new one
-                        old_picture_path = None
-                        if student.profile_picture:
-                            try:
-                                old_picture_path = student.profile_picture.path
-                            except Exception:
-                                pass
+                        try:
+                            # Store old profile picture path BEFORE assigning new one
+                            old_picture_path = None
+                            if student.profile_picture:
+                                try:
+                                    old_picture_path = student.profile_picture.path
+                                except Exception:
+                                    pass
+                            
+                            # Assign the new profile picture
+                            student.profile_picture = profile_picture
+                            
+                            # Save the student instance (this will trigger optimization in model's save method)
+                            student.save()
+                            
+                            # Refresh from database to ensure we have the latest state
+                            student.refresh_from_db()
+                            
+                            # Delete old profile picture AFTER saving new one to prevent duplicates
+                            if old_picture_path and os.path.isfile(old_picture_path):
+                                try:
+                                    # Make sure we're not deleting the newly uploaded file
+                                    current_path = student.profile_picture.path if student.profile_picture else None
+                                    if old_picture_path != current_path:
+                                        os.remove(old_picture_path)
+                                        logger.info(f"Deleted old profile picture: {old_picture_path}")
+                                except Exception as e:
+                                    logger.warning(f"Failed to delete old profile picture: {e}")
+                            
+                            messages.success(request, "Profile picture uploaded successfully!")
+                            logger.info(f"Profile picture updated for student {student.id}: {student.profile_picture.name if student.profile_picture else 'None'}")
+                        except Exception as e:
+                            logger.exception(f"Error uploading profile picture for student {student.id}: {str(e)}")
+                            messages.error(request, f"Failed to upload profile picture. Please try again.")
                         
-                        # Assign and save the new profile picture
-                        student.profile_picture = profile_picture
-                        student.save()
-                        
-                        # Delete old profile picture AFTER saving new one to prevent duplicates
-                        if old_picture_path and os.path.isfile(old_picture_path):
-                            try:
-                                os.remove(old_picture_path)
-                                logger.info(f"Deleted old profile picture: {old_picture_path}")
-                            except Exception as e:
-                                logger.warning(f"Failed to delete old profile picture: {e}")
-                        
-                        messages.success(request, "Profile picture uploaded successfully!")
                         return redirect('student_profile')
             else:
                 messages.error(request, "Please select an image file.")
+                return redirect('student_profile')
         
         elif 'remove_picture' in request.POST:
             if student.profile_picture:
@@ -6101,8 +6422,13 @@ def student_profile_view(request):
             student.save()
             return redirect('student_profile')
     
+    # Add cache buster for profile picture to prevent browser caching issues
+    import time
+    cache_buster = int(time.time())
+    
     context = {
         'student': student,
+        'cache_buster': cache_buster,
     }
     return render(request, 'attendance/student_profile.html', context)
 
@@ -6512,13 +6838,16 @@ def adviser_enrollment_requests(request):
             status='PENDING'
         ).select_related('student', 'subject').order_by('-requested_at')
     else:
-        # Regular users (advisers): show enrollment requests only for subjects where instructor belongs to this adviser
+        # Regular users (advisers): show requests for their assigned students OR subjects under their scope
         if hasattr(request.user, 'adviser_profile'):
             adviser = request.user.adviser_profile
-            # Show requests where subject's instructor belongs to this adviser
+            # Accessible if: student's adviser is this adviser OR subject's instructor/adviser is this adviser
             enrollment_requests = EnrollmentRequest.objects.filter(
-                status='PENDING',
-                subject__instructor__adviser=adviser
+                status='PENDING'
+            ).filter(
+                Q(student__adviser=adviser) |
+                Q(subject__instructor__adviser=adviser) |
+                Q(subject__adviser=adviser)
             ).select_related('student', 'subject', 'subject__instructor', 'subject__instructor__adviser').order_by('-requested_at')
         else:
             enrollment_requests = EnrollmentRequest.objects.none()
@@ -6570,8 +6899,11 @@ def adviser_enrollment_requests(request):
                     adviser = request.user.adviser_profile
                     accessible_requests = EnrollmentRequest.objects.filter(
                         id__in=selected_ids,
-                        status='PENDING',
-                        subject__instructor__adviser=adviser
+                        status='PENDING'
+                    ).filter(
+                        Q(student__adviser=adviser) |
+                        Q(subject__instructor__adviser=adviser) |
+                        Q(subject__adviser=adviser)
                     ).select_related('student', 'subject', 'subject__instructor', 'subject__instructor__adviser')
                     print(f"[BULK APPROVE DEBUG] Adviser '{adviser.name}' - Found {accessible_requests.count()} pending requests")
                 else:
@@ -6598,15 +6930,20 @@ def adviser_enrollment_requests(request):
                 try:
                     print(f"[{idx}/{total_requests}] Processing: {enrollment_request.student.name} - {enrollment_request.subject.code}")
                     
-                    # Validate instructor relationship for non-staff users
-                    # Request should be accessible if subject's instructor belongs to this adviser
+                    # Validate access for non-staff users
+                    # Allow approval if the student is assigned to this adviser OR
+                    # the subject belongs to/instructor under this adviser
                     if not (request.user.is_staff or request.user.is_superuser):
                         if hasattr(request.user, 'adviser_profile'):
                             adviser = request.user.adviser_profile
                             subject = enrollment_request.subject
-                            # Check if subject's instructor belongs to this adviser
-                            if not subject.instructor or subject.instructor.adviser != adviser:
-                                print(f"  ✗ Error: Subject instructor does not belong to adviser {adviser.name}")
+                            student_ok = enrollment_request.student.adviser == adviser
+                            subject_ok = (
+                                (subject.instructor and subject.instructor.adviser == adviser) or
+                                (subject.adviser == adviser)
+                            )
+                            if not (student_ok or subject_ok):
+                                print(f"  ✗ Error: Request not under adviser {adviser.name}'s scope")
                                 failed_count += 1
                                 continue
                     
@@ -6679,13 +7016,16 @@ def adviser_enrollment_requests(request):
                     status='PENDING'
                 )
             else:
-                # For regular users (advisers), filter by subject's instructor's adviser
+                # For regular users (advisers), allow if student's adviser matches OR subject is under their scope
                 if hasattr(request.user, 'adviser_profile'):
                     adviser = request.user.adviser_profile
                     enrollment_request = EnrollmentRequest.objects.filter(
                         id=request_id,
-                        status='PENDING',
-                        subject__instructor__adviser=adviser
+                        status='PENDING'
+                    ).filter(
+                        Q(student__adviser=adviser) |
+                        Q(subject__instructor__adviser=adviser) |
+                        Q(subject__adviser=adviser)
                     ).select_related('student', 'subject', 'subject__instructor', 'subject__instructor__adviser').first()
                 else:
                     enrollment_request = None
@@ -6758,7 +7098,9 @@ def adviser_enrollment_requests(request):
         if hasattr(request.user, 'adviser_profile'):
             adviser = request.user.adviser_profile
             stats_base = EnrollmentRequest.objects.filter(
-                subject__instructor__adviser=adviser
+                Q(student__adviser=adviser) |
+                Q(subject__instructor__adviser=adviser) |
+                Q(subject__adviser=adviser)
             )
         else:
             stats_base = EnrollmentRequest.objects.none()
@@ -7116,10 +7458,11 @@ def adviser_absent_students(request):
 @login_required
 @require_http_methods(["POST"])
 def adviser_mark_absences_present(request):
-    """Mark selected absent attendance records as PRESENT (same-day only).
+    """Mark students present, excluding those who already timed in during active class time.
 
     - Limits scope to adviser's subjects unless staff/superuser.
-    - Only updates records dated today (Manila) to avoid backdating silently.
+    - Marks ALL students as PRESENT EXCEPT those who have already timed in (who already attended).
+    - If specific attendance IDs are selected, only those are updated.
     """
     # Determine allowed subjects for this user
     if request.user.is_staff or request.user.is_superuser:
@@ -7139,50 +7482,65 @@ def adviser_mark_absences_present(request):
     except Exception:
         selected_ids = []
 
-    if not selected_ids:
-        messages.warning(request, "No absences selected.")
-        return redirect(request.META.get('HTTP_REFERER') or reverse('adviser_absent_students'))
-
     today_manila = get_manila_now().date()
     allow_past = request.POST.get('allow_past') == '1'
 
-    # Limit to ABSENT and allowed subjects; date filter only if not overriding past
-    filter_kwargs = {
-        'id__in': selected_ids,
-        'status': 'ABSENT',
-        'subject_id__in': allowed_subjects,
-    }
-    if not allow_past:
-        filter_kwargs['date'] = today_manila
-
-    qs = Attendance.objects.filter(**filter_kwargs)
+    # Determine which records to update
+    if selected_ids:
+        # If specific IDs are selected, mark those present
+        filter_kwargs = {
+            'id__in': selected_ids,
+            'subject_id__in': allowed_subjects,
+        }
+        if not allow_past:
+            filter_kwargs['date'] = today_manila
+        
+        qs = Attendance.objects.filter(**filter_kwargs)
+    else:
+        # No selection: mark ALL students as PRESENT EXCEPT those who already timed in
+        target_date = today_manila
+        filter_kwargs = {
+            'date': target_date,
+            'subject_id__in': allowed_subjects,
+            'time_in__isnull': True,  # Only students who have NOT timed in
+        }
+        qs = Attendance.objects.filter(**filter_kwargs)
+        
+        if not qs.exists():
+            messages.warning(request, "No students without time-in records found for today.")
+            return redirect(request.META.get('HTTP_REFERER') or reverse('adviser_absent_students'))
 
     updated_count = 0
     now_time = get_manila_now().time()
     with transaction.atomic():
         for att in qs.select_for_update():
-            att.status = 'PRESENT'
-            # Set time_in for audit trail; keep legacy time aligned if empty
-            if not att.time_in:
-                att.time_in = now_time
-            if not att.time:
-                att.time = att.time_in or now_time
-            # Append a short note
-            if allow_past:
-                note_suffix = f"Marked PRESENT override on {today_manila.isoformat()}"
-            else:
-                note_suffix = f"Marked present by adviser on {today_manila.isoformat()}"
-            att.notes = (att.notes + "\n" if att.notes else "") + note_suffix
-            att.save(update_fields=['status', 'time_in', 'time', 'notes'])
-            updated_count += 1
+            # Only update if not already present
+            if att.status != 'PRESENT':
+                att.status = 'PRESENT'
+                # Set time_in for audit trail if not set; keep legacy time aligned if empty
+                if not att.time_in:
+                    att.time_in = now_time
+                if not att.time:
+                    att.time = att.time_in or now_time
+                # Append a short note
+                if allow_past:
+                    note_suffix = f"Marked PRESENT override on {today_manila.isoformat()}"
+                else:
+                    note_suffix = f"Marked present by adviser on {today_manila.isoformat()}"
+                att.notes = (att.notes + "\n" if att.notes else "") + note_suffix
+                att.save(update_fields=['status', 'time_in', 'time', 'notes'])
+                updated_count += 1
 
     if updated_count:
-        if allow_past:
-            messages.success(request, f"Updated {updated_count} record(s) to PRESENT (past-date override).")
+        if selected_ids:
+            messages.success(request, f"Updated {updated_count} selected record(s) to PRESENT.")
         else:
-            messages.success(request, f"Updated {updated_count} record(s) to PRESENT for today.")
+            messages.success(request, f"Marked {updated_count} student(s) present (excluding those who already timed in).")
     else:
-        messages.info(request, "No eligible records updated (must be today's absences).")
+        if selected_ids:
+            messages.info(request, "Selected records are already marked as PRESENT.")
+        else:
+            messages.info(request, "All students without time-in records are already marked PRESENT.")
 
     # Redirect back to listing, preserving simple filters if present
     return redirect(request.META.get('HTTP_REFERER') or reverse('adviser_absent_students'))

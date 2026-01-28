@@ -77,11 +77,18 @@ class Course(models.Model):
             models.Index(fields=['code', 'is_active']),
         ]
 
+def adviser_profile_picture_path(instance, filename):
+    """Generate file path for adviser profile pictures"""
+    ext = filename.split('.')[-1]
+    filename = f"{instance.employee_id or instance.id}_{timezone.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+    return f'adviser_profiles/{filename}'
+
 class Adviser(models.Model):
     name = models.CharField(max_length=100)
     email = models.EmailField(unique=True)
     employee_id = models.CharField(max_length=50, unique=True, null=True, blank=True)
     department = models.CharField(max_length=100, blank=True, default='')
+    profile_picture = models.ImageField(upload_to=adviser_profile_picture_path, null=True, blank=True, help_text="Adviser profile picture")
     courses = models.ManyToManyField('Course', related_name='advisers', blank=True, help_text="Courses this adviser manages")
     user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True, related_name='adviser_profile')
     created_at = models.DateTimeField(auto_now_add=True, null=True, blank=True)
@@ -162,16 +169,34 @@ class Student(models.Model):
     
     def save(self, *args, **kwargs):
         """Optimize profile picture on save for faster loading"""
+        # Check if profile_picture has changed
+        profile_picture_changed = False
+        old_picture_path = None
+        if self.pk:
+            try:
+                old_instance = Student.objects.get(pk=self.pk)
+                profile_picture_changed = old_instance.profile_picture != self.profile_picture
+                if profile_picture_changed and old_instance.profile_picture:
+                    try:
+                        old_picture_path = old_instance.profile_picture.path
+                    except Exception:
+                        old_picture_path = None
+            except Student.DoesNotExist:
+                profile_picture_changed = True
+        else:
+            profile_picture_changed = bool(self.profile_picture)
+        
+        # Save first to ensure file is written to disk
         super().save(*args, **kwargs)
         
-        # Optimize profile picture if it exists
-        if self.profile_picture:
+        # Optimize profile picture if it exists and has changed
+        if self.profile_picture and profile_picture_changed:
             try:
                 from PIL import Image
                 import io
                 from django.core.files.base import ContentFile
                 
-                # Open the image
+                # Open the image from the saved file path
                 img = Image.open(self.profile_picture.path)
                 
                 # Convert RGBA to RGB if necessary
@@ -192,16 +217,36 @@ class Student(models.Model):
                 img.save(output, format='JPEG', quality=85, optimize=True)
                 output.seek(0)
                 
-                # Update the file
+                # Get the original file name
+                original_name = self.profile_picture.name
+                
+                # Update the file with optimized version
                 self.profile_picture.save(
-                    self.profile_picture.name,
+                    original_name,
                     ContentFile(output.read()),
                     save=False
                 )
-                # Save again to update the file
+                # Save again to update the database record
                 super().save(update_fields=['profile_picture'])
+            except Exception as e:
+                # Log the error for debugging but don't fail the save
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to optimize profile picture for student {self.id}: {str(e)}")
+                # File is already saved, so we can continue
+
+        # Delete old profile picture file if a new one replaced it or it was cleared
+        if profile_picture_changed and old_picture_path:
+            try:
+                current_path = None
+                try:
+                    current_path = self.profile_picture.path if self.profile_picture else None
+                except Exception:
+                    current_path = None
+                if old_picture_path != current_path and os.path.isfile(old_picture_path):
+                    os.remove(old_picture_path)
             except Exception:
-                # If optimization fails, just keep the original
+                # Silently ignore file removal issues
                 pass
     
     def get_profile_picture_url(self):

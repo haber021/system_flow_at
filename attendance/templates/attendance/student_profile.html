@@ -18,7 +18,7 @@
                     <div class="col-md-4 text-center mb-4 mb-md-0">
                         <div class="profile-picture-container">
                             {% if student.profile_picture %}
-                                <img src="{{ student.profile_picture.url }}" alt="Profile Picture" 
+                                <img src="{{ student.profile_picture.url }}?v={{ cache_buster }}" alt="Profile Picture" 
                                      id="profile-picture-preview"
                                      class="profile-picture img-thumbnail rounded-circle mb-3" 
                                      style="width: 200px; height: 200px; object-fit: cover; border: 4px solid #10b981;">
@@ -37,9 +37,9 @@
                                     <i class="bi bi-camera"></i> Upload Profile Picture
                                 </label>
                                 <input type="file" class="form-control" id="profile_picture" name="profile_picture" 
-                                       accept="image/jpeg,image/jpg,image/png,image/gif" required>
+                                       accept="image/jpeg,image/jpg,image/png,image/gif">
                                 <input type="hidden" name="cropped_image" id="cropped_image">
-                                <small class="form-text text-muted">Max size: 5MB. Formats: JPEG, PNG, GIF</small>
+                                <small class="form-text text-muted">Max size: 5MB. Formats: JPEG, PNG, GIF. Crop before upload.</small>
                             </div>
                             <button type="submit" name="upload_picture" class="btn btn-success btn-sm w-100">
                                 <i class="bi bi-upload"></i> Upload Picture
@@ -226,6 +226,41 @@
     </div>
 </div>
 
+<!-- Loading overlay -->
+<div id="loadingOverlay" aria-hidden="true">
+    <div class="loading-backdrop"></div>
+    <div class="loading-content" role="status" aria-live="polite">
+        <div class="spinner-border text-success" style="width: 2.75rem; height: 2.75rem;" aria-hidden="true"></div>
+        <div class="loading-text mt-3 fw-semibold" id="loadingMessage">Processing…</div>
+    </div>
+    <button type="button" class="visually-hidden" aria-label="Close loading" onclick="document.getElementById('loadingOverlay').classList.remove('active');"></button>
+    
+    <!-- Optional progress bar placeholder; can be updated from JS if needed -->
+    <div class="loading-progress visually-hidden">
+        <div class="progress">
+            <div class="progress-bar bg-success" role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+    </div>
+    
+    <!-- Subtext for more details if needed -->
+    <div class="loading-subtext visually-hidden" id="loadingSubtext"></div>
+    
+    <!-- A11y live region for screen readers -->
+    <div class="visually-hidden" aria-live="assertive" id="loadingA11yLive">Processing…</div>
+    
+    <!-- Prevent interactions while loading -->
+    <div class="loading-scrim"></div>
+    
+    <!-- Transparent button to allow ESC-like cancel in future if needed -->
+    <div class="loading-capture"></div>
+    
+    <!-- Ensure overlay is on top -->
+    <style>
+        #loadingOverlay { display: none; }
+        #loadingOverlay.active { display: block; }
+    </style>
+</div>
+
 <!-- Cropping modal -->
 <div class="modal fade" id="cropperModal" tabindex="-1" aria-labelledby="cropperModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -238,9 +273,14 @@
                 <div class="ratio ratio-1x1 bg-light border rounded cropper-wrapper">
                     <img id="cropper-image" class="img-fluid" alt="Crop preview">
                 </div>
-                <small class="text-muted d-block mt-2">Drag to adjust the square crop. The preview will update after saving.</small>
+                <small class="text-muted d-block mt-2">
+                    <i class="bi bi-info-circle me-1"></i>Drag to adjust the crop area. Click "Save Crop" when ready, then upload.
+                </small>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i> Cancel
+                </button>
                 <button type="button" class="btn btn-outline-secondary" id="cropperReset">
                     <i class="bi bi-arrow-counterclockwise"></i> Reset
                 </button>
@@ -255,6 +295,22 @@
 <script src="https://unpkg.com/cropperjs@1.6.1/dist/cropper.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // Loading helpers
+    const overlay = document.getElementById('loadingOverlay');
+    const overlayMsg = document.getElementById('loadingMessage');
+    const a11yLive = document.getElementById('loadingA11yLive');
+    
+    const showLoading = (message = 'Processing…') => {
+        if (overlayMsg) overlayMsg.textContent = message;
+        if (a11yLive) a11yLive.textContent = message;
+        overlay?.classList.add('active');
+        document.body.classList.add('loading-no-scroll');
+    };
+    const hideLoading = () => {
+        overlay?.classList.remove('active');
+        document.body.classList.remove('loading-no-scroll');
+    };
+
     const fileInput = document.getElementById('profile_picture');
     const hiddenCroppedInput = document.getElementById('cropped_image');
     const cropperImage = document.getElementById('cropper-image');
@@ -368,6 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Auto-show modal when image is loaded
+    cropperImage.addEventListener('load', () => {
+        if (currentImageURL && !cropperModalEl.classList.contains('show')) {
+            cropperModal.show();
+        }
+    }, { once: false });
+
     // Show modal when image is loaded
     cropperImage.addEventListener('load', () => {
         if (currentImageURL && !cropperModalEl.classList.contains('show')) {
@@ -385,12 +448,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Cleanup when modal is hidden
     cropperModalEl.addEventListener('hidden.bs.modal', () => {
         destroyCropper();
-        if (!hiddenCroppedInput.value) {
-            // User closed without saving, reset file input
-            fileInput.value = '';
-            currentImageURL = '';
-            originalFile = null;
-        }
+        // Don't reset file input if modal was closed - allow upload without cropping
+        // Users can upload the original file or the cropped version if they saved it
     });
 
     // Reset cropper
@@ -459,15 +518,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Prevent form submission without cropped image
     uploadForm.addEventListener('submit', (e) => {
-        if (fileInput.files.length > 0 && !hiddenCroppedInput.value) {
-            e.preventDefault();
-            alert('Please crop the image before uploading.');
-            if (currentImageURL) {
-                cropperModal.show();
+        // Check if this is a profile picture upload
+        const submitButton = e.submitter;
+        const isUploadPicture = submitButton && submitButton.name === 'upload_picture';
+        
+        if (isUploadPicture) {
+            // Allow uploading without cropping; proceed if either file or cropped data is present
+            // Validate file is selected
+            if (!fileInput.files.length && !hiddenCroppedInput.value) {
+                e.preventDefault();
+                alert('Please select an image file to upload.');
+                return false;
             }
-            return false;
+            // Show loading specific to upload
+            showLoading('Uploading profile picture…');
         }
     });
 
@@ -517,6 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Submit form
                 document.body.appendChild(form);
+                    showLoading('Updating student status…');
                 form.submit();
             } else {
                 // Revert toggle if user cancels
@@ -524,6 +590,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Show overlay on other form submissions with context message
+    document.querySelectorAll('form[action$="{% url "student_profile" %}"]').forEach((form) => {
+        form.addEventListener('submit', (e) => {
+            const btn = e.submitter;
+            const name = btn?.name || '';
+            let msg = 'Processing…';
+            if (name === 'update_profile') msg = 'Saving profile…';
+            else if (name === 'remove_picture') msg = 'Removing picture…';
+            else if (name === 'change_password') msg = 'Updating password…';
+            // upload_picture handled above to validate inputs first
+            if (name && name !== 'upload_picture') {
+                showLoading(msg);
+            }
+        });
+    });
+
+    // Optional: show overlay on navigation away to hint processing
+    window.addEventListener('beforeunload', () => {
+        showLoading('Loading…');
+    });
 });
 </script>
 
@@ -767,6 +854,14 @@ document.addEventListener('DOMContentLoaded', () => {
         font-size: 1rem;
     }
 }
+
+/* Loading overlay styles */
+.loading-no-scroll { overflow: hidden; }
+#loadingOverlay { position: fixed; inset: 0; z-index: 2000; }
+#loadingOverlay .loading-backdrop { position: absolute; inset: 0; background: rgba(17,24,39,0.45); backdrop-filter: blur(1px); }
+#loadingOverlay .loading-content { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; justify-content: center; background: #ffffff; border-radius: 12px; padding: 20px 28px; box-shadow: 0 10px 25px rgba(0,0,0,0.15); min-width: 240px; }
+#loadingOverlay .loading-text { color: #065f46; }
+#loadingOverlay .loading-scrim, #loadingOverlay .loading-capture { position: absolute; inset: 0; }
 </style>
 {% endblock %}
 
